@@ -5,7 +5,7 @@ CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 
 API_URL_BASE = "https://connect.klereo.fr/php"
-API_URL_LOGIN = f"{API_URL_BASE}/Login.php"
+API_URL_LOGIN = f"{API_URL_BASE}/GetJWT.php"
 API_URL_GET_INDEX = f"{API_URL_BASE}/GetIndex.php"
 API_URL_GET_POOL_DETAILS = f"{API_URL_BASE}/GetPoolDetails.php"
 API_URL_SET_OUT = f"{API_URL_BASE}/SetOut.php"
