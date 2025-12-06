@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import DOMAIN, SCAN_INTERVAL_MINUTES
 from .api import KlereoApi
+from .debug_logger import log_to_file
 
 _LOGGER = logging.getLogger(__name__)
 
