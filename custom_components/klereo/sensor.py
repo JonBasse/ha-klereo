@@ -12,27 +12,28 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     entities = []
     
-    _LOGGER.debug(f"Sensor setup: coordinator data has {len(coordinator.data)} systems")
+    _LOGGER.warning(f"--- KLEREO INTEGRATION VERSION 1.0.2 ---")
+    _LOGGER.warning(f"Sensor setup: coordinator data has {len(coordinator.data)} systems")
     
     # Iterate over all systems found
     for system_id, system_data in coordinator.data.items():
         details = system_data.get("details", {})
-        _LOGGER.debug(f"Sensor setup: System {system_id} details keys: {details.keys()}")
+        _LOGGER.warning(f"Sensor setup: System {system_id} details keys: {list(details.keys())}")
         
         # Add Sensors from 'probes'
         if "probes" in details:
             for probe in details["probes"]:
-                _LOGGER.debug(f"Adding sensor for probe {probe.get('index')}")
+                _LOGGER.warning(f"Adding sensor for probe {probe.get('index')}")
                 entities.append(KlereoSensor(coordinator, system_id, probe))
         else:
-             _LOGGER.debug(f"No 'probes' key in details for system {system_id}")
+             _LOGGER.warning(f"No 'probes' key in details for system {system_id}")
                 
         # Add Parameters as read-only sensors
         if "RegulModes" in details:
             for key, value in details["RegulModes"].items():
                  entities.append(KlereoParamSensor(coordinator, system_id, key, value))
 
-    _LOGGER.debug(f"Sensor setup: Adding {len(entities)} entities")
+    _LOGGER.warning(f"Sensor setup: Adding {len(entities)} entities")
     async_add_entities(entities)
 
 
