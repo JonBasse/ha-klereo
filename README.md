@@ -28,5 +28,6 @@ A custom component for Home Assistant to control Klereo pool systems.
 4.  Enter your Klereo **Username** and **Password**.
 
 ## Notes
-- This integration uses the Klereo Cloud API (`https://connect.klereo.fr`).
+- This integration uses the Klereo Cloud API (`https://connect.klereo.fr/php/`).
 - Polling interval is set to 5 minutes by default.
+- **Future Reference**: Klereo has a new frontend at `https://connect.klereo.fr/v3/` which may offer a new API in the future.
