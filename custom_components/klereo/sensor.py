@@ -62,6 +62,16 @@ class KlereoSensor(SensorEntity):
         return False
 
     @property
+    def device_info(self):
+        """Return device information."""
+        return {
+            "identifiers": {(DOMAIN, self.system_id)},
+            "name": self.coordinator.data[self.system_id]["info"].get("poolNickname", "Klereo Pool"),
+            "manufacturer": "Klereo",
+            "model": "Pool System",
+        }
+
+    @property
     def available(self):
         """Return if entity is available."""
         return self.coordinator.last_update_success
