@@ -42,8 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Handle if get_systems returns a list or something else.
             # Assuming it returns a list of systems or a dict with a list.
             # Jeedom loop: foreach ($result['list_systems'] as $system)
+            # Jeedom getIndex returns $body['response']
             
-            if "list_systems" in systems:
+            if "response" in systems:
+                system_list = systems["response"]
+            elif "list_systems" in systems:
                 system_list = systems["list_systems"]
             else:
                  # Fallback if structure is different
