@@ -1,0 +1,94 @@
+"""Switch platform for Klereo."""
+import logging
+from homeassistant.components.switch import SwitchEntity
+
+from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up the Klereo switches."""
+    coordinator = hass.data[DOMAIN][entry.entry_id]
+    
+    entities = []
+    
+    for system_id, system_data in coordinator.data.items():
+        details = system_data.get("details", {})
+        
+        if "list_outputs" in details:
+            for output in details["list_outputs"]:
+                # Check if it's a binary controllable output
+                # Some might be variable speed or similar, assuming switch for now
+                entities.append(KlereoSwitch(coordinator, system_id, output))
+
+    async_add_entities(entities)
+
+
+class KlereoSwitch(SwitchEntity):
+    """Representation of a Klereo Switch."""
+
+    def __init__(self, coordinator, system_id, output_data):
+        """Initialize the switch."""
+        self.coordinator = coordinator
+        self.system_id = system_id
+        self._output_id = output_data.get("id") # This is outNumber
+        self._label = output_data.get("label", "Unknown")
+        self._attr_unique_id = f"{system_id}_output_{self._output_id}"
+        self._attr_name = f"Klereo {self._label}"
+        
+        self._update_from_data(output_data)
+
+    @property
+    def should_poll(self):
+        return False
+
+    @property
+    def available(self):
+        return self.coordinator.last_update_success
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))
+
+    def _update_from_data(self, data):
+        """Update state from data."""
+        # Value might be "On", "Off", 1, 0, or boolean.
+        val = data.get("value")
+        if isinstance(val, str):
+            self._attr_is_on = val.lower() in ["on", "1", "true"]
+        else:
+            self._attr_is_on = bool(val)
+            
+        self._attr_extra_state_attributes = {
+            "mode": data.get("mode"), # Auto, Manu, etc.
+            "type": data.get("type")
+        }
+
+    def _find_my_data(self):
+        if self.system_id not in self.coordinator.data:
+            return None
+        details = self.coordinator.data[self.system_id].get("details", {})
+        if "list_outputs" not in details:
+            return None
+        for o in details["list_outputs"]:
+            if o.get("id") == self._output_id:
+                return o
+        return None
+        
+    def update(self):
+         data = self._find_my_data()
+         if data:
+             self._update_from_data(data)
+
+    async def async_turn_on(self, **kwargs):
+        """Turn the switch on."""
+        # Force to Manual On
+        # Mode 1 = Manual, State 1 = On, Delay 0
+        await self.coordinator.api.set_output(self.system_id, self._output_id, 1, 1, 0)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs):
+        """Turn the switch off."""
+        # Force to Manual Off
+        # Mode 1 = Manual, State 0 = Off, Delay 0
+        await self.coordinator.api.set_output(self.system_id, self._output_id, 1, 0, 0)
+        await self.coordinator.async_request_refresh()

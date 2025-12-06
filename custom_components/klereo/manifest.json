@@ -1,0 +1,12 @@
+{
+    "domain": "klereo",
+    "name": "Klereo",
+    "codeowners": [],
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/yourusername/ha-klereo",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://github.com/yourusername/ha-klereo/issues",
+    "requirements": [],
+    "version": "1.0.0"
+}
