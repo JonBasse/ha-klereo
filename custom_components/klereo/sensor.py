@@ -3,6 +3,7 @@ import logging
 from homeassistant.components.sensor import SensorEntity
 
 from .const import DOMAIN, SENSOR_TYPES
+from .debug_logger import log_to_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -12,28 +13,27 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     entities = []
     
-    _LOGGER.warning(f"--- KLEREO INTEGRATION VERSION 1.0.2 ---")
-    _LOGGER.warning(f"Sensor setup: coordinator data has {len(coordinator.data)} systems")
+    log_to_file(f"SENSOR SETUP: Starting. Coordinator data systems: {len(coordinator.data)}")
     
     # Iterate over all systems found
     for system_id, system_data in coordinator.data.items():
         details = system_data.get("details", {})
-        _LOGGER.warning(f"Sensor setup: System {system_id} details keys: {list(details.keys())}")
+        log_to_file(f"SENSOR SETUP: System {system_id} has keys: {list(details.keys())}")
         
         # Add Sensors from 'probes'
         if "probes" in details:
             for probe in details["probes"]:
-                _LOGGER.warning(f"Adding sensor for probe {probe.get('index')}")
+                log_to_file(f"SENSOR SETUP: Adding probe {probe.get('index')} type {probe.get('type')}")
                 entities.append(KlereoSensor(coordinator, system_id, probe))
         else:
-             _LOGGER.warning(f"No 'probes' key in details for system {system_id}")
+             log_to_file(f"SENSOR SETUP: No 'probes' key for {system_id}")
                 
         # Add Parameters as read-only sensors
         if "RegulModes" in details:
             for key, value in details["RegulModes"].items():
                  entities.append(KlereoParamSensor(coordinator, system_id, key, value))
 
-    _LOGGER.warning(f"Sensor setup: Adding {len(entities)} entities")
+    log_to_file(f"SENSOR SETUP: Final entity count: {len(entities)}")
     async_add_entities(entities)
 
 
