@@ -29,17 +29,31 @@ class KlereoApi:
             await self.login()
         return {"Authorization": f"Bearer {self._token}", "User-Agent": "Home Assistant Klereo Integration"}
 
+import hashlib
+
     async def login(self):
         """Authenticate with the Klereo API."""
         _LOGGER.debug("Logging in to Klereo API")
         try:
+            # SHA1 encrypt password
+            hashed_password = hashlib.sha1(self._password.encode("utf-8")).hexdigest()
+            
             async with async_timeout.timeout(10):
-                # Try JSON payload first as it's more common for newer APIs
-                payload = {"login": self._username, "password": self._password}
+                # Using form data with SHA1 password and extra parameters as found in community forum
+                data = {
+                    "login": self._username,
+                    "password": hashed_password,
+                    "version": "391-H",
+                    "app": "Api"
+                }
+                
                 response = await self._session.post(
                     API_URL_LOGIN,
-                    json=payload, # Use json instead of data
-                    headers={"User-Agent": "Home Assistant Klereo Integration"}
+                    data=data,
+                    headers={
+                        "User-Agent": "Home Assistant Klereo Integration",
+                        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+                    }
                 )
                 response.raise_for_status()
                 data = await response.json(content_type=None)
