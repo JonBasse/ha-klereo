@@ -14,17 +14,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     for system_id, system_data in coordinator.data.items():
         details = system_data.get("details", {})
-        
-        if "list_sensors" in details:
-            for sensor in details["list_sensors"]:
-                # Check if it looks like a binary sensor
-                # Could check type or value
-                val = sensor.get("value")
-                s_type = sensor.get("type", "")
-                
-                # Heuristic: if value is clearly boolean or type indicates status
-                if s_type.lower() in ["alarm", "error", "flow", "contact"] or isinstance(val, (bool)):
-                     entities.append(KlereoBinarySensor(coordinator, system_id, sensor))
+        # Assuming no dedicated binary sensors in 'probes' or 'outs' yet based on previous logs,
+        # but leaving infrastructure in place.
+        # If there are specific boolean flags in 'params' or 'status', they should be mapped here.
+        # For now, we will leave it empty but logged to avoid confusion.
+        pass
 
     async_add_entities(entities)
 
