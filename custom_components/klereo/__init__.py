@@ -33,6 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             # First ensure we have systems
             systems = await api.get_systems()
+            _LOGGER.debug(f"Systems response: {systems}")
             
             # For each system, get details. 
             # We will store data as a dict keyed by system ID.
@@ -48,11 +49,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                  # Fallback if structure is different
                  system_list = systems if isinstance(systems, list) else []
 
+            _LOGGER.debug(f"Parsed system list: {system_list}")
+
             for system in system_list:
                 # System object likely has an 'id'
                 sys_id = system.get("id")
                 if sys_id:
                     details = await api.get_pool_details(sys_id)
+                    _LOGGER.debug(f"Details for system {sys_id}: {details}")
                     data[sys_id] = {
                         "info": system,
                         "details": details
