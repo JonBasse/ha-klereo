@@ -12,15 +12,22 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     entities = []
     
+    _LOGGER.debug(f"Switch setup: coordinator data has {len(coordinator.data)} systems")
+    
     for system_id, system_data in coordinator.data.items():
         details = system_data.get("details", {})
+        _LOGGER.debug(f"Switch setup: System {system_id} details keys: {details.keys()}")
         
         if "outs" in details:
             for output in details["outs"]:
                 # Check if it's a binary controllable output
                 # Using all outputs for now as switches
+                _LOGGER.debug(f"Adding switch for output {output.get('index')}")
                 entities.append(KlereoSwitch(coordinator, system_id, output))
+        else:
+            _LOGGER.debug(f"No 'outs' key in details for system {system_id}")
 
+    _LOGGER.debug(f"Switch setup: Adding {len(entities)} entities")
     async_add_entities(entities)
 
 

@@ -12,24 +12,27 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     entities = []
     
+    _LOGGER.debug(f"Sensor setup: coordinator data has {len(coordinator.data)} systems")
+    
     # Iterate over all systems found
     for system_id, system_data in coordinator.data.items():
         details = system_data.get("details", {})
+        _LOGGER.debug(f"Sensor setup: System {system_id} details keys: {details.keys()}")
         
         # Add Sensors from 'probes'
         if "probes" in details:
             for probe in details["probes"]:
+                _LOGGER.debug(f"Adding sensor for probe {probe.get('index')}")
                 entities.append(KlereoSensor(coordinator, system_id, probe))
+        else:
+             _LOGGER.debug(f"No 'probes' key in details for system {system_id}")
                 
         # Add Parameters as read-only sensors
-        # Params can be in 'params' dict (Jeedom style) or just top level keys?
-        # User log shows 'RegulModes' in GetIndex response.
-        # GetPoolDetails 'response' is likely similar.
-        # Let's inspect 'RegulModes' if available
         if "RegulModes" in details:
             for key, value in details["RegulModes"].items():
                  entities.append(KlereoParamSensor(coordinator, system_id, key, value))
 
+    _LOGGER.debug(f"Sensor setup: Adding {len(entities)} entities")
     async_add_entities(entities)
 
 
