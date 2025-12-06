@@ -2,6 +2,7 @@
 import logging
 import aiohttp
 import async_timeout
+import hashlib
 
 from .const import (
     API_URL_LOGIN,
@@ -29,7 +30,7 @@ class KlereoApi:
             await self.login()
         return {"Authorization": f"Bearer {self._token}", "User-Agent": "Home Assistant Klereo Integration"}
 
-import hashlib
+
 
     async def login(self):
         """Authenticate with the Klereo API."""
