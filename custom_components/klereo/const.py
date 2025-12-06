@@ -13,3 +13,12 @@ API_URL_SET_PARAM = f"{API_URL_BASE}/SetParam.php"
 
 # Default update interval
 SCAN_INTERVAL_MINUTES = 5
+
+SENSOR_TYPES = {
+    1: {"name": "Water Temperature", "unit": "°C", "device_class": "temperature"},
+    2: {"name": "External Temperature", "unit": "°C", "device_class": "temperature"},
+    3: {"name": "pH", "unit": None, "device_class": None},
+    4: {"name": "Redox", "unit": "mV", "device_class": "voltage"},
+    5: {"name": "Air Temperature", "unit": "°C", "device_class": "temperature"},
+    16: {"name": "Air Temperature", "unit": "°C", "device_class": "temperature"},
+}

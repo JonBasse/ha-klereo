@@ -56,9 +56,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             for system in system_list:
                 # System object likely has an 'id'
-                sys_id = system.get("id")
+                sys_id = system.get("idSystem")
                 if sys_id:
-                    details = await api.get_pool_details(sys_id)
+                    details_json = await api.get_pool_details(sys_id)
+                    details = {}
+                    if "response" in details_json and isinstance(details_json["response"], list) and len(details_json["response"]) > 0:
+                        details = details_json["response"][0]
+                    
                     _LOGGER.debug(f"Details for system {sys_id}: {details}")
                     data[sys_id] = {
                         "info": system,
