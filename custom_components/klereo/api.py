@@ -34,9 +34,11 @@ class KlereoApi:
         _LOGGER.debug("Logging in to Klereo API")
         try:
             async with async_timeout.timeout(10):
+                # Try JSON payload first as it's more common for newer APIs
+                payload = {"login": self._username, "password": self._password}
                 response = await self._session.post(
                     API_URL_LOGIN,
-                    data={"login": self._username, "password": self._password},
+                    json=payload, # Use json instead of data
                     headers={"User-Agent": "Home Assistant Klereo Integration"}
                 )
                 response.raise_for_status()
