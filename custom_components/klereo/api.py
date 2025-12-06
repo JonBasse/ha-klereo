@@ -40,33 +40,29 @@ class KlereoApi:
             hashed_password = hashlib.sha1(self._password.encode("utf-8")).hexdigest()
             
             async with async_timeout.timeout(10):
-                # Using form data with SHA1 password and extra parameters as found in community forum
+                # Using form data with SHA1 password and parameters matching Jeedom plugin
                 data = {
                     "login": self._username,
                     "password": hashed_password,
-                    "version": "391-H",
-                    "app": "Api"
+                    "version": "393-J", # Updated to match Jeedom
+                    # "app": "Api" # Jeedom doesn't send this
                 }
                 
                 response = await self._session.post(
                     API_URL_LOGIN,
                     data=data,
                     headers={
-                        "User-Agent": "Home Assistant Klereo Integration",
+                        "User-Agent": "Jeedom plugin",
                         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
                     }
                 )
                 response.raise_for_status()
                 data = await response.json(content_type=None)
                 
-                # Check for success - the API returns the token directly or in a structure
-                # Based on analysis, it returns a JWT token string or object.
-                # Assuming it returns a JSON with key 'token' or similar, 
-                # OR raw string if it's a simple JWT return.
-                # Let's inspect the response structure based on common practices or re-check if needed.
-                # The Jeedom code does: $result = json_decode($result, true); if (isset($result['token'])) ...
-                
-                if "token" in data:
+                # Jeedom expects 'jwt' key
+                if "jwt" in data:
+                    self._token = data["jwt"]
+                elif "token" in data:
                     self._token = data["token"]
                 else:
                     _LOGGER.error(f"Login failed, no token found in response: {data}")
