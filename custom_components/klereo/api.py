@@ -97,7 +97,7 @@ class KlereoApi:
             async with async_timeout.timeout(10):
                 response = await self._session.post(
                     API_URL_GET_POOL_DETAILS,
-                    data={"idSystem": system_id},
+                    data={"poolID": system_id},
                     headers=headers
                 )
                 response.raise_for_status()
@@ -109,7 +109,7 @@ class KlereoApi:
                 async with async_timeout.timeout(10):
                     response = await self._session.post(
                         API_URL_GET_POOL_DETAILS,
-                        data={"idSystem": system_id},
+                        data={"poolID": system_id},
                         headers=headers
                     )
                     response.raise_for_status()

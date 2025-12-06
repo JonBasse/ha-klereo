@@ -58,12 +58,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # System object likely has an 'id'
                 sys_id = system.get("idSystem")
                 if sys_id:
-                    details_json = await api.get_pool_details(sys_id)
-                    details = {}
-                    if "response" in details_json and isinstance(details_json["response"], list) and len(details_json["response"]) > 0:
-                        details = details_json["response"][0]
+                    # Initialize details with the system data itself, as it contains probes (from GetIndex)
+                    details = system.copy()
                     
-                    _LOGGER.debug(f"Details for system {sys_id}: {details}")
+                    try:
+                        details_json = await api.get_pool_details(sys_id)
+                        if "response" in details_json and isinstance(details_json["response"], list) and len(details_json["response"]) > 0:
+                            # Merge full details if available
+                            details.update(details_json["response"][0])
+                            _LOGGER.debug(f"Merged details for system {sys_id}")
+                    except Exception as e:
+                        _LOGGER.warning(f"Failed to get extended pool details for {sys_id}: {e}")
+                    
+                    _LOGGER.debug(f"Final details for system {sys_id}: {details}")
                     data[sys_id] = {
                         "info": system,
                         "details": details
