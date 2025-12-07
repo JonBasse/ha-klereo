@@ -3,7 +3,6 @@ import logging
 from homeassistant.components.switch import SwitchEntity
 
 from .const import DOMAIN, OUTPUT_NAMES
-from .debug_logger import log_to_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     entities = []
     
-    log_to_file(f"SWITCH SETUP: Starting. Coordinator data systems: {len(coordinator.data)}")
+    _LOGGER.debug(f"Switch setup: Starting. Coordinator data systems: {len(coordinator.data)}")
     
     for system_id, system_data in coordinator.data.items():
         details = system_data.get("details", {})
@@ -22,12 +21,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
             for output in details["outs"]:
                 # Check if it's a binary controllable output
                 # Using all outputs for now as switches
-                log_to_file(f"SWITCH SETUP: Adding switch {output.get('index')}")
+                _LOGGER.debug(f"Switch setup: Adding switch {output.get('index')}")
                 entities.append(KlereoSwitch(coordinator, system_id, output))
         else:
-            log_to_file(f"SWITCH SETUP: No 'outs' key for {system_id}")
+            _LOGGER.debug(f"Switch setup: No 'outs' key for {system_id}")
 
-    log_to_file(f"SWITCH SETUP: Final entity count: {len(entities)}")
+    _LOGGER.debug(f"Switch setup: Final entity count: {len(entities)}")
     async_add_entities(entities)
 
 

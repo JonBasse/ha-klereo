@@ -11,7 +11,6 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import DOMAIN, SCAN_INTERVAL_MINUTES
 from .api import KlereoApi
-from .debug_logger import log_to_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,13 +67,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             # Merge full details if available
                             details.update(details_json["response"][0])
                             _LOGGER.debug(f"Merged details for system {sys_id}")
-                            log_to_file(f"Merged details for system {sys_id}: keys={list(details.keys())}")
                     except Exception as e:
                         _LOGGER.warning(f"Failed to get extended pool details for {sys_id}: {e}")
-                        log_to_file(f"Failed to get extended pool details for {sys_id}: {e}")
                     
                     _LOGGER.debug(f"Final details for system {sys_id}: {details}")
-                    log_to_file(f"Final details for {sys_id}: probes={len(details.get('probes', []))}, outs={len(details.get('outs', []))}")
                     
                     data[sys_id] = {
                         "info": system,
