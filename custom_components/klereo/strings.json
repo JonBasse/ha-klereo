@@ -1,0 +1,22 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Klereo Connect",
+                "description": "Enter your Klereo Connect credentials.",
+                "data": {
+                    "username": "Username",
+                    "password": "Password"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Unable to connect to the Klereo API. Check your network connection.",
+            "invalid_auth": "Invalid username or password.",
+            "unknown": "An unexpected error occurred."
+        },
+        "abort": {
+            "already_configured": "This account is already configured."
+        }
+    }
+}

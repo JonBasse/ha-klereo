@@ -1,13 +1,16 @@
 """Config flow for Klereo integration."""
 import logging
+
+import aiohttp
 import voluptuous as vol
 
-from homeassistant import config_entries, core, exceptions
+from homeassistant import config_entries, core
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .api import KlereoApi, KlereoApiError
 from .const import DOMAIN
-from .api import KlereoApi
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,22 +21,23 @@ DATA_SCHEMA = vol.Schema(
     }
 )
 
-async def validate_input(hass: core.HomeAssistant, data):
-    """Validate the user input allows us to connect.
 
-    Data has the keys from DATA_SCHEMA with values provided by the user.
-    """
+async def validate_input(hass: core.HomeAssistant, data: dict) -> dict:
+    """Validate the user input allows us to connect."""
     session = async_get_clientsession(hass)
     api = KlereoApi(data[CONF_USERNAME], data[CONF_PASSWORD], session)
 
     try:
         await api.login()
-    except Exception as err:
-        # If login fails
+    except KlereoApiError as err:
         raise InvalidAuth from err
+    except aiohttp.ClientResponseError as err:
+        if err.status in (401, 403):
+            raise InvalidAuth from err
+        raise CannotConnect from err
+    except (aiohttp.ClientError, TimeoutError) as err:
+        raise CannotConnect from err
 
-    # Login successful, we might want to get systems now or just assume it's good.
-    # We can use the username as the title.
     return {"title": data[CONF_USERNAME]}
 
 
@@ -41,7 +45,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Klereo."""
 
     VERSION = 1
-    
+
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
@@ -49,11 +53,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 info = await validate_input(self.hass, user_input)
 
+                await self.async_set_unique_id(user_input[CONF_USERNAME])
+                self._abort_if_unique_id_configured()
+
                 return self.async_create_entry(title=info["title"], data=user_input)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
+            except Exception:
+                _LOGGER.exception("Unexpected exception during Klereo setup")
                 errors["base"] = "unknown"
 
         return self.async_show_form(
@@ -61,5 +70,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
 
-class InvalidAuth(exceptions.HomeAssistantError):
+class CannotConnect(HomeAssistantError):
+    """Error to indicate we cannot connect."""
+
+
+class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""

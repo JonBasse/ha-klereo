@@ -1,8 +1,6 @@
 """Constants for the Klereo integration."""
 
 DOMAIN = "klereo"
-CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
 
 API_URL_BASE = "https://connect.klereo.fr/php"
 API_URL_LOGIN = f"{API_URL_BASE}/GetJWT.php"
@@ -14,14 +12,30 @@ API_URL_SET_PARAM = f"{API_URL_BASE}/SetParam.php"
 # Default update interval
 SCAN_INTERVAL_MINUTES = 5
 
+# Output modes (from Jeedom plugin _OUT_MODE_* constants)
+OUT_MODE_MAN = 0
+OUT_MODE_TIME_SLOTS = 1
+OUT_MODE_TIMER = 2
+OUT_MODE_REGUL = 3
+
+# Output states (from Jeedom plugin _OUT_STATE_* constants)
+OUT_STATE_OFF = 0
+OUT_STATE_ON = 1
+
+# Probe type to sensor metadata mapping (from Jeedom _PROBE_TYPE_* constants)
 SENSOR_TYPES = {
-    1: {"name": "Water Temperature", "unit": "°C", "device_class": "temperature"},
-    2: {"name": "External Temperature", "unit": "°C", "device_class": "temperature"},
+    0: {"name": "Technical Room Temperature", "unit": "°C", "device_class": "temperature"},
+    1: {"name": "Air Temperature", "unit": "°C", "device_class": "temperature"},
+    2: {"name": "Water Level", "unit": "%", "device_class": None},
     3: {"name": "pH", "unit": None, "device_class": None},
     4: {"name": "Redox", "unit": "mV", "device_class": "voltage"},
-    5: {"name": "Air Temperature", "unit": "°C", "device_class": "temperature"},
-    5: {"name": "Air Temperature", "unit": "°C", "device_class": "temperature"},
-    16: {"name": "Air Temperature", "unit": "°C", "device_class": "temperature"},
+    5: {"name": "Water Temperature", "unit": "°C", "device_class": "temperature"},
+    6: {"name": "Filter Pressure", "unit": "mbar", "device_class": "pressure"},
+    10: {"name": "Generic", "unit": "%", "device_class": None},
+    11: {"name": "Flow", "unit": "m³/h", "device_class": None},
+    12: {"name": "Container Level", "unit": "%", "device_class": None},
+    13: {"name": "Cover Position", "unit": "%", "device_class": None},
+    14: {"name": "Chlorine", "unit": "mg/L", "device_class": None},
 }
 
 OUTPUT_NAMES = {

@@ -1,5 +1,4 @@
 """The Klereo integration."""
-import asyncio
 import logging
 from datetime import timedelta
 
@@ -9,78 +8,73 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, SCAN_INTERVAL_MINUTES
 from .api import KlereoApi
+from .const import DOMAIN, SCAN_INTERVAL_MINUTES
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH]
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Klereo from a config entry."""
-    
     hass.data.setdefault(DOMAIN, {})
-    
-    username = entry.data[CONF_USERNAME]
-    password = entry.data[CONF_PASSWORD]
+
     session = async_get_clientsession(hass)
-    
-    api = KlereoApi(username, password, session)
-    
-    # Coordinator to fetch data
+    api = KlereoApi(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD], session)
+
     async def async_update_data():
-        """Fetch data from API endpoint."""
+        """Fetch data from the Klereo API."""
         try:
-            # First ensure we have systems
-            systems = await api.get_systems()
-            _LOGGER.debug(f"Systems response: {systems}")
-            
-            # For each system, get details. 
-            # We will store data as a dict keyed by system ID.
-            data = {}
-            
-            # Handle if get_systems returns a list or something else.
-            # Assuming it returns a list of systems or a dict with a list.
-            # Jeedom loop: foreach ($result['list_systems'] as $system)
-            # Jeedom getIndex returns $body['response']
-            
-            if "response" in systems:
-                system_list = systems["response"]
-            elif "list_systems" in systems:
-                system_list = systems["list_systems"]
+            systems_response = await api.get_systems()
+            _LOGGER.debug("Systems response: %s", systems_response)
+
+            # Parse system list from response — the API wraps it differently
+            # depending on context (direct list, {"response": [...]}, or
+            # {"list_systems": [...]}).
+            if isinstance(systems_response, dict):
+                system_list = systems_response.get(
+                    "response", systems_response.get("list_systems", [])
+                )
+            elif isinstance(systems_response, list):
+                system_list = systems_response
             else:
-                 # Fallback if structure is different
-                 system_list = systems if isinstance(systems, list) else []
+                system_list = []
 
-            _LOGGER.debug(f"Parsed system list: {system_list}")
+            if not isinstance(system_list, list):
+                system_list = []
 
+            data = {}
             for system in system_list:
-                # System object likely has an 'id'
                 sys_id = system.get("idSystem")
-                if sys_id:
-                    # Initialize details with the system data itself, as it contains probes (from GetIndex)
-                    details = system.copy()
-                    
-                    try:
-                        details_json = await api.get_pool_details(sys_id)
-                        if "response" in details_json and isinstance(details_json["response"], list) and len(details_json["response"]) > 0:
-                            # Merge full details if available
-                            details.update(details_json["response"][0])
-                            _LOGGER.debug(f"Merged details for system {sys_id}")
-                    except Exception as e:
-                        _LOGGER.warning(f"Failed to get extended pool details for {sys_id}: {e}")
-                    
-                    _LOGGER.debug(f"Final details for system {sys_id}: {details}")
-                    
-                    data[sys_id] = {
-                        "info": system,
-                        "details": details
-                    }
-            
+                if not sys_id:
+                    continue
+
+                # Start with the system-level data from GetIndex
+                details = system.copy()
+
+                # Merge in full details from GetPoolDetails
+                try:
+                    details_response = await api.get_pool_details(sys_id)
+                    if isinstance(details_response, dict):
+                        response_data = details_response.get("response")
+                        if isinstance(response_data, list) and response_data:
+                            details.update(response_data[0])
+                except Exception:
+                    _LOGGER.warning(
+                        "Failed to get pool details for system %s",
+                        sys_id,
+                        exc_info=True,
+                    )
+
+                data[sys_id] = {"info": system, "details": details}
+
             return data
-            
+
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with API: {err}")
+            raise UpdateFailed(
+                f"Error communicating with Klereo API: {err}"
+            ) from err
 
     coordinator = DataUpdateCoordinator(
         hass,
@@ -89,8 +83,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_method=async_update_data,
         update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
     )
-    
-    coordinator.api = api # Attach API client to coordinator for use in platform entities
+    coordinator.api = api
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -99,6 +92,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
