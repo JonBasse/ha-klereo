@@ -2,6 +2,7 @@
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/release/JonBasse/ha-klereo.svg)](https://github.com/JonBasse/ha-klereo/releases)
+[![Validate](https://github.com/JonBasse/ha-klereo/actions/workflows/validate.yml/badge.svg)](https://github.com/JonBasse/ha-klereo/actions/workflows/validate.yml)
 
 A Home Assistant custom integration for the [Klereo Connect](https://connect.klereo.fr) pool management system. Monitor water quality parameters and control pool equipment directly from Home Assistant.
 
@@ -10,15 +11,18 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 ## Features
 
 - **Probe sensors** — Water temperature, air temperature, pH, redox (ORP), filter pressure, flow rate, chlorine level, container levels, and more.
-- **Equipment switches** — Control lighting, filtration, heating, and auxiliary outputs (on/off).
+- **Equipment switches** — Control lighting, filtration, heating, and auxiliary outputs (on/off) with optimistic state updates.
+- **Adjustable setpoints** — Water temperature setpoint exposed as a number entity you can adjust directly from the UI.
 - **Regulation parameters** — View regulation modes and setpoints as read-only sensors.
-- **Automatic discovery** — All pool systems, probes, and outputs are discovered automatically from your Klereo account.
-- **Cloud polling** — Data is refreshed every 5 minutes from the Klereo Connect cloud API.
+- **Automatic discovery** — All pool systems, probes, and outputs are discovered automatically from your Klereo account. New entities are added dynamically without requiring a restart.
+- **Cloud polling** — Data refreshed from the Klereo Connect cloud API at a configurable interval (1–60 minutes, default 5).
+- **Diagnostics** — Built-in diagnostics support for troubleshooting, with automatic redaction of sensitive data.
+- **Re-authentication** — If your credentials expire, the integration prompts you to re-enter them instead of requiring a full removal and re-setup.
 
 ## Prerequisites
 
 - A [Klereo Connect](https://connect.klereo.fr) account with at least one pool system.
-- Home Assistant 2024.1 or later.
+- Home Assistant 2024.4 or later.
 
 ## Installation
 
@@ -44,7 +48,13 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 3. Enter your Klereo Connect credentials (the same email and password you use on [connect.klereo.fr](https://connect.klereo.fr)).
 4. Click **Submit**.
 
-Your pool systems, sensors, and switches will be created automatically.
+Your pool systems, sensors, switches, and number entities will be created automatically.
+
+### Options
+
+After setup, you can configure the integration by clicking **Configure** on the integration card:
+
+- **Update interval** — How often to poll the Klereo API (1–60 minutes, default 5).
 
 ## Entities
 
@@ -87,15 +97,25 @@ Each output on your Klereo system is exposed as a switch:
 | 9–14 | Aux 4–9 |
 | 15 | Hybrid Disinfectant |
 
-Turning a switch on or off sends a **Manual mode** command to the Klereo system. The switch state reflects the current output status as reported by the API.
+Turning a switch on or off sends a **Manual mode** command to the Klereo system. The switch state updates optimistically and is confirmed on the next data refresh.
 
 > **Note:** Some outputs (pH Corrector, Disinfectant, Flocculant, Hybrid Disinfectant) may require professional-level access on your Klereo account to control.
+
+### Number Entities
+
+Writable regulation setpoints are exposed as number entities:
+
+| Parameter | Name | Range | Step |
+|---|---|---|---|
+| ConsigneEau | Water Setpoint | 10–40 °C | 0.5 |
+
+Changing a value sends a `SetParam` command to the Klereo API.
 
 ## Troubleshooting
 
 ### Authentication errors
 
-Verify your credentials work at [connect.klereo.fr](https://connect.klereo.fr). This integration uses the same login.
+Verify your credentials work at [connect.klereo.fr](https://connect.klereo.fr). This integration uses the same login. If the integration shows a re-authentication prompt, click it to re-enter your credentials.
 
 ### No entities appear
 
@@ -104,6 +124,10 @@ Check Home Assistant logs for errors from the `klereo` integration: **Settings**
 ### Switch commands don't take effect immediately
 
 The Klereo cloud API relays commands to your pool equipment. There may be a delay before the command executes. The integration requests a data refresh after each command, but the equipment state may not change instantly.
+
+### Diagnostics
+
+To download diagnostic data for bug reports, go to **Settings** > **Devices & Services** > **Klereo** > three-dot menu > **Download diagnostics**. Sensitive data (passwords, tokens) is automatically redacted.
 
 ### Debug logging
 

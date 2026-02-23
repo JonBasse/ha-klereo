@@ -15,6 +15,9 @@ firebase-debug.log
 dist/
 build/
 
+# Internal docs
+docs/plans/
+
 # Testing / linting
 .mypy_cache/
 .pytest_cache/
