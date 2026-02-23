@@ -81,10 +81,7 @@ class KlereoSensor(KlereoEntity, SensorEntity):
         if self.system_id not in self.coordinator.data:
             return None
         details = self.coordinator.data[self.system_id].get("details", {})
-        for p in details.get("probes", []):
-            if p.get("index") == self._index:
-                return p
-        return None
+        return details.get("_probe_index", {}).get(self._index)
 
 
 class KlereoParamSensor(KlereoEntity, SensorEntity):

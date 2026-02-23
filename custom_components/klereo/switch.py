@@ -70,10 +70,7 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
         if self.system_id not in self.coordinator.data:
             return None
         details = self.coordinator.data[self.system_id].get("details", {})
-        for o in details.get("outs", []):
-            if o.get("index") == self._output_index:
-                return o
-        return None
+        return details.get("_output_index", {}).get(self._output_index)
 
     async def async_turn_on(self, **kwargs):
         """Turn the output on (Manual mode, ON state)."""

@@ -1,4 +1,5 @@
 """DataUpdateCoordinator for Klereo."""
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -47,26 +48,39 @@ class KlereoCoordinator(DataUpdateCoordinator):
             if not isinstance(system_list, list):
                 system_list = []
 
+            # Build system map
             data: dict = {}
+            system_map: dict = {}
             for system in system_list:
                 sys_id = system.get("idSystem")
-                if not sys_id:
-                    continue
+                if sys_id:
+                    system_map[sys_id] = system
 
+            # Fetch all pool details in parallel
+            details_results = await asyncio.gather(
+                *(self.api.get_pool_details(sid) for sid in system_map),
+                return_exceptions=True,
+            )
+
+            for sys_id, result in zip(system_map, details_results):
+                system = system_map[sys_id]
                 details = system.copy()
 
-                try:
-                    details_response = await self.api.get_pool_details(sys_id)
-                    if isinstance(details_response, dict):
-                        response_data = details_response.get("response")
-                        if isinstance(response_data, list) and response_data:
-                            details.update(response_data[0])
-                except (aiohttp.ClientError, KlereoApiError, TimeoutError):
+                if isinstance(result, Exception):
                     _LOGGER.warning(
-                        "Failed to get pool details for system %s",
-                        sys_id,
-                        exc_info=True,
+                        "Failed to get pool details for system %s: %s",
+                        sys_id, result,
                     )
+                elif isinstance(result, dict):
+                    response_data = result.get("response")
+                    if isinstance(response_data, list) and response_data:
+                        details.update(response_data[0])
+
+                # Build index dicts for O(1) entity lookup
+                probes = details.get("probes", [])
+                outs = details.get("outs", [])
+                details["_probe_index"] = {p["index"]: p for p in probes if "index" in p}
+                details["_output_index"] = {o["index"]: o for o in outs if "index" in o}
 
                 data[sys_id] = {"info": system, "details": details}
 
