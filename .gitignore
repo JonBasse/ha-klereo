@@ -3,4 +3,5 @@ __pycache__/
 *$py.class
 *.log
 .DS_Store
+firebase-debug.log
 .worktrees/
