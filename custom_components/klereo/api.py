@@ -13,6 +13,8 @@ from .const import (
     API_URL_GET_POOL_DETAILS,
     API_URL_SET_OUT,
     API_URL_SET_PARAM,
+    API_VERSION,
+    API_COM_MODE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ class KlereoApi:
                     data={
                         "login": self._username,
                         "password": hashed_password,
-                        "version": "393-J",
+                        "version": API_VERSION,
                     },
                     headers={
                         "User-Agent": USER_AGENT,
@@ -65,7 +67,8 @@ class KlereoApi:
         elif "token" in data:
             self._token = data["token"]
         else:
-            _LOGGER.error("Login failed, no token in response: %s", data)
+            _LOGGER.error("Login failed: no token in API response")
+            _LOGGER.debug("Login response body: %s", data)
             raise KlereoApiError("Login failed: no token returned")
 
     async def _get_auth_header(self) -> dict[str, str]:
@@ -80,7 +83,7 @@ class KlereoApi:
         }
 
     async def _request_with_retry(self, method: str, url: str, **kwargs: Any) -> Any:
-        """Make an API request, retrying once on 401 (expired token)."""
+        """Make an API request, retrying on 401 and transient errors."""
         headers = await self._get_auth_header()
         try:
             async with asyncio.timeout(TIMEOUT):
@@ -107,10 +110,25 @@ class KlereoApi:
                     text = await response.text()
                     try:
                         return json.loads(text)
-                    except json.JSONDecodeError as err:
+                    except json.JSONDecodeError as parse_err:
                         _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
-                        raise KlereoApiError(f"Invalid JSON response from {url}") from err
+                        raise KlereoApiError(f"Invalid JSON response from {url}") from parse_err
             raise
+        except (aiohttp.ClientConnectionError, TimeoutError) as err:
+            _LOGGER.debug("Transient error on %s, retrying once: %s", url, err)
+            await asyncio.sleep(2)
+            headers = await self._get_auth_header()
+            async with asyncio.timeout(TIMEOUT):
+                response = await self._session.request(
+                    method, url, headers=headers, **kwargs
+                )
+                response.raise_for_status()
+                text = await response.text()
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError as parse_err:
+                    _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
+                    raise KlereoApiError(f"Invalid JSON response from {url}") from parse_err
 
     async def get_systems(self) -> Any:
         """Get list of pool systems."""
@@ -141,7 +159,7 @@ class KlereoApi:
                 "outIdx": out_index,
                 "newMode": mode,
                 "newState": state,
-                "comMode": 1,
+                "comMode": API_COM_MODE,
             },
         )
 
@@ -160,6 +178,6 @@ class KlereoApi:
                 "poolID": system_id,
                 "paramID": param_id,
                 "newValue": value,
-                "comMode": 1,
+                "comMode": API_COM_MODE,
             },
         )
