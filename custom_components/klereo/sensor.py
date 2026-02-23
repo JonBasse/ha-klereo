@@ -93,6 +93,7 @@ class KlereoParamSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Klereo regulation parameter as a sensor."""
 
     _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, system_id, key, initial_value):
         """Initialize the parameter sensor."""
