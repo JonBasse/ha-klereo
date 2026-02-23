@@ -77,6 +77,43 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
 
+    async def async_step_reauth(self, entry_data: dict):
+        """Handle re-authentication."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        """Handle re-authentication confirmation."""
+        errors = {}
+        if user_input is not None:
+            try:
+                await validate_input(self.hass, user_input)
+
+                stored_data = {
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: hashlib.sha1(
+                        user_input[CONF_PASSWORD].encode("utf-8")
+                    ).hexdigest(),
+                }
+
+                self.hass.config_entries.async_update_entry(
+                    self._get_reauth_entry(), data=stored_data
+                )
+                await self.hass.config_entries.async_reload(
+                    self._get_reauth_entry().entry_id
+                )
+                return self.async_abort(reason="reauth_successful")
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("Unexpected exception during Klereo reauth")
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="reauth_confirm", data_schema=DATA_SCHEMA, errors=errors
+        )
+
 
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""

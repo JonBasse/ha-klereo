@@ -5,6 +5,7 @@ from datetime import timedelta
 import aiohttp
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import KlereoApi, KlereoApiError
@@ -71,6 +72,18 @@ class KlereoCoordinator(DataUpdateCoordinator):
 
             return data
 
+        except KlereoApiError as err:
+            raise ConfigEntryAuthFailed(
+                "Authentication failed — please re-enter your Klereo credentials"
+            ) from err
+        except aiohttp.ClientResponseError as err:
+            if err.status in (401, 403):
+                raise ConfigEntryAuthFailed(
+                    "Authentication failed — please re-enter your Klereo credentials"
+                ) from err
+            raise UpdateFailed(
+                f"Error communicating with Klereo API: {err}"
+            ) from err
         except Exception as err:
             raise UpdateFailed(
                 f"Error communicating with Klereo API: {err}"

@@ -5,7 +5,15 @@
                 "title": "Klereo Connect",
                 "description": "Enter your Klereo Connect credentials.",
                 "data": {
-                    "username": "Username",
+                    "username": "Email",
+                    "password": "Password"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Re-authenticate Klereo",
+                "description": "Your Klereo credentials have expired. Please re-enter them.",
+                "data": {
+                    "username": "Email",
                     "password": "Password"
                 }
             }
@@ -16,7 +24,8 @@
             "unknown": "An unexpected error occurred."
         },
         "abort": {
-            "already_configured": "This account is already configured."
+            "already_configured": "This account is already configured.",
+            "reauth_successful": "Re-authentication was successful."
         }
     }
 }
