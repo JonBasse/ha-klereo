@@ -45,11 +45,11 @@ class KlereoSwitch(CoordinatorEntity, SwitchEntity):
     @property
     def device_info(self):
         """Return device information."""
+        system = self.coordinator.data.get(self.system_id, {})
+        name = system.get("info", {}).get("poolNickname", "Klereo Pool")
         return {
             "identifiers": {(DOMAIN, self.system_id)},
-            "name": self.coordinator.data[self.system_id]["info"].get(
-                "poolNickname", "Klereo Pool"
-            ),
+            "name": name,
             "manufacturer": "Klereo",
             "model": "Pool System",
         }
