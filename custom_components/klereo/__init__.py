@@ -17,10 +17,23 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Klereo from a config entry."""
+    import hashlib
+
     hass.data.setdefault(DOMAIN, {})
 
+    password = entry.data[CONF_PASSWORD]
+    # Migrate plaintext password to hash (SHA-1 hex is always 40 lowercase hex chars)
+    if len(password) != 40 or not all(c in "0123456789abcdef" for c in password):
+        password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_PASSWORD: password_hash},
+        )
+    else:
+        password_hash = password
+
     session = async_get_clientsession(hass)
-    api = KlereoApi(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD], session)
+    api = KlereoApi(entry.data[CONF_USERNAME], password_hash, session)
 
     coordinator = KlereoCoordinator(hass, api)
     await coordinator.async_config_entry_first_refresh()

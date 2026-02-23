@@ -1,4 +1,5 @@
 """Config flow for Klereo integration."""
+import hashlib
 import logging
 
 import aiohttp
@@ -25,7 +26,8 @@ DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: core.HomeAssistant, data: dict) -> dict:
     """Validate the user input allows us to connect."""
     session = async_get_clientsession(hass)
-    api = KlereoApi(data[CONF_USERNAME], data[CONF_PASSWORD], session)
+    password_hash = hashlib.sha1(data[CONF_PASSWORD].encode("utf-8")).hexdigest()
+    api = KlereoApi(data[CONF_USERNAME], password_hash, session)
 
     try:
         await api.login()
@@ -56,7 +58,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(user_input[CONF_USERNAME].strip().lower())
                 self._abort_if_unique_id_configured()
 
-                return self.async_create_entry(title=info["title"], data=user_input)
+                stored_data = {
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: hashlib.sha1(
+                        user_input[CONF_PASSWORD].encode("utf-8")
+                    ).hexdigest(),
+                }
+                return self.async_create_entry(title=info["title"], data=stored_data)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:

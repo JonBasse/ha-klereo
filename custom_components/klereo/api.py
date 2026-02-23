@@ -1,6 +1,5 @@
 """API Client for Klereo."""
 import asyncio
-import hashlib
 import json
 import logging
 from typing import Any
@@ -30,10 +29,14 @@ class KlereoApiError(Exception):
 class KlereoApi:
     """Klereo API Client."""
 
-    def __init__(self, username: str, password: str, session: aiohttp.ClientSession):
-        """Initialize the API client."""
+    def __init__(self, username: str, password_hash: str, session: aiohttp.ClientSession):
+        """Initialize the API client.
+
+        Args:
+            password_hash: SHA-1 hex digest of the password.
+        """
         self._username = username
-        self._password = password
+        self._password_hash = password_hash
         self._session = session
         self._token: str | None = None
         self._auth_lock = asyncio.Lock()
@@ -41,14 +44,13 @@ class KlereoApi:
     async def login(self) -> None:
         """Authenticate with the Klereo API and obtain a JWT token."""
         _LOGGER.debug("Logging in to Klereo API")
-        hashed_password = hashlib.sha1(self._password.encode("utf-8")).hexdigest()
         try:
             async with asyncio.timeout(TIMEOUT):
                 response = await self._session.post(
                     API_URL_LOGIN,
                     data={
                         "login": self._username,
-                        "password": hashed_password,
+                        "password": self._password_hash,
                         "version": API_VERSION,
                     },
                     headers={
