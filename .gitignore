@@ -5,3 +5,19 @@ __pycache__/
 .DS_Store
 firebase-debug.log
 .worktrees/
+
+# Development
+.env
+.venv/
+.vscode/
+.idea/
+*.egg-info/
+dist/
+build/
+
+# Testing / linting
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/

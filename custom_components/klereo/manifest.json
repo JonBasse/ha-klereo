@@ -1,5 +1,6 @@
 {
     "domain": "klereo",
+    "homeassistant": "2024.1.0",
     "name": "Klereo",
     "codeowners": ["@JonBasse"],
     "config_flow": true,
