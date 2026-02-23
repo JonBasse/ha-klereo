@@ -1,17 +1,14 @@
 """The Klereo integration."""
 import logging
-from datetime import timedelta
-
-import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import KlereoApi, KlereoApiError
-from .const import DOMAIN, SCAN_INTERVAL_MINUTES
+from .api import KlereoApi
+from .const import DOMAIN
+from .coordinator import KlereoCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,68 +22,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
     api = KlereoApi(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD], session)
 
-    async def async_update_data():
-        """Fetch data from the Klereo API."""
-        try:
-            systems_response = await api.get_systems()
-            _LOGGER.debug("Systems response: %s", systems_response)
-
-            # Parse system list from response — the API wraps it differently
-            # depending on context (direct list, {"response": [...]}, or
-            # {"list_systems": [...]}).
-            if isinstance(systems_response, dict):
-                system_list = systems_response.get(
-                    "response", systems_response.get("list_systems", [])
-                )
-            elif isinstance(systems_response, list):
-                system_list = systems_response
-            else:
-                system_list = []
-
-            if not isinstance(system_list, list):
-                system_list = []
-
-            data = {}
-            for system in system_list:
-                sys_id = system.get("idSystem")
-                if not sys_id:
-                    continue
-
-                # Start with the system-level data from GetIndex
-                details = system.copy()
-
-                # Merge in full details from GetPoolDetails
-                try:
-                    details_response = await api.get_pool_details(sys_id)
-                    if isinstance(details_response, dict):
-                        response_data = details_response.get("response")
-                        if isinstance(response_data, list) and response_data:
-                            details.update(response_data[0])
-                except (aiohttp.ClientError, KlereoApiError, TimeoutError):
-                    _LOGGER.warning(
-                        "Failed to get pool details for system %s",
-                        sys_id,
-                        exc_info=True,
-                    )
-
-                data[sys_id] = {"info": system, "details": details}
-
-            return data
-
-        except Exception as err:
-            raise UpdateFailed(
-                f"Error communicating with Klereo API: {err}"
-            ) from err
-
-    coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name="klereo",
-        update_method=async_update_data,
-        update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
-    )
-    coordinator.api = api
-
+    coordinator = KlereoCoordinator(hass, api)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
