@@ -50,6 +50,12 @@ class TestKlereoSwitch:
         switch = KlereoSwitch(mock_coordinator, "SYS1", output)
         assert switch._attr_is_on is False
 
+    def test_is_on_when_status_is_string_one(self, mock_coordinator):
+        """Should be ON when status is string '1' (API may return strings)."""
+        output = {"index": 0, "status": "1", "mode": 0, "type": 0}
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        assert switch._attr_is_on is True
+
     def test_is_off_when_status_is_string_zero(self, mock_coordinator):
         """Should be OFF when status is string '0'."""
         output = {"index": 0, "status": "0", "mode": 0, "type": 0}

@@ -21,9 +21,9 @@ class KlereoEntity(CoordinatorEntity[KlereoCoordinator]):
         """Return device information."""
         system = self.coordinator.data.get(self.system_id, {})
         name = system.get("info", {}).get("poolNickname", "Klereo Pool")
-        return {
-            "identifiers": {(DOMAIN, self.system_id)},
-            "name": name,
-            "manufacturer": "Klereo",
-            "model": "Pool System",
-        }
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.system_id)},
+            name=name,
+            manufacturer="Klereo",
+            model="Pool System",
+        )

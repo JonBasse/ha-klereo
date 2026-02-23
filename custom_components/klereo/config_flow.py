@@ -53,7 +53,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         """Return the options flow handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
@@ -70,6 +70,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_PASSWORD: hashlib.sha1(
                         user_input[CONF_PASSWORD].encode("utf-8")
                     ).hexdigest(),
+                    "password_hashed": True,
                 }
                 return self.async_create_entry(title=info["title"], data=stored_data)
             except CannotConnect:
@@ -100,6 +101,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_PASSWORD: hashlib.sha1(
                         user_input[CONF_PASSWORD].encode("utf-8")
                     ).hexdigest(),
+                    "password_hashed": True,
                 }
 
                 self.hass.config_entries.async_update_entry(

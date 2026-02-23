@@ -1,4 +1,5 @@
 """The Klereo integration."""
+import hashlib
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -17,17 +18,16 @@ PLATFORMS: list[Platform] = [Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Klereo from a config entry."""
-    import hashlib
-
     hass.data.setdefault(DOMAIN, {})
 
     password = entry.data[CONF_PASSWORD]
-    # Migrate plaintext password to hash (SHA-1 hex is always 40 lowercase hex chars)
-    if len(password) != 40 or not all(c in "0123456789abcdef" for c in password):
+    # Migrate plaintext password to SHA-1 hash (Klereo API requirement).
+    # Use an explicit flag to avoid misidentifying a 40-char hex password as a hash.
+    if not entry.data.get("password_hashed"):
         password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
         hass.config_entries.async_update_entry(
             entry,
-            data={**entry.data, CONF_PASSWORD: password_hash},
+            data={**entry.data, CONF_PASSWORD: password_hash, "password_hashed": True},
         )
     else:
         password_hash = password

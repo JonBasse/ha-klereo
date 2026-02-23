@@ -84,6 +84,16 @@ class KlereoApi:
             "User-Agent": USER_AGENT,
         }
 
+    async def _parse_response(self, response: aiohttp.ClientResponse, url: str) -> Any:
+        """Parse and validate a JSON response from the API."""
+        response.raise_for_status()
+        text = await response.text()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as err:
+            _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
+            raise KlereoApiError(f"Invalid JSON response from {url}") from err
+
     async def _request_with_retry(self, method: str, url: str, **kwargs: Any) -> Any:
         """Make an API request, retrying on 401 and transient errors."""
         headers = await self._get_auth_header()
@@ -92,13 +102,7 @@ class KlereoApi:
                 response = await self._session.request(
                     method, url, headers=headers, **kwargs
                 )
-                response.raise_for_status()
-                text = await response.text()
-                try:
-                    return json.loads(text)
-                except json.JSONDecodeError as err:
-                    _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
-                    raise KlereoApiError(f"Invalid JSON response from {url}") from err
+                return await self._parse_response(response, url)
         except aiohttp.ClientResponseError as err:
             if err.status == 401:
                 _LOGGER.debug("Token expired, re-authenticating")
@@ -108,13 +112,7 @@ class KlereoApi:
                     response = await self._session.request(
                         method, url, headers=headers, **kwargs
                     )
-                    response.raise_for_status()
-                    text = await response.text()
-                    try:
-                        return json.loads(text)
-                    except json.JSONDecodeError as parse_err:
-                        _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
-                        raise KlereoApiError(f"Invalid JSON response from {url}") from parse_err
+                    return await self._parse_response(response, url)
             raise
         except (aiohttp.ClientConnectionError, TimeoutError) as err:
             _LOGGER.debug("Transient error on %s, retrying once: %s", url, err)
@@ -124,13 +122,7 @@ class KlereoApi:
                 response = await self._session.request(
                     method, url, headers=headers, **kwargs
                 )
-                response.raise_for_status()
-                text = await response.text()
-                try:
-                    return json.loads(text)
-                except json.JSONDecodeError as parse_err:
-                    _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
-                    raise KlereoApiError(f"Invalid JSON response from {url}") from parse_err
+                return await self._parse_response(response, url)
 
     async def get_systems(self) -> Any:
         """Get list of pool systems."""

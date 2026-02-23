@@ -87,8 +87,8 @@ class KlereoCoordinator(DataUpdateCoordinator):
             return data
 
         except KlereoApiError as err:
-            raise ConfigEntryAuthFailed(
-                "Authentication failed — please re-enter your Klereo credentials"
+            raise UpdateFailed(
+                f"Klereo API error: {err}"
             ) from err
         except aiohttp.ClientResponseError as err:
             if err.status in (401, 403):
