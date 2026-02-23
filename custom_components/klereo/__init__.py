@@ -2,13 +2,15 @@
 import logging
 from datetime import timedelta
 
+import aiohttp
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import KlereoApi
+from .api import KlereoApi, KlereoApiError
 from .const import DOMAIN, SCAN_INTERVAL_MINUTES
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         response_data = details_response.get("response")
                         if isinstance(response_data, list) and response_data:
                             details.update(response_data[0])
-                except Exception:
+                except (aiohttp.ClientError, KlereoApiError, TimeoutError):
                     _LOGGER.warning(
                         "Failed to get pool details for system %s",
                         sys_id,
