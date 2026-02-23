@@ -34,6 +34,7 @@ class KlereoApi:
         self._password = password
         self._session = session
         self._token: str | None = None
+        self._auth_lock = asyncio.Lock()
 
     async def login(self) -> None:
         """Authenticate with the Klereo API and obtain a JWT token."""
@@ -70,7 +71,9 @@ class KlereoApi:
     async def _get_auth_header(self) -> dict[str, str]:
         """Get the authorization header, logging in if necessary."""
         if not self._token:
-            await self.login()
+            async with self._auth_lock:
+                if not self._token:
+                    await self.login()
         return {
             "Authorization": f"Bearer {self._token}",
             "User-Agent": USER_AGENT,
