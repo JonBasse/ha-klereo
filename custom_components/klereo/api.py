@@ -1,6 +1,7 @@
 """API Client for Klereo."""
 import asyncio
 import hashlib
+import json
 import logging
 
 import aiohttp
@@ -83,7 +84,12 @@ class KlereoApi:
                     method, url, headers=headers, **kwargs
                 )
                 response.raise_for_status()
-                return await response.json(content_type=None)
+                text = await response.text()
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError as err:
+                    _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
+                    raise KlereoApiError(f"Invalid JSON response from {url}") from err
         except aiohttp.ClientResponseError as err:
             if err.status == 401:
                 _LOGGER.debug("Token expired, re-authenticating")
@@ -94,7 +100,12 @@ class KlereoApi:
                         method, url, headers=headers, **kwargs
                     )
                     response.raise_for_status()
-                    return await response.json(content_type=None)
+                    text = await response.text()
+                    try:
+                        return json.loads(text)
+                    except json.JSONDecodeError as err:
+                        _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
+                        raise KlereoApiError(f"Invalid JSON response from {url}") from err
             raise
 
     async def get_systems(self):

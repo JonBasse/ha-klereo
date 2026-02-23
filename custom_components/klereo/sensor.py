@@ -19,6 +19,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
         details = system_data.get("details", {})
 
         for probe in details.get("probes", []):
+            if probe.get("index") is None:
+                _LOGGER.warning("Skipping probe with no index: %s", probe)
+                continue
             entities.append(KlereoSensor(coordinator, system_id, probe))
 
         for key, value in details.get("RegulModes", {}).items():
@@ -57,7 +60,10 @@ class KlereoSensor(KlereoEntity, SensorEntity):
 
     def _update_from_data(self, data):
         """Update state from probe data."""
-        self._attr_native_value = data.get("filteredValue", data.get("directValue"))
+        value = data.get("filteredValue")
+        if value is None:
+            value = data.get("directValue")
+        self._attr_native_value = value
         self._attr_extra_state_attributes = {
             "type": data.get("type"),
             "status": data.get("status"),

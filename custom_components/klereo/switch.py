@@ -18,6 +18,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
     for system_id, system_data in coordinator.data.items():
         details = system_data.get("details", {})
         for output in details.get("outs", []):
+            if output.get("index") is None:
+                _LOGGER.warning("Skipping output with no index: %s", output)
+                continue
             entities.append(KlereoSwitch(coordinator, system_id, output))
 
     async_add_entities(entities)
