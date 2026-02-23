@@ -3,9 +3,8 @@ import logging
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import callback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
 from .const import DOMAIN, SENSOR_TYPES
+from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,16 +27,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class KlereoSensor(CoordinatorEntity, SensorEntity):
+class KlereoSensor(KlereoEntity, SensorEntity):
     """Representation of a Klereo probe sensor."""
 
-    _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, system_id, sensor_data):
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self.system_id = system_id
+        super().__init__(coordinator, system_id)
         self._index = sensor_data.get("index")
         self._type = sensor_data.get("type")
 
@@ -49,18 +46,6 @@ class KlereoSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = sensor_def.get("device_class")
 
         self._update_from_data(sensor_data)
-
-    @property
-    def device_info(self):
-        """Return device information."""
-        system = self.coordinator.data.get(self.system_id, {})
-        name = system.get("info", {}).get("poolNickname", "Klereo Pool")
-        return {
-            "identifiers": {(DOMAIN, self.system_id)},
-            "name": name,
-            "manufacturer": "Klereo",
-            "model": "Pool System",
-        }
 
     @callback
     def _handle_coordinator_update(self):
@@ -89,33 +74,19 @@ class KlereoSensor(CoordinatorEntity, SensorEntity):
         return None
 
 
-class KlereoParamSensor(CoordinatorEntity, SensorEntity):
+class KlereoParamSensor(KlereoEntity, SensorEntity):
     """Representation of a Klereo regulation parameter as a sensor."""
 
-    _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, system_id, key, initial_value):
         """Initialize the parameter sensor."""
-        super().__init__(coordinator)
-        self.system_id = system_id
+        super().__init__(coordinator, system_id)
         self._key = key
 
         self._attr_unique_id = f"{system_id}_param_{key}"
         self._attr_name = key
         self._attr_native_value = initial_value
-
-    @property
-    def device_info(self):
-        """Return device information."""
-        system = self.coordinator.data.get(self.system_id, {})
-        name = system.get("info", {}).get("poolNickname", "Klereo Pool")
-        return {
-            "identifiers": {(DOMAIN, self.system_id)},
-            "name": name,
-            "manufacturer": "Klereo",
-            "model": "Pool System",
-        }
 
     @callback
     def _handle_coordinator_update(self):
