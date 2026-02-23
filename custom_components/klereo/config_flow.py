@@ -4,9 +4,8 @@ import logging
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant import config_entries, core
-from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession

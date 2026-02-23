@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, OUTPUT_NAMES, OUT_MODE_MAN, OUT_STATE_ON, OUT_STATE_OFF
+from .const import DOMAIN, OUT_MODE_MAN, OUT_STATE_OFF, OUT_STATE_ON, OUTPUT_NAMES
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)

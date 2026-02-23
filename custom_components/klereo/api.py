@@ -7,13 +7,13 @@ from typing import Any
 import aiohttp
 
 from .const import (
-    API_URL_LOGIN,
+    API_COM_MODE,
     API_URL_GET_INDEX,
     API_URL_GET_POOL_DETAILS,
+    API_URL_LOGIN,
     API_URL_SET_OUT,
     API_URL_SET_PARAM,
     API_VERSION,
-    API_COM_MODE,
 )
 
 _LOGGER = logging.getLogger(__name__)

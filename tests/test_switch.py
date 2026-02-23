@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from custom_components.klereo.const import OUT_MODE_MAN, OUT_STATE_OFF, OUT_STATE_ON
 from custom_components.klereo.switch import KlereoSwitch
-from custom_components.klereo.const import OUT_MODE_MAN, OUT_STATE_ON, OUT_STATE_OFF
 
 
 @pytest.fixture

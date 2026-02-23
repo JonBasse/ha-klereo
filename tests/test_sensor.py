@@ -3,8 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.klereo.sensor import KlereoSensor, KlereoParamSensor
-from custom_components.klereo.const import SENSOR_TYPES
+from custom_components.klereo.sensor import KlereoParamSensor, KlereoSensor
 
 
 @pytest.fixture

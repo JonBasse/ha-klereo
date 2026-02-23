@@ -1,10 +1,9 @@
 """Tests for the Klereo coordinator."""
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import aiohttp
 
-from custom_components.klereo.api import KlereoApi, KlereoApiError
+from custom_components.klereo.api import KlereoApi
 from custom_components.klereo.coordinator import KlereoCoordinator
 
 

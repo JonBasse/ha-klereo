@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from custom_components.klereo.api import KlereoApi
-from custom_components.klereo.const import DOMAIN
 
 MOCK_SYSTEM_ID = "ABC123"
 MOCK_USERNAME = "test@example.com"
