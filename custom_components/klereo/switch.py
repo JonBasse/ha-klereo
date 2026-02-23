@@ -64,7 +64,7 @@ class KlereoSwitch(CoordinatorEntity, SwitchEntity):
 
     def _update_from_data(self, data):
         """Update state from output data."""
-        self._attr_is_on = bool(data.get("status"))
+        self._attr_is_on = data.get("status") == OUT_STATE_ON
         self._attr_extra_state_attributes = {
             "mode": data.get("mode"),
             "type": data.get("type"),
