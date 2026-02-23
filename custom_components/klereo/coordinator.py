@@ -20,13 +20,13 @@ class KlereoCoordinator(DataUpdateCoordinator):
 
     api: KlereoApi
 
-    def __init__(self, hass: HomeAssistant, api: KlereoApi) -> None:
+    def __init__(self, hass: HomeAssistant, api: KlereoApi, scan_interval: int = SCAN_INTERVAL_MINUTES) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name="klereo",
-            update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
+            update_interval=timedelta(minutes=scan_interval),
         )
         self.api = api
 

@@ -27,5 +27,15 @@
             "already_configured": "This account is already configured.",
             "reauth_successful": "Re-authentication was successful."
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Klereo Options",
+                "data": {
+                    "scan_interval": "Update interval (minutes)"
+                }
+            }
+        }
     }
 }
