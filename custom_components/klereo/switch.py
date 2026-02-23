@@ -20,18 +20,29 @@ async def async_setup_entry(
 ) -> None:
     """Set up Klereo switches."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
+    known_ids: set[str] = set()
 
-    entities = []
+    @callback
+    def _discover_entities() -> None:
+        new_entities: list[SwitchEntity] = []
 
-    for system_id, system_data in coordinator.data.items():
-        details = system_data.get("details", {})
-        for output in details.get("outs", []):
-            if output.get("index") is None:
-                _LOGGER.warning("Skipping output with no index: %s", output)
-                continue
-            entities.append(KlereoSwitch(coordinator, system_id, output))
+        for system_id, system_data in coordinator.data.items():
+            details = system_data.get("details", {})
+            for output in details.get("outs", []):
+                if output.get("index") is None:
+                    continue
+                uid = f"{system_id}_output_{output['index']}"
+                if uid not in known_ids:
+                    known_ids.add(uid)
+                    new_entities.append(
+                        KlereoSwitch(coordinator, system_id, output)
+                    )
 
-    async_add_entities(entities)
+        if new_entities:
+            async_add_entities(new_entities)
+
+    _discover_entities()
+    entry.async_on_unload(coordinator.async_add_listener(_discover_entities))
 
 
 class KlereoSwitch(KlereoEntity, SwitchEntity):

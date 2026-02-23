@@ -19,22 +19,39 @@ async def async_setup_entry(
 ) -> None:
     """Set up Klereo sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
+    known_sensor_ids: set[str] = set()
+    known_param_ids: set[str] = set()
 
-    entities = []
+    @callback
+    def _discover_entities() -> None:
+        new_entities: list[SensorEntity] = []
 
-    for system_id, system_data in coordinator.data.items():
-        details = system_data.get("details", {})
+        for system_id, system_data in coordinator.data.items():
+            details = system_data.get("details", {})
 
-        for probe in details.get("probes", []):
-            if probe.get("index") is None:
-                _LOGGER.warning("Skipping probe with no index: %s", probe)
-                continue
-            entities.append(KlereoSensor(coordinator, system_id, probe))
+            for probe in details.get("probes", []):
+                if probe.get("index") is None:
+                    continue
+                uid = f"{system_id}_sensor_{probe['index']}"
+                if uid not in known_sensor_ids:
+                    known_sensor_ids.add(uid)
+                    new_entities.append(
+                        KlereoSensor(coordinator, system_id, probe)
+                    )
 
-        for key, value in details.get("RegulModes", {}).items():
-            entities.append(KlereoParamSensor(coordinator, system_id, key, value))
+            for key, value in details.get("RegulModes", {}).items():
+                uid = f"{system_id}_param_{key}"
+                if uid not in known_param_ids:
+                    known_param_ids.add(uid)
+                    new_entities.append(
+                        KlereoParamSensor(coordinator, system_id, key, value)
+                    )
 
-    async_add_entities(entities)
+        if new_entities:
+            async_add_entities(new_entities)
+
+    _discover_entities()
+    entry.async_on_unload(coordinator.async_add_listener(_discover_entities))
 
 
 class KlereoSensor(KlereoEntity, SensorEntity):
