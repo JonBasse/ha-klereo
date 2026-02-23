@@ -1,0 +1,72 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [1.3.0] — 2026-02-23
+
+### Added
+
+- **Number entities** — Water temperature setpoint (`ConsigneEau`) as an adjustable number entity (10–40 °C).
+- **Diagnostics platform** — Download redacted diagnostic data for troubleshooting.
+- **Re-authentication flow** — Expired credentials prompt re-entry instead of requiring removal.
+- **Configurable scan interval** — Options flow to set polling interval (1–60 minutes).
+- **Dynamic entity discovery** — New probes/outputs are added automatically without restart.
+- **CI/CD pipeline** — GitHub Actions for linting (ruff), testing (pytest), and HACS validation.
+- **Test suite** — 31 tests covering API client, coordinator, sensors, and switches.
+- **KlereoCoordinator** — Dedicated coordinator subclass with parallel API fetching.
+- **KlereoEntity base class** — Shared base with DeviceInfo and `has_entity_name`.
+- **Type annotations** — Added throughout the codebase.
+
+### Fixed
+
+- Switch status comparison now handles string values from the API (`"1"` / `"0"`).
+- `KlereoApiError` (JSON parse errors) no longer incorrectly triggers re-authentication.
+- `device_info` uses safe `.get()` to prevent `KeyError` on partial API data.
+- `KlereoParamSensor` now has `state_class` for long-term statistics support.
+- Narrowed bare `except Exception` to specific error types.
+- Normalized config entry `unique_id` to prevent duplicate entries.
+
+### Security
+
+- Credentials stored as SHA-1 hash instead of plaintext, with automatic migration.
+- `firebase-debug.log` removed from repository.
+- Diagnostics redacts sensitive data from both config entry and coordinator data.
+
+### Changed
+
+- Minimum Home Assistant version bumped to **2024.4** (from 2024.1).
+- API client uses `asyncio.Lock` for re-authentication to prevent concurrent login storms.
+- API client retries on transient errors (`ClientConnectionError`, `TimeoutError`) with 2s backoff.
+- Switch commands wrapped with `HomeAssistantError` and use optimistic state updates.
+- O(1) entity lookup via index dicts instead of linear scans.
+- Extracted `_parse_response` helper to DRY up JSON parsing in API client.
+
+## [1.2.0] — 2026-02-02
+
+### Fixed
+
+- Fixed broken switch commands — API parameter names were wrong.
+- Fixed switch mode value — was sending mode=1 (Time Slots) instead of mode=0 (Manual).
+- Fixed stale entities — sensors and switches never updated after initial load.
+- Fixed sensor type mapping — types 1 (Air Temp) and 5 (Water Temp) were swapped.
+
+### Added
+
+- Proper error differentiation in config flow (`CannotConnect` vs `InvalidAuth`).
+- Unique ID on config entries to prevent duplicate setups.
+- Named constants for output modes and states.
+- `SensorStateClass.MEASUREMENT` for long-term statistics.
+- Config flow translations.
+
+### Removed
+
+- Dead `binary_sensor.py` that never created entities.
+
+## [1.1.0] — Initial HACS Release
+
+### Added
+
+- Probe sensors for water quality monitoring.
+- Output switches for pool equipment control.
+- Regulation parameter sensors.
+- Config flow for credential setup.

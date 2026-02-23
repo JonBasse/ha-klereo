@@ -139,6 +139,34 @@ logger:
     custom_components.klereo: debug
 ```
 
+## Development
+
+### Setup
+
+```bash
+git clone https://github.com/JonBasse/ha-klereo.git
+cd ha-klereo
+python -m venv .venv
+source .venv/bin/activate
+pip install pytest pytest-asyncio pytest-homeassistant-custom-component ruff
+```
+
+### Run tests
+
+```bash
+pytest tests/ -v
+```
+
+### Lint
+
+```bash
+ruff check .
+```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes per version.
+
 ## Credits
 
 - **Author:** [JonBasse](https://github.com/JonBasse)
