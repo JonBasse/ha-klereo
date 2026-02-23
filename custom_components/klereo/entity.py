@@ -1,4 +1,5 @@
 """Base entity for Klereo."""
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -16,7 +17,7 @@ class KlereoEntity(CoordinatorEntity[KlereoCoordinator]):
         self.system_id = system_id
 
     @property
-    def device_info(self):
+    def device_info(self) -> DeviceInfo:
         """Return device information."""
         system = self.coordinator.data.get(self.system_id, {})
         name = system.get("info", {}).get("poolNickname", "Klereo Pool")

@@ -2,14 +2,21 @@
 import logging
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
-from homeassistant.core import callback
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 from .const import DOMAIN, SENSOR_TYPES
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     """Set up Klereo sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
 

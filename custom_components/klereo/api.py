@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import json
 import logging
+from typing import Any
 
 import aiohttp
 
@@ -34,7 +35,7 @@ class KlereoApi:
         self._session = session
         self._token: str | None = None
 
-    async def login(self):
+    async def login(self) -> None:
         """Authenticate with the Klereo API and obtain a JWT token."""
         _LOGGER.debug("Logging in to Klereo API")
         hashed_password = hashlib.sha1(self._password.encode("utf-8")).hexdigest()
@@ -75,7 +76,7 @@ class KlereoApi:
             "User-Agent": USER_AGENT,
         }
 
-    async def _request_with_retry(self, method: str, url: str, **kwargs):
+    async def _request_with_retry(self, method: str, url: str, **kwargs: Any) -> Any:
         """Make an API request, retrying once on 401 (expired token)."""
         headers = await self._get_auth_header()
         try:
@@ -108,11 +109,11 @@ class KlereoApi:
                         raise KlereoApiError(f"Invalid JSON response from {url}") from err
             raise
 
-    async def get_systems(self):
+    async def get_systems(self) -> Any:
         """Get list of pool systems."""
         return await self._request_with_retry("GET", API_URL_GET_INDEX)
 
-    async def get_pool_details(self, system_id: str):
+    async def get_pool_details(self, system_id: str) -> Any:
         """Get details for a specific pool system."""
         return await self._request_with_retry(
             "POST", API_URL_GET_POOL_DETAILS, data={"poolID": system_id}
@@ -120,7 +121,7 @@ class KlereoApi:
 
     async def set_output(
         self, system_id: str, out_index: int, mode: int, state: int
-    ):
+    ) -> Any:
         """Set an output state.
 
         Args:
@@ -141,7 +142,7 @@ class KlereoApi:
             },
         )
 
-    async def set_param(self, system_id: str, param_id: str, value):
+    async def set_param(self, system_id: str, param_id: str, value: Any) -> Any:
         """Set a parameter value.
 
         Args:
