@@ -59,3 +59,7 @@ OUTPUT_NAMES = {
     14: "Aux 9",
     15: "Hybrid Disinfectant",
 }
+
+PARAM_TYPES = {
+    "ConsigneEau": {"name": "Water Setpoint", "unit": "°C", "min": 10, "max": 40, "step": 0.5},
+}
