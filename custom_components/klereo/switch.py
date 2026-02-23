@@ -4,6 +4,7 @@ import logging
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, OUTPUT_NAMES, OUT_MODE_MAN, OUT_STATE_ON, OUT_STATE_OFF
@@ -76,14 +77,28 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs):
         """Turn the output on (Manual mode, ON state)."""
-        await self.coordinator.api.set_output(
-            self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_ON
-        )
+        try:
+            await self.coordinator.api.set_output(
+                self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_ON
+            )
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Failed to turn on {self._attr_name}: {err}"
+            ) from err
+        self._attr_is_on = True
+        self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs):
         """Turn the output off (Manual mode, OFF state)."""
-        await self.coordinator.api.set_output(
-            self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_OFF
-        )
+        try:
+            await self.coordinator.api.set_output(
+                self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_OFF
+            )
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Failed to turn off {self._attr_name}: {err}"
+            ) from err
+        self._attr_is_on = False
+        self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
