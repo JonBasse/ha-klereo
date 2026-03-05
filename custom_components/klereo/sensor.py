@@ -1,15 +1,21 @@
 """Sensor platform for Klereo."""
 import logging
+import re
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, PARAM_TYPES, SENSOR_TYPES
+from .const import DOMAIN, PARAM_NAMES, PARAM_TYPES, SENSOR_TYPES
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _humanize_key(key: str) -> str:
+    """Convert a camelCase API key to a human-readable name."""
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key)
 
 
 async def async_setup_entry(
@@ -59,8 +65,6 @@ async def async_setup_entry(
 class KlereoSensor(KlereoEntity, SensorEntity):
     """Representation of a Klereo probe sensor."""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
-
     def __init__(self, coordinator, system_id, sensor_data):
         """Initialize the sensor."""
         super().__init__(coordinator, system_id)
@@ -74,6 +78,10 @@ class KlereoSensor(KlereoEntity, SensorEntity):
         self._attr_native_unit_of_measurement = sensor_def.get("unit")
         self._attr_device_class = sensor_def.get("device_class")
 
+        state_class = sensor_def.get("state_class")
+        if state_class:
+            self._attr_state_class = SensorStateClass(state_class)
+
         self._update_from_data(sensor_data)
 
     @callback
@@ -81,7 +89,10 @@ class KlereoSensor(KlereoEntity, SensorEntity):
         """Handle updated data from the coordinator."""
         data = self._find_my_data()
         if data:
+            self._attr_available = True
             self._update_from_data(data)
+        else:
+            self._attr_available = False
         super()._handle_coordinator_update()
 
     def _update_from_data(self, data):
@@ -106,15 +117,13 @@ class KlereoSensor(KlereoEntity, SensorEntity):
 class KlereoParamSensor(KlereoEntity, SensorEntity):
     """Representation of a Klereo regulation parameter as a sensor."""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
-
     def __init__(self, coordinator, system_id, key, initial_value):
         """Initialize the parameter sensor."""
         super().__init__(coordinator, system_id)
         self._key = key
 
         self._attr_unique_id = f"{system_id}_param_{key}"
-        self._attr_name = key
+        self._attr_name = PARAM_NAMES.get(key, _humanize_key(key))
         self._attr_native_value = initial_value
 
     @callback

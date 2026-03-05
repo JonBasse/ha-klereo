@@ -4,7 +4,6 @@ import logging
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, PARAM_TYPES
@@ -79,12 +78,6 @@ class KlereoNumber(KlereoEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the parameter value."""
-        try:
-            await self.coordinator.api.set_param(self.system_id, self._key, value)
-        except Exception as err:
-            raise HomeAssistantError(
-                f"Failed to set {self._attr_name}: {err}"
-            ) from err
         self._attr_native_value = value
         self.async_write_ha_state()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_set_param(self.system_id, self._key, value)

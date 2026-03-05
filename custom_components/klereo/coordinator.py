@@ -2,10 +2,11 @@
 import asyncio
 import logging
 from datetime import timedelta
+from typing import Any
 
 import aiohttp
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import KlereoApi, KlereoApiError
@@ -97,3 +98,27 @@ class KlereoCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(
                 f"Error communicating with Klereo API: {err}"
             ) from err
+
+    async def async_set_output(
+        self, system_id: str, out_index: int, mode: int, state: int
+    ) -> Any:
+        """Send a set-output command and request a data refresh."""
+        try:
+            result = await self.api.set_output(system_id, out_index, mode, state)
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Failed to set output {out_index}: {err}"
+            ) from err
+        await self.async_request_refresh()
+        return result
+
+    async def async_set_param(self, system_id: str, param_id: str, value: Any) -> Any:
+        """Send a set-parameter command and request a data refresh."""
+        try:
+            result = await self.api.set_param(system_id, param_id, value)
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Failed to set parameter {param_id}: {err}"
+            ) from err
+        await self.async_request_refresh()
+        return result

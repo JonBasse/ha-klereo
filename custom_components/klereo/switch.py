@@ -4,7 +4,6 @@ import logging
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, OUT_MODE_MAN, OUT_STATE_OFF, OUT_STATE_ON, OUTPUT_NAMES
@@ -65,7 +64,10 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
         """Handle updated data from the coordinator."""
         data = self._find_my_data()
         if data:
+            self._attr_available = True
             self._update_from_data(data)
+        else:
+            self._attr_available = False
         super()._handle_coordinator_update()
 
     def _update_from_data(self, data):
@@ -93,28 +95,16 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs):
         """Turn the output on (Manual mode, ON state)."""
-        try:
-            await self.coordinator.api.set_output(
-                self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_ON
-            )
-        except Exception as err:
-            raise HomeAssistantError(
-                f"Failed to turn on {self._attr_name}: {err}"
-            ) from err
         self._attr_is_on = True
         self.async_write_ha_state()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_set_output(
+            self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_ON
+        )
 
     async def async_turn_off(self, **kwargs):
         """Turn the output off (Manual mode, OFF state)."""
-        try:
-            await self.coordinator.api.set_output(
-                self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_OFF
-            )
-        except Exception as err:
-            raise HomeAssistantError(
-                f"Failed to turn off {self._attr_name}: {err}"
-            ) from err
         self._attr_is_on = False
         self.async_write_ha_state()
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_set_output(
+            self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_OFF
+        )

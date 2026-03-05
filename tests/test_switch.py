@@ -14,6 +14,7 @@ def mock_coordinator():
     coordinator.api = AsyncMock()
     coordinator.api.set_output.return_value = {"response": "ok"}
     coordinator.async_request_refresh = AsyncMock()
+    coordinator.async_set_output = AsyncMock()
     coordinator.data = {
         "SYS1": {
             "info": {"idSystem": "SYS1", "poolNickname": "My Pool"},
@@ -69,35 +70,35 @@ class TestKlereoSwitch:
         assert switch._attr_is_on is False
 
     async def test_turn_on_calls_api(self, mock_coordinator):
-        """turn_on should call set_output with correct args."""
+        """turn_on should call async_set_output with correct args."""
         output = {"index": 0, "status": 0, "mode": 0, "type": 0}
         switch = KlereoSwitch(mock_coordinator, "SYS1", output)
         switch.async_write_ha_state = MagicMock()
         await switch.async_turn_on()
-        mock_coordinator.api.set_output.assert_called_once_with(
+        mock_coordinator.async_set_output.assert_called_once_with(
             "SYS1", 0, OUT_MODE_MAN, OUT_STATE_ON
         )
         assert switch._attr_is_on is True
 
     async def test_turn_off_calls_api(self, mock_coordinator):
-        """turn_off should call set_output with correct args."""
+        """turn_off should call async_set_output with correct args."""
         output = {"index": 0, "status": 1, "mode": 0, "type": 0}
         switch = KlereoSwitch(mock_coordinator, "SYS1", output)
         switch.async_write_ha_state = MagicMock()
         await switch.async_turn_off()
-        mock_coordinator.api.set_output.assert_called_once_with(
+        mock_coordinator.async_set_output.assert_called_once_with(
             "SYS1", 0, OUT_MODE_MAN, OUT_STATE_OFF
         )
         assert switch._attr_is_on is False
 
     async def test_turn_on_error_raises_ha_error(self, mock_coordinator):
-        """turn_on should raise HomeAssistantError on API failure."""
+        """turn_on should raise HomeAssistantError on coordinator failure."""
         from homeassistant.exceptions import HomeAssistantError
-        mock_coordinator.api.set_output.side_effect = Exception("API down")
+        mock_coordinator.async_set_output.side_effect = HomeAssistantError("Failed to set output 0: API down")
         output = {"index": 0, "status": 0, "mode": 0, "type": 0}
         switch = KlereoSwitch(mock_coordinator, "SYS1", output)
         switch.async_write_ha_state = MagicMock()
-        with pytest.raises(HomeAssistantError, match="Failed to turn on"):
+        with pytest.raises(HomeAssistantError, match="Failed to set output"):
             await switch.async_turn_on()
 
     def test_find_my_data_uses_index(self, mock_coordinator):

@@ -26,19 +26,23 @@ OUT_STATE_OFF = 0
 OUT_STATE_ON = 1
 
 # Probe type to sensor metadata mapping (from Jeedom _PROBE_TYPE_* constants)
+# state_class: "measurement" for continuous readings, None for positional/unknown values
 SENSOR_TYPES = {
-    0: {"name": "Technical Room Temperature", "unit": "°C", "device_class": "temperature"},
-    1: {"name": "Air Temperature", "unit": "°C", "device_class": "temperature"},
-    2: {"name": "Water Level", "unit": "%", "device_class": None},
-    3: {"name": "pH", "unit": None, "device_class": None},
-    4: {"name": "Redox", "unit": "mV", "device_class": "voltage"},
-    5: {"name": "Water Temperature", "unit": "°C", "device_class": "temperature"},
-    6: {"name": "Filter Pressure", "unit": "mbar", "device_class": "pressure"},
-    10: {"name": "Generic", "unit": "%", "device_class": None},
-    11: {"name": "Flow", "unit": "m³/h", "device_class": None},
-    12: {"name": "Container Level", "unit": "%", "device_class": None},
-    13: {"name": "Cover Position", "unit": "%", "device_class": None},
-    14: {"name": "Chlorine", "unit": "mg/L", "device_class": None},
+    0: {
+        "name": "Technical Room Temperature", "unit": "°C",
+        "device_class": "temperature", "state_class": "measurement",
+    },
+    1: {"name": "Air Temperature", "unit": "°C", "device_class": "temperature", "state_class": "measurement"},
+    2: {"name": "Water Level", "unit": "%", "device_class": None, "state_class": "measurement"},
+    3: {"name": "pH", "unit": None, "device_class": None, "state_class": "measurement"},
+    4: {"name": "Redox", "unit": "mV", "device_class": "voltage", "state_class": "measurement"},
+    5: {"name": "Water Temperature", "unit": "°C", "device_class": "temperature", "state_class": "measurement"},
+    6: {"name": "Filter Pressure", "unit": "mbar", "device_class": "pressure", "state_class": "measurement"},
+    10: {"name": "Generic", "unit": "%", "device_class": None, "state_class": None},
+    11: {"name": "Flow", "unit": "m³/h", "device_class": None, "state_class": "measurement"},
+    12: {"name": "Container Level", "unit": "%", "device_class": None, "state_class": "measurement"},
+    13: {"name": "Cover Position", "unit": "%", "device_class": None, "state_class": None},
+    14: {"name": "Chlorine", "unit": "mg/L", "device_class": None, "state_class": "measurement"},
 }
 
 OUTPUT_NAMES = {
@@ -58,6 +62,20 @@ OUTPUT_NAMES = {
     13: "Aux 8",
     14: "Aux 9",
     15: "Hybrid Disinfectant",
+}
+
+# Friendly names for RegulModes keys exposed as read-only param sensors.
+# Keys in PARAM_TYPES are excluded (they become number entities instead).
+PARAM_NAMES = {
+    "ModeFiltration": "Filtration Mode",
+    "ModeRegulPH": "pH Regulation Mode",
+    "ModeRegulRedox": "Redox Regulation Mode",
+    "ModeRegulChlore": "Chlorine Regulation Mode",
+    "ModeRegulTemp": "Temperature Regulation Mode",
+    "ConsignePH": "pH Setpoint",
+    "ConsigneRedox": "Redox Setpoint",
+    "ConsigneChlore": "Chlorine Setpoint",
+    "DureeTimerFiltration": "Filtration Timer Duration",
 }
 
 PARAM_TYPES = {

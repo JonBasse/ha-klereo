@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] — 2026-03-05
+
+### Fixed
+
+- Entities now correctly become **unavailable** when their data disappears from the API (all entity types) ([#34](https://github.com/JonBasse/ha-klereo/issues/34)).
+- `SensorStateClass.MEASUREMENT` is now applied per probe type — Cover Position and Generic sensors no longer produce misleading long-term statistics ([#26](https://github.com/JonBasse/ha-klereo/issues/26)).
+- `KlereoParamSensor` now shows human-readable names (e.g. "Filtration Mode") instead of raw API keys ([#27](https://github.com/JonBasse/ha-klereo/issues/27)).
+- `KlereoParamSensor` no longer applies `state_class: MEASUREMENT` indiscriminately.
+
+### Changed
+
+- Switch and number commands now route through `KlereoCoordinator` methods (`async_set_output`, `async_set_param`) instead of calling the API client directly — centralizes error handling and post-command refresh ([#30](https://github.com/JonBasse/ha-klereo/issues/30)).
+
 ## [1.3.1] — 2026-03-05
 
 ### Fixed

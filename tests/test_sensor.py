@@ -78,7 +78,7 @@ class TestKlereoParamSensor:
     def test_creates_with_initial_value(self, mock_coordinator):
         """Should set initial value from RegulModes."""
         sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsigneEau", 28)
-        assert sensor._attr_name == "ConsigneEau"
+        assert sensor._attr_name == "Consigne Eau"
         assert sensor._attr_native_value == 28
         assert sensor._attr_unique_id == "SYS1_param_ConsigneEau"
 
