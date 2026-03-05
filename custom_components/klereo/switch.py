@@ -71,7 +71,14 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
     def _update_from_data(self, data):
         """Update state from output data."""
         status = data.get("status")
-        self._attr_is_on = status is not None and int(status) == OUT_STATE_ON
+        if status is not None:
+            try:
+                self._attr_is_on = int(status) == OUT_STATE_ON
+            except (ValueError, TypeError):
+                _LOGGER.warning("Unexpected status value %r for output %s", status, self._output_index)
+                self._attr_is_on = False
+        else:
+            self._attr_is_on = False
         self._attr_extra_state_attributes = {
             "mode": data.get("mode"),
             "type": data.get("type"),

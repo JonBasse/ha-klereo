@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] — 2026-03-05
+
+### Fixed
+
+- Removed broad `except Exception` in coordinator that swallowed programming errors — unexpected exceptions now propagate with full tracebacks ([#46](https://github.com/JonBasse/ha-klereo/issues/46)).
+- Guarded `int(status)` in switch against `ValueError` for non-numeric API responses — logs a warning and defaults to off ([#25](https://github.com/JonBasse/ha-klereo/issues/25)).
+- Excluded `PARAM_TYPES` keys from sensor discovery to prevent duplicate entities (e.g. `ConsigneEau` appearing as both sensor and number) ([#28](https://github.com/JonBasse/ha-klereo/issues/28)).
+- Fixed early return in `_handle_coordinator_update` for `KlereoParamSensor` and `KlereoNumber` — entities now correctly become unavailable when their system disappears from the API instead of keeping stale state ([#24](https://github.com/JonBasse/ha-klereo/issues/24)).
+
 ## [1.3.0] — 2026-02-23
 
 ### Added

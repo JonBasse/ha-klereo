@@ -68,7 +68,9 @@ class KlereoNumber(KlereoEntity, NumberEntity):
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
         if self.system_id not in self.coordinator.data:
-            return
+            self._attr_available = False
+            return super()._handle_coordinator_update()
+        self._attr_available = True
         details = self.coordinator.data[self.system_id].get("details", {})
         regul = details.get("RegulModes", {})
         if self._key in regul:

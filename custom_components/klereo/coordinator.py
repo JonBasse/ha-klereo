@@ -97,7 +97,3 @@ class KlereoCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(
                 f"Error communicating with Klereo API: {err}"
             ) from err
-        except Exception as err:
-            raise UpdateFailed(
-                f"Error communicating with Klereo API: {err}"
-            ) from err

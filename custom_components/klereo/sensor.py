@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, SENSOR_TYPES
+from .const import DOMAIN, PARAM_TYPES, SENSOR_TYPES
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +40,8 @@ async def async_setup_entry(
                     )
 
             for key, value in details.get("RegulModes", {}).items():
+                if key in PARAM_TYPES:
+                    continue
                 uid = f"{system_id}_param_{key}"
                 if uid not in known_param_ids:
                     known_param_ids.add(uid)
@@ -119,7 +121,9 @@ class KlereoParamSensor(KlereoEntity, SensorEntity):
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
         if self.system_id not in self.coordinator.data:
-            return
+            self._attr_available = False
+            return super()._handle_coordinator_update()
+        self._attr_available = True
         details = self.coordinator.data[self.system_id].get("details", {})
         regul = details.get("RegulModes", {})
         if self._key in regul:
