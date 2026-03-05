@@ -6,10 +6,21 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, PARAM_TYPES
-from .entity import KlereoEntity
+from .const import PARAM_TYPES
+from .entity import KlereoEntity, setup_discovery
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _extract_numbers(coordinator, system_id, details):
+    """Extract number entities from system details."""
+    items = []
+    for key, value in details.get("RegulModes", {}).items():
+        if key not in PARAM_TYPES:
+            continue
+        uid = f"{system_id}_number_{key}"
+        items.append((uid, KlereoNumber(coordinator, system_id, key, value)))
+    return items
 
 
 async def async_setup_entry(
@@ -18,30 +29,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Klereo number entities."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    known_ids: set[str] = set()
-
-    @callback
-    def _discover_entities() -> None:
-        new_entities: list[NumberEntity] = []
-
-        for system_id, system_data in coordinator.data.items():
-            details = system_data.get("details", {})
-            for key, value in details.get("RegulModes", {}).items():
-                if key not in PARAM_TYPES:
-                    continue
-                uid = f"{system_id}_number_{key}"
-                if uid not in known_ids:
-                    known_ids.add(uid)
-                    new_entities.append(
-                        KlereoNumber(coordinator, system_id, key, value)
-                    )
-
-        if new_entities:
-            async_add_entities(new_entities)
-
-    _discover_entities()
-    entry.async_on_unload(coordinator.async_add_listener(_discover_entities))
+    setup_discovery(hass, entry, async_add_entities, _extract_numbers)
 
 
 class KlereoNumber(KlereoEntity, NumberEntity):

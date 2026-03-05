@@ -6,10 +6,22 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, OUT_MODE_MAN, OUT_STATE_OFF, OUT_STATE_ON, OUTPUT_NAMES
-from .entity import KlereoEntity
+from .api import OUT_MODE_MAN, OUT_STATE_OFF, OUT_STATE_ON
+from .const import OUTPUT_NAMES
+from .entity import KlereoEntity, setup_discovery
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _extract_switches(coordinator, system_id, details):
+    """Extract output switches from system details."""
+    items = []
+    for output in details.get("outs", []):
+        if output.get("index") is None:
+            continue
+        uid = f"{system_id}_output_{output['index']}"
+        items.append((uid, KlereoSwitch(coordinator, system_id, output)))
+    return items
 
 
 async def async_setup_entry(
@@ -18,30 +30,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Klereo switches."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    known_ids: set[str] = set()
-
-    @callback
-    def _discover_entities() -> None:
-        new_entities: list[SwitchEntity] = []
-
-        for system_id, system_data in coordinator.data.items():
-            details = system_data.get("details", {})
-            for output in details.get("outs", []):
-                if output.get("index") is None:
-                    continue
-                uid = f"{system_id}_output_{output['index']}"
-                if uid not in known_ids:
-                    known_ids.add(uid)
-                    new_entities.append(
-                        KlereoSwitch(coordinator, system_id, output)
-                    )
-
-        if new_entities:
-            async_add_entities(new_entities)
-
-    _discover_entities()
-    entry.async_on_unload(coordinator.async_add_listener(_discover_entities))
+    setup_discovery(hass, entry, async_add_entities, _extract_switches)
 
 
 class KlereoSwitch(KlereoEntity, SwitchEntity):

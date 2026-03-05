@@ -1,5 +1,4 @@
 """The Klereo integration."""
-import hashlib
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -8,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KlereoApi
-from .const import DOMAIN, SCAN_INTERVAL_MINUTES
+from .const import DOMAIN, SCAN_INTERVAL_MINUTES, hash_password
 from .coordinator import KlereoCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,24 +15,28 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entry to current version."""
+    if entry.version < 2:
+        _LOGGER.debug("Migrating config entry from version %s to 2", entry.version)
+        password = entry.data[CONF_PASSWORD]
+        if not entry.data.get("password_hashed"):
+            password = hash_password(password)
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_PASSWORD: password, "password_hashed": True},
+            version=2,
+        )
+        _LOGGER.info("Config entry migrated to version 2")
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Klereo from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    password = entry.data[CONF_PASSWORD]
-    # Migrate plaintext password to SHA-1 hash (Klereo API requirement).
-    # Use an explicit flag to avoid misidentifying a 40-char hex password as a hash.
-    if not entry.data.get("password_hashed"):
-        password_hash = hashlib.sha1(password.encode("utf-8")).hexdigest()
-        hass.config_entries.async_update_entry(
-            entry,
-            data={**entry.data, CONF_PASSWORD: password_hash, "password_hashed": True},
-        )
-    else:
-        password_hash = password
-
     session = async_get_clientsession(hass)
-    api = KlereoApi(entry.data[CONF_USERNAME], password_hash, session)
+    api = KlereoApi(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD], session)
 
     scan_interval = entry.options.get("scan_interval", SCAN_INTERVAL_MINUTES)
     coordinator = KlereoCoordinator(hass, api, scan_interval=scan_interval)

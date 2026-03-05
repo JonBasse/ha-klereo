@@ -1,5 +1,4 @@
 """Config flow for Klereo integration."""
-import hashlib
 import logging
 
 import aiohttp
@@ -11,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KlereoApi, KlereoApiError
-from .const import DOMAIN, SCAN_INTERVAL_MINUTES
+from .const import DOMAIN, SCAN_INTERVAL_MINUTES, hash_password
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: core.HomeAssistant, data: dict) -> dict:
     """Validate the user input allows us to connect."""
     session = async_get_clientsession(hass)
-    password_hash = hashlib.sha1(data[CONF_PASSWORD].encode("utf-8")).hexdigest()
+    password_hash = hash_password(data[CONF_PASSWORD])
     api = KlereoApi(data[CONF_USERNAME], password_hash, session)
 
     try:
@@ -46,7 +45,7 @@ async def validate_input(hass: core.HomeAssistant, data: dict) -> dict:
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Klereo."""
 
-    VERSION = 1
+    VERSION = 2
 
     @staticmethod
     @callback
@@ -66,9 +65,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 stored_data = {
                     CONF_USERNAME: user_input[CONF_USERNAME],
-                    CONF_PASSWORD: hashlib.sha1(
-                        user_input[CONF_PASSWORD].encode("utf-8")
-                    ).hexdigest(),
+                    CONF_PASSWORD: hash_password(user_input[CONF_PASSWORD]),
                     "password_hashed": True,
                 }
                 return self.async_create_entry(title=info["title"], data=stored_data)
@@ -97,9 +94,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 stored_data = {
                     CONF_USERNAME: user_input[CONF_USERNAME],
-                    CONF_PASSWORD: hashlib.sha1(
-                        user_input[CONF_PASSWORD].encode("utf-8")
-                    ).hexdigest(),
+                    CONF_PASSWORD: hash_password(user_input[CONF_PASSWORD]),
                     "password_hashed": True,
                 }
 

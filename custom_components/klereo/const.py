@@ -1,29 +1,15 @@
 """Constants for the Klereo integration."""
+import hashlib
 
 DOMAIN = "klereo"
 
-API_URL_BASE = "https://connect.klereo.fr/php"
-API_URL_LOGIN = f"{API_URL_BASE}/GetJWT.php"
-API_URL_GET_INDEX = f"{API_URL_BASE}/GetIndex.php"
-API_URL_GET_POOL_DETAILS = f"{API_URL_BASE}/GetPoolDetails.php"
-API_URL_SET_OUT = f"{API_URL_BASE}/SetOut.php"
-API_URL_SET_PARAM = f"{API_URL_BASE}/SetParam.php"
 
-API_VERSION = "393-J"
-API_COM_MODE = 1
+def hash_password(plaintext: str) -> str:
+    """Hash a plaintext password with SHA-1 for the Klereo API."""
+    return hashlib.sha1(plaintext.encode("utf-8")).hexdigest()
 
 # Default update interval
 SCAN_INTERVAL_MINUTES = 5
-
-# Output modes (from Jeedom plugin _OUT_MODE_* constants)
-OUT_MODE_MAN = 0
-OUT_MODE_TIME_SLOTS = 1
-OUT_MODE_TIMER = 2
-OUT_MODE_REGUL = 3
-
-# Output states (from Jeedom plugin _OUT_STATE_* constants)
-OUT_STATE_OFF = 0
-OUT_STATE_ON = 1
 
 # Probe type to sensor metadata mapping (from Jeedom _PROBE_TYPE_* constants)
 # state_class: "measurement" for continuous readings, None for positional/unknown values

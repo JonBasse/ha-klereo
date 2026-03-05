@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] — 2026-03-05
+
+### Changed
+
+- Extracted `hash_password()` helper in `const.py` — replaces 3 duplicated SHA-1 hashing call sites ([#29](https://github.com/JonBasse/ha-klereo/issues/29)).
+- Moved API wire constants (`API_URL_*`, `OUT_MODE_*`, `OUT_STATE_*`, `API_VERSION`, `API_COM_MODE`) from `const.py` to `api.py` where they belong ([#43](https://github.com/JonBasse/ha-klereo/issues/43)).
+- Extracted `setup_discovery()` helper in `entity.py` — replaces triplicated discovery boilerplate across sensor, switch, and number platforms ([#31](https://github.com/JonBasse/ha-klereo/issues/31)).
+- Config entry migration now uses HA's formal `async_migrate_entry` with `VERSION = 2` instead of inline migration in `async_setup_entry` ([#32](https://github.com/JonBasse/ha-klereo/issues/32)).
+
 ## [1.4.0] — 2026-03-05
 
 ### Fixed

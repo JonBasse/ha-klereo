@@ -1,5 +1,10 @@
 """Base entity for Klereo."""
+from collections.abc import Callable
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -27,3 +32,34 @@ class KlereoEntity(CoordinatorEntity[KlereoCoordinator]):
             manufacturer="Klereo",
             model="Pool System",
         )
+
+
+def setup_discovery(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+    extract_fn: Callable[[KlereoCoordinator, str, dict], list[KlereoEntity]],
+) -> None:
+    """Set up dynamic entity discovery for a platform.
+
+    Args:
+        extract_fn: Called with (coordinator, system_id, details) and returns
+            a list of (uid, entity) tuples for new entities to register.
+    """
+    coordinator: KlereoCoordinator = hass.data[DOMAIN][entry.entry_id]
+    known_ids: set[str] = set()
+
+    @callback
+    def _discover() -> None:
+        new_entities: list[KlereoEntity] = []
+        for system_id, system_data in coordinator.data.items():
+            details = system_data.get("details", {})
+            for uid, entity in extract_fn(coordinator, system_id, details):
+                if uid not in known_ids:
+                    known_ids.add(uid)
+                    new_entities.append(entity)
+        if new_entities:
+            async_add_entities(new_entities)
+
+    _discover()
+    entry.async_on_unload(coordinator.async_add_listener(_discover))

@@ -6,20 +6,31 @@ from typing import Any
 
 import aiohttp
 
-from .const import (
-    API_COM_MODE,
-    API_URL_GET_INDEX,
-    API_URL_GET_POOL_DETAILS,
-    API_URL_LOGIN,
-    API_URL_SET_OUT,
-    API_URL_SET_PARAM,
-    API_VERSION,
-)
-
 _LOGGER = logging.getLogger(__name__)
+
+# API wire constants
+API_URL_BASE = "https://connect.klereo.fr/php"
+API_URL_LOGIN = f"{API_URL_BASE}/GetJWT.php"
+API_URL_GET_INDEX = f"{API_URL_BASE}/GetIndex.php"
+API_URL_GET_POOL_DETAILS = f"{API_URL_BASE}/GetPoolDetails.php"
+API_URL_SET_OUT = f"{API_URL_BASE}/SetOut.php"
+API_URL_SET_PARAM = f"{API_URL_BASE}/SetParam.php"
+
+API_VERSION = "393-J"
+API_COM_MODE = 1
 
 TIMEOUT = 10
 USER_AGENT = "Jeedom plugin"
+
+# Output modes (from Jeedom plugin _OUT_MODE_* constants)
+OUT_MODE_MAN = 0
+OUT_MODE_TIME_SLOTS = 1
+OUT_MODE_TIMER = 2
+OUT_MODE_REGUL = 3
+
+# Output states (from Jeedom plugin _OUT_STATE_* constants)
+OUT_STATE_OFF = 0
+OUT_STATE_ON = 1
 
 
 class KlereoApiError(Exception):
