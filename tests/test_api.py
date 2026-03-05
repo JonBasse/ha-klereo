@@ -99,3 +99,53 @@ class TestRequestWithRetry:
         result = await api._request_with_retry("GET", "https://example.com/api")
         assert result == {"data": "value"}
         assert api._token == "new-token"
+
+    async def test_transient_error_retries(self, api, mock_session):
+        """ConnectionError should retry once after 2s backoff."""
+        api._token = "valid-token"
+        success_response = _make_response({"data": "ok"})
+        mock_session.request.side_effect = [
+            aiohttp.ClientConnectionError("connection lost"),
+            success_response,
+        ]
+        result = await api._request_with_retry("GET", "https://example.com/api")
+        assert result == {"data": "ok"}
+        assert mock_session.request.call_count == 2
+
+    async def test_transient_error_retry_fails(self, api, mock_session):
+        """If retry also fails with transient error, exception propagates."""
+        api._token = "valid-token"
+        mock_session.request.side_effect = aiohttp.ClientConnectionError("still broken")
+        with pytest.raises(aiohttp.ClientConnectionError):
+            await api._request_with_retry("GET", "https://example.com/api")
+
+    async def test_non_401_http_error_propagates(self, api, mock_session):
+        """Non-401 HTTP errors should propagate without retry."""
+        api._token = "valid-token"
+        mock_session.request.return_value = _make_response({}, status=500)
+        with pytest.raises(aiohttp.ClientResponseError):
+            await api._request_with_retry("GET", "https://example.com/api")
+
+
+class TestParseResponse:
+    """Tests for _parse_response."""
+
+    async def test_valid_json(self, api):
+        """Valid JSON response should be parsed."""
+        response = _make_response({"key": "value"})
+        result = await api._parse_response(response, "https://example.com")
+        assert result == {"key": "value"}
+
+    async def test_invalid_json_raises(self, api):
+        """Invalid JSON should raise KlereoApiError."""
+        response = AsyncMock()
+        response.raise_for_status = MagicMock()
+        response.text = AsyncMock(return_value="not json at all")
+        with pytest.raises(KlereoApiError, match="Invalid JSON"):
+            await api._parse_response(response, "https://example.com")
+
+    async def test_http_error_raises(self, api):
+        """Non-200 status should raise ClientResponseError via raise_for_status."""
+        response = _make_response({}, status=503)
+        with pytest.raises(aiohttp.ClientResponseError):
+            await api._parse_response(response, "https://example.com")

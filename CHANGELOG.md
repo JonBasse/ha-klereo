@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] — 2026-03-05
+
+### Added
+
+- **test_config_flow.py** — 10 tests covering `validate_input` (success, API errors, HTTP errors, timeout, password hashing) and `hash_password` utility ([#36](https://github.com/JonBasse/ha-klereo/issues/36)).
+- **test_diagnostics.py** — 3 tests covering diagnostics output structure, sensitive field redaction, and `TO_REDACT` contents ([#37](https://github.com/JonBasse/ha-klereo/issues/37)).
+- **test_number.py** — 6 tests covering `KlereoNumber` creation, initial value, `async_set_native_value`, coordinator update, availability, and device info ([#38](https://github.com/JonBasse/ha-klereo/issues/38)).
+- **test_api.py** — 6 new tests for `_request_with_retry` (transient error retry, retry exhaustion, non-401 propagation) and `_parse_response` (valid JSON, invalid JSON, HTTP errors).
+- Test suite now covers **56 tests** across 6 files (up from 31).
+
 ## [1.5.0] — 2026-03-05
 
 ### Changed
