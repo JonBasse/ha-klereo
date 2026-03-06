@@ -1,8 +1,9 @@
 {
     "domain": "klereo",
-    "homeassistant": "2024.4.0",
     "name": "Klereo",
-    "codeowners": ["@JonBasse"],
+    "codeowners": [
+        "@JonBasse"
+    ],
     "config_flow": true,
     "dependencies": [],
     "documentation": "https://github.com/JonBasse/ha-klereo",
