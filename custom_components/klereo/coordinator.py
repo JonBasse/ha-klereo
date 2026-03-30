@@ -11,11 +11,12 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import KlereoApi, KlereoApiError
 from .const import SCAN_INTERVAL_MINUTES
+from .models import KlereoPoolDetails, KlereoSystemData, KlereoSystemInfo
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class KlereoCoordinator(DataUpdateCoordinator):
+class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     """Klereo data update coordinator."""
 
     api: KlereoApi
@@ -30,7 +31,7 @@ class KlereoCoordinator(DataUpdateCoordinator):
         )
         self.api = api
 
-    async def _async_update_data(self) -> dict:
+    async def _async_update_data(self) -> dict[str, KlereoSystemData]:
         """Fetch data from the Klereo API."""
         try:
             systems_response = await self.api.get_systems()
@@ -49,8 +50,8 @@ class KlereoCoordinator(DataUpdateCoordinator):
                 system_list = []
 
             # Build system map
-            data: dict = {}
-            system_map: dict = {}
+            data: dict[str, KlereoSystemData] = {}
+            system_map: dict[str, dict] = {}
             for system in system_list:
                 sys_id = system.get("idSystem")
                 if sys_id:
@@ -64,7 +65,7 @@ class KlereoCoordinator(DataUpdateCoordinator):
 
             for sys_id, result in zip(system_map, details_results):
                 system = system_map[sys_id]
-                details = system.copy()
+                details_raw = system.copy()
 
                 if isinstance(result, Exception):
                     _LOGGER.warning(
@@ -74,15 +75,12 @@ class KlereoCoordinator(DataUpdateCoordinator):
                 elif isinstance(result, dict):
                     response_data = result.get("response")
                     if isinstance(response_data, list) and response_data:
-                        details.update(response_data[0])
+                        details_raw.update(response_data[0])
 
-                # Build index dicts for O(1) entity lookup
-                probes = details.get("probes", [])
-                outs = details.get("outs", [])
-                details["_probe_index"] = {p["index"]: p for p in probes if "index" in p}
-                details["_output_index"] = {o["index"]: o for o in outs if "index" in o}
-
-                data[sys_id] = {"info": system, "details": details}
+                data[sys_id] = KlereoSystemData(
+                    info=KlereoSystemInfo.from_dict(system),
+                    details=KlereoPoolDetails.from_dict(details_raw),
+                )
 
             return data
 

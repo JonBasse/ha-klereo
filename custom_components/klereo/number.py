@@ -8,14 +8,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import PARAM_TYPES
 from .entity import KlereoEntity, setup_discovery
+from .models import KlereoPoolDetails
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _extract_numbers(coordinator, system_id, details):
+def _extract_numbers(coordinator, system_id, details: KlereoPoolDetails):
     """Extract number entities from system details."""
     items = []
-    for key, value in details.get("RegulModes", {}).items():
+    for key, value in details.regul_modes.items():
         if key not in PARAM_TYPES:
             continue
         uid = f"{system_id}_number_{key}"
@@ -54,12 +55,12 @@ class KlereoNumber(KlereoEntity, NumberEntity):
     @callback
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
-        if self.system_id not in self.coordinator.data:
+        system = self.coordinator.data.get(self.system_id)
+        if system is None:
             self._attr_available = False
             return super()._handle_coordinator_update()
         self._attr_available = True
-        details = self.coordinator.data[self.system_id].get("details", {})
-        regul = details.get("RegulModes", {})
+        regul = system.details.regul_modes
         if self._key in regul:
             self._attr_native_value = regul[self._key]
         super()._handle_coordinator_update()
