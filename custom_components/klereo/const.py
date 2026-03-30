@@ -13,6 +13,13 @@ SCAN_INTERVAL_MINUTES = 5
 
 # Probe type to sensor metadata mapping (from Jeedom _PROBE_TYPE_* constants)
 # state_class: "measurement" for continuous readings, None for positional/unknown values
+# Probe types that return binary 0/1 values and should be BinarySensorEntity
+BINARY_SENSOR_TYPES = {
+    10: {"name": "Generic", "device_class": None},
+}
+
+# Probe type to sensor metadata mapping (from Jeedom _PROBE_TYPE_* constants)
+# state_class: "measurement" for continuous readings, None for positional/unknown values
 SENSOR_TYPES = {
     0: {
         "name": "Technical Room Temperature", "unit": "°C",
@@ -24,7 +31,7 @@ SENSOR_TYPES = {
     4: {"name": "Redox", "unit": "mV", "device_class": "voltage", "state_class": "measurement"},
     5: {"name": "Water Temperature", "unit": "°C", "device_class": "temperature", "state_class": "measurement"},
     6: {"name": "Filter Pressure", "unit": "mbar", "device_class": "pressure", "state_class": "measurement"},
-    10: {"name": "Generic", "unit": "%", "device_class": None, "state_class": None},
+    # type 10 "Generic" moved to BINARY_SENSOR_TYPES
     11: {"name": "Flow", "unit": "m³/h", "device_class": None, "state_class": "measurement"},
     12: {"name": "Container Level", "unit": "%", "device_class": None, "state_class": "measurement"},
     13: {"name": "Cover Position", "unit": "%", "device_class": None, "state_class": None},

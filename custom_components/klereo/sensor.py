@@ -7,7 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import PARAM_NAMES, PARAM_TYPES, SENSOR_TYPES
+from .const import BINARY_SENSOR_TYPES, PARAM_NAMES, PARAM_TYPES, SENSOR_TYPES
 from .entity import KlereoEntity, setup_discovery
 from .models import KlereoPoolDetails, KlereoProbe
 
@@ -23,6 +23,8 @@ def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
     """Extract probe sensors and param sensors from system details."""
     items = []
     for probe in details.probes:
+        if probe.type in BINARY_SENSOR_TYPES:
+            continue
         uid = f"{system_id}_sensor_{probe.index}"
         items.append((uid, KlereoSensor(coordinator, system_id, probe)))
 
