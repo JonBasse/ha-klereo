@@ -5,6 +5,7 @@ import pytest
 
 from custom_components.klereo.api import KlereoApi
 from custom_components.klereo.coordinator import KlereoCoordinator
+from custom_components.klereo.models import KlereoSystemData
 
 
 @pytest.fixture
@@ -51,7 +52,8 @@ class TestAsyncUpdateData:
         }
         result = await coordinator._async_update_data()
         assert "SYS1" in result
-        assert result["SYS1"]["info"]["idSystem"] == "SYS1"
+        assert isinstance(result["SYS1"], KlereoSystemData)
+        assert result["SYS1"].info.id_system == "SYS1"
 
     async def test_parses_list_format(self, coordinator, mock_api):
         """Should parse direct list format."""
@@ -61,6 +63,7 @@ class TestAsyncUpdateData:
         mock_api.get_pool_details.return_value = {"response": [{}]}
         result = await coordinator._async_update_data()
         assert "SYS1" in result
+        assert isinstance(result["SYS1"], KlereoSystemData)
 
     async def test_parses_list_systems_format(self, coordinator, mock_api):
         """Should parse {list_systems: [...]} format."""
@@ -72,7 +75,7 @@ class TestAsyncUpdateData:
         assert "SYS1" in result
 
     async def test_builds_probe_index(self, coordinator, mock_api):
-        """Should build _probe_index for O(1) lookup."""
+        """Should build probe_index for O(1) lookup."""
         mock_api.get_systems.return_value = {
             "response": [{"idSystem": "SYS1"}]
         }
@@ -83,13 +86,13 @@ class TestAsyncUpdateData:
             ], "outs": []}]
         }
         result = await coordinator._async_update_data()
-        probe_idx = result["SYS1"]["details"]["_probe_index"]
+        probe_idx = result["SYS1"].details.probe_index
         assert 0 in probe_idx
         assert 1 in probe_idx
-        assert probe_idx[0]["filteredValue"] == 28.5
+        assert probe_idx[0].filtered_value == 28.5
 
     async def test_builds_output_index(self, coordinator, mock_api):
-        """Should build _output_index for O(1) lookup."""
+        """Should build output_index for O(1) lookup."""
         mock_api.get_systems.return_value = {
             "response": [{"idSystem": "SYS1"}]
         }
@@ -99,9 +102,9 @@ class TestAsyncUpdateData:
             ]}]
         }
         result = await coordinator._async_update_data()
-        out_idx = result["SYS1"]["details"]["_output_index"]
+        out_idx = result["SYS1"].details.output_index
         assert 0 in out_idx
-        assert out_idx[0]["status"] == 1
+        assert out_idx[0].status == 1
 
     async def test_skips_system_without_id(self, coordinator, mock_api):
         """Should skip systems without idSystem."""

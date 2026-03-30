@@ -9,6 +9,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import KlereoCoordinator
+from .models import KlereoPoolDetails
 
 
 class KlereoEntity(CoordinatorEntity[KlereoCoordinator]):
@@ -24,8 +25,8 @@ class KlereoEntity(CoordinatorEntity[KlereoCoordinator]):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
-        system = self.coordinator.data.get(self.system_id, {})
-        name = system.get("info", {}).get("poolNickname", "Klereo Pool")
+        system = self.coordinator.data.get(self.system_id)
+        name = system.info.pool_nickname if system else "Klereo Pool"
         return DeviceInfo(
             identifiers={(DOMAIN, self.system_id)},
             name=name,
@@ -38,7 +39,7 @@ def setup_discovery(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    extract_fn: Callable[[KlereoCoordinator, str, dict], list[KlereoEntity]],
+    extract_fn: Callable[[KlereoCoordinator, str, KlereoPoolDetails], list[KlereoEntity]],
 ) -> None:
     """Set up dynamic entity discovery for a platform.
 
@@ -53,8 +54,7 @@ def setup_discovery(
     def _discover() -> None:
         new_entities: list[KlereoEntity] = []
         for system_id, system_data in coordinator.data.items():
-            details = system_data.get("details", {})
-            for uid, entity in extract_fn(coordinator, system_id, details):
+            for uid, entity in extract_fn(coordinator, system_id, system_data.details):
                 if uid not in known_ids:
                     known_ids.add(uid)
                     new_entities.append(entity)

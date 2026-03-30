@@ -3,6 +3,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from custom_components.klereo.models import (
+    KlereoPoolDetails,
+    KlereoSystemData,
+    KlereoSystemInfo,
+)
 from custom_components.klereo.number import KlereoNumber
 
 
@@ -12,12 +17,16 @@ def mock_coordinator():
     coordinator = MagicMock()
     coordinator.async_set_param = AsyncMock()
     coordinator.data = {
-        "SYS1": {
-            "info": {"idSystem": "SYS1", "poolNickname": "My Pool"},
-            "details": {
-                "RegulModes": {"ConsigneEau": 28, "ModeFiltration": 1},
-            },
-        }
+        "SYS1": KlereoSystemData(
+            info=KlereoSystemInfo(id_system="SYS1", pool_nickname="My Pool"),
+            details=KlereoPoolDetails(
+                probes=[],
+                outs=[],
+                regul_modes={"ConsigneEau": 28, "ModeFiltration": 1},
+                probe_index={},
+                output_index={},
+            ),
+        )
     }
     return coordinator
 
@@ -53,7 +62,7 @@ class TestKlereoNumber:
         """Should update value from coordinator data."""
         number = KlereoNumber(mock_coordinator, "SYS1", "ConsigneEau", 28)
         number.async_write_ha_state = MagicMock()
-        mock_coordinator.data["SYS1"]["details"]["RegulModes"]["ConsigneEau"] = 35
+        mock_coordinator.data["SYS1"].details.regul_modes["ConsigneEau"] = 35
         number._handle_coordinator_update()
         assert number._attr_native_value == 35
         assert number._attr_available is True

@@ -5,6 +5,11 @@ from custom_components.klereo.diagnostics import (
     TO_REDACT,
     async_get_config_entry_diagnostics,
 )
+from custom_components.klereo.models import (
+    KlereoPoolDetails,
+    KlereoSystemData,
+    KlereoSystemInfo,
+)
 
 
 class TestDiagnostics:
@@ -20,10 +25,10 @@ class TestDiagnostics:
         }
         coordinator = MagicMock()
         coordinator.data = {
-            "SYS1": {
-                "info": {"idSystem": "SYS1", "poolNickname": "My Pool"},
-                "details": {"probes": []},
-            }
+            "SYS1": KlereoSystemData(
+                info=KlereoSystemInfo(id_system="SYS1", pool_nickname="My Pool"),
+                details=KlereoPoolDetails(),
+            )
         }
         hass.data = {"klereo": {entry.entry_id: coordinator}}
 
@@ -40,7 +45,7 @@ class TestDiagnostics:
             "options": {},
         }
         coordinator = MagicMock()
-        coordinator.data = {"token": "should_be_redacted"}
+        coordinator.data = {}
         hass.data = {"klereo": {entry.entry_id: coordinator}}
 
         result = await async_get_config_entry_diagnostics(hass, entry)
