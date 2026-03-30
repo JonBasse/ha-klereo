@@ -1,13 +1,14 @@
 {
     "domain": "klereo",
-    "homeassistant": "2024.4.0",
     "name": "Klereo",
-    "codeowners": ["@JonBasse"],
+    "codeowners": [
+        "@JonBasse"
+    ],
     "config_flow": true,
     "dependencies": [],
     "documentation": "https://github.com/JonBasse/ha-klereo",
     "iot_class": "cloud_polling",
     "issue_tracker": "https://github.com/JonBasse/ha-klereo/issues",
     "requirements": [],
-    "version": "1.5.1"
+    "version": "1.5.2"
 }
