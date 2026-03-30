@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import PARAM_NAMES, PARAM_TYPES, SENSOR_TYPES
 from .entity import KlereoEntity, setup_discovery
+from .models import KlereoPoolDetails, KlereoProbe
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,16 +19,14 @@ def _humanize_key(key: str) -> str:
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key)
 
 
-def _extract_sensors(coordinator, system_id, details):
+def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
     """Extract probe sensors and param sensors from system details."""
     items = []
-    for probe in details.get("probes", []):
-        if probe.get("index") is None:
-            continue
-        uid = f"{system_id}_sensor_{probe['index']}"
+    for probe in details.probes:
+        uid = f"{system_id}_sensor_{probe.index}"
         items.append((uid, KlereoSensor(coordinator, system_id, probe)))
 
-    for key, value in details.get("RegulModes", {}).items():
+    for key, value in details.regul_modes.items():
         if key in PARAM_TYPES:
             continue
         uid = f"{system_id}_param_{key}"
@@ -47,11 +46,11 @@ async def async_setup_entry(
 class KlereoSensor(KlereoEntity, SensorEntity):
     """Representation of a Klereo probe sensor."""
 
-    def __init__(self, coordinator, system_id, sensor_data):
+    def __init__(self, coordinator, system_id, probe: KlereoProbe):
         """Initialize the sensor."""
         super().__init__(coordinator, system_id)
-        self._index = sensor_data.get("index")
-        self._type = sensor_data.get("type")
+        self._index = probe.index
+        self._type = probe.type
 
         sensor_def = SENSOR_TYPES.get(self._type, {})
 
@@ -64,36 +63,36 @@ class KlereoSensor(KlereoEntity, SensorEntity):
         if state_class:
             self._attr_state_class = SensorStateClass(state_class)
 
-        self._update_from_data(sensor_data)
+        self._update_from_probe(probe)
 
     @callback
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
-        data = self._find_my_data()
-        if data:
+        probe = self._find_my_probe()
+        if probe:
             self._attr_available = True
-            self._update_from_data(data)
+            self._update_from_probe(probe)
         else:
             self._attr_available = False
         super()._handle_coordinator_update()
 
-    def _update_from_data(self, data):
+    def _update_from_probe(self, probe: KlereoProbe):
         """Update state from probe data."""
-        value = data.get("filteredValue")
+        value = probe.filtered_value
         if value is None:
-            value = data.get("directValue")
+            value = probe.direct_value
         self._attr_native_value = value
         self._attr_extra_state_attributes = {
-            "type": data.get("type"),
-            "status": data.get("status"),
+            "type": probe.type,
+            "status": probe.status,
         }
 
-    def _find_my_data(self):
+    def _find_my_probe(self) -> KlereoProbe | None:
         """Find this probe's data in the coordinator data."""
-        if self.system_id not in self.coordinator.data:
+        system = self.coordinator.data.get(self.system_id)
+        if system is None:
             return None
-        details = self.coordinator.data[self.system_id].get("details", {})
-        return details.get("_probe_index", {}).get(self._index)
+        return system.details.probe_index.get(self._index)
 
 
 class KlereoParamSensor(KlereoEntity, SensorEntity):
@@ -111,12 +110,12 @@ class KlereoParamSensor(KlereoEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
-        if self.system_id not in self.coordinator.data:
+        system = self.coordinator.data.get(self.system_id)
+        if system is None:
             self._attr_available = False
             return super()._handle_coordinator_update()
         self._attr_available = True
-        details = self.coordinator.data[self.system_id].get("details", {})
-        regul = details.get("RegulModes", {})
+        regul = system.details.regul_modes
         if self._key in regul:
             self._attr_native_value = regul[self._key]
         super()._handle_coordinator_update()

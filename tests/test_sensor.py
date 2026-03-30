@@ -3,26 +3,38 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from custom_components.klereo.models import (
+    KlereoPoolDetails,
+    KlereoProbe,
+    KlereoSystemData,
+    KlereoSystemInfo,
+)
 from custom_components.klereo.sensor import KlereoParamSensor, KlereoSensor
+
+
+def _make_probe(**kwargs) -> KlereoProbe:
+    """Create a KlereoProbe with defaults."""
+    defaults = {"index": 0, "type": 5, "filtered_value": 28.5, "direct_value": 28.4, "status": 0}
+    defaults.update(kwargs)
+    return KlereoProbe(**defaults)
 
 
 @pytest.fixture
 def mock_coordinator():
     """Create a mock coordinator."""
+    probe = _make_probe()
     coordinator = MagicMock()
     coordinator.data = {
-        "SYS1": {
-            "info": {"idSystem": "SYS1", "poolNickname": "My Pool"},
-            "details": {
-                "probes": [
-                    {"index": 0, "type": 5, "filteredValue": 28.5, "directValue": 28.4, "status": 0},
-                ],
-                "_probe_index": {
-                    0: {"index": 0, "type": 5, "filteredValue": 28.5, "directValue": 28.4, "status": 0},
-                },
-                "RegulModes": {"ConsigneEau": 28},
-            },
-        }
+        "SYS1": KlereoSystemData(
+            info=KlereoSystemInfo(id_system="SYS1", pool_nickname="My Pool"),
+            details=KlereoPoolDetails(
+                probes=[probe],
+                outs=[],
+                regul_modes={"ConsigneEau": 28},
+                probe_index={0: probe},
+                output_index={},
+            ),
+        )
     }
     return coordinator
 
@@ -32,7 +44,7 @@ class TestKlereoSensor:
 
     def test_creates_with_known_type(self, mock_coordinator):
         """Should use SENSOR_TYPES mapping for known probe types."""
-        probe = {"index": 0, "type": 5, "filteredValue": 28.5, "status": 0}
+        probe = _make_probe()
         sensor = KlereoSensor(mock_coordinator, "SYS1", probe)
         assert sensor._attr_name == "Water Temperature"
         assert sensor._attr_native_unit_of_measurement == "°C"
@@ -41,35 +53,35 @@ class TestKlereoSensor:
 
     def test_creates_with_unknown_type(self, mock_coordinator):
         """Should use fallback name for unknown probe types."""
-        probe = {"index": 99, "type": 999, "filteredValue": 50.0, "status": 0}
+        probe = _make_probe(index=99, type=999, filtered_value=50.0)
         sensor = KlereoSensor(mock_coordinator, "SYS1", probe)
         assert sensor._attr_name == "Sensor 99"
 
     def test_uses_filtered_value(self, mock_coordinator):
         """Should prefer filteredValue over directValue."""
-        probe = {"index": 0, "type": 5, "filteredValue": 28.5, "directValue": 28.4, "status": 0}
+        probe = _make_probe(filtered_value=28.5, direct_value=28.4)
         sensor = KlereoSensor(mock_coordinator, "SYS1", probe)
         assert sensor._attr_native_value == 28.5
 
     def test_falls_back_to_direct_value(self, mock_coordinator):
         """Should use directValue when filteredValue is None."""
-        probe = {"index": 0, "type": 5, "filteredValue": None, "directValue": 28.4, "status": 0}
+        probe = _make_probe(filtered_value=None, direct_value=28.4)
         sensor = KlereoSensor(mock_coordinator, "SYS1", probe)
         assert sensor._attr_native_value == 28.4
 
-    def test_find_my_data_uses_index(self, mock_coordinator):
-        """Should find probe data via _probe_index."""
-        probe = {"index": 0, "type": 5, "filteredValue": 28.5, "status": 0}
+    def test_find_my_probe_uses_index(self, mock_coordinator):
+        """Should find probe data via probe_index."""
+        probe = _make_probe()
         sensor = KlereoSensor(mock_coordinator, "SYS1", probe)
-        found = sensor._find_my_data()
+        found = sensor._find_my_probe()
         assert found is not None
-        assert found["filteredValue"] == 28.5
+        assert found.filtered_value == 28.5
 
-    def test_find_my_data_missing_system(self, mock_coordinator):
+    def test_find_my_probe_missing_system(self, mock_coordinator):
         """Should return None for missing system."""
-        probe = {"index": 0, "type": 5, "filteredValue": 28.5, "status": 0}
+        probe = _make_probe()
         sensor = KlereoSensor(mock_coordinator, "MISSING", probe)
-        assert sensor._find_my_data() is None
+        assert sensor._find_my_probe() is None
 
 
 class TestKlereoParamSensor:
