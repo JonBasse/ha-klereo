@@ -32,6 +32,14 @@ OUT_MODE_REGUL = 3
 OUT_STATE_OFF = 0
 OUT_STATE_ON = 1
 
+# Human-readable output mode labels (int → label)
+OUTPUT_MODES = {
+    OUT_MODE_MAN: "Manual",
+    OUT_MODE_TIME_SLOTS: "Time Slots",
+    OUT_MODE_TIMER: "Timer",
+    OUT_MODE_REGUL: "Regulation",
+}
+
 
 class KlereoApiError(Exception):
     """Error from the Klereo API."""
