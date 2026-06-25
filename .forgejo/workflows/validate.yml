@@ -57,9 +57,12 @@ jobs:
           if [ "$R1" != failure ] && [ "$R2" != failure ]; then
             echo "validate ok (lint=$R1 test=$R2) — no alert"; exit 0
           fi
+          # The runner's GITHUB_SERVER_URL is the internal http://forgejo:3000 —
+          # override to the public host so the run link below is externally clickable.
+          GITHUB_SERVER_URL="https://forgejo.dragonlance.xyz"
           text="❌ Forgejo CI failed: ${GITHUB_REPOSITORY} / ${GITHUB_WORKFLOW}
           branch ${GITHUB_REF_NAME} @ ${GITHUB_SHA}
-          https://forgejo.dragonlance.xyz/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_NUMBER}"
+          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_NUMBER}"
           curl -sS -X POST "https://api.telegram.org/bot${BOT}/sendMessage" \
             --data-urlencode "chat_id=${CHAT}" \
             --data-urlencode "text=${text}"
