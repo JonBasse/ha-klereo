@@ -38,3 +38,28 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
       - run: pytest tests/ -v
+
+  # CI-result alert: Forgejo has no workflow_run/status webhook event, so post to
+  # "Homelab GH" on failure. always() + shell gate on upstream results via env
+  # context (failure() is unsupported in Forgejo Actions). Secrets = repo Actions.
+  notify-failure:
+    needs: [lint, test]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Telegram alert on CI failure
+        env:
+          R1: ${{ needs.lint.result }}
+          R2: ${{ needs.test.result }}
+          BOT: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "$R1" != failure ] && [ "$R2" != failure ]; then
+            echo "validate ok (lint=$R1 test=$R2) — no alert"; exit 0
+          fi
+          text="❌ Forgejo CI failed: ${GITHUB_REPOSITORY} / ${GITHUB_WORKFLOW}
+          branch ${GITHUB_REF_NAME} @ ${GITHUB_SHA}
+          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_NUMBER}"
+          curl -sS -X POST "https://api.telegram.org/bot${BOT}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" \
+            --data-urlencode "text=${text}"
