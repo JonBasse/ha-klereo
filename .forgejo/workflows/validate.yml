@@ -1,0 +1,50 @@
+name: Validate
+
+# Forgejo-native port of .github/workflows/validate.yml (#675, epic homelab#671).
+# .forgejo shadows .github (fallback, not union), so all jobs live here now.
+# Deltas vs GitHub: fully-qualified uses: URLs (resolve regardless of
+# DEFAULT_ACTIONS_URL; the HA-ecosystem actions are pinned to github.com so the
+# self-hosted runner fetches them); dropped `cache: pip` (no cache backend
+# assumed on the self-hosted runner).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+      - uses: https://github.com/actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+      - uses: https://github.com/actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest tests/ -v
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+      - uses: https://github.com/hacs/action@22.5.0
+        with:
+          category: integration
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+      - uses: https://github.com/home-assistant/actions/hassfest@master
