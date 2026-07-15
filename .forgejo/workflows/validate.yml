@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: https://github.com/actions/checkout@v7
-      - uses: https://github.com/actions/setup-python@v5
+      - uses: https://github.com/actions/setup-python@v6
         with:
           python-version: "3.14"
       - run: pip install -r requirements-dev.txt
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: https://github.com/actions/checkout@v7
-      - uses: https://github.com/actions/setup-python@v5
+      - uses: https://github.com/actions/setup-python@v6
         with:
           python-version: "3.14"
       - run: pip install -r requirements-dev.txt
