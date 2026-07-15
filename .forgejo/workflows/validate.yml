@@ -25,7 +25,7 @@ jobs:
       - uses: https://github.com/actions/checkout@v7
       - uses: https://github.com/actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
 
@@ -35,7 +35,7 @@ jobs:
       - uses: https://github.com/actions/checkout@v7
       - uses: https://github.com/actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - run: pip install -r requirements-dev.txt
       - run: pytest tests/ -v
 
