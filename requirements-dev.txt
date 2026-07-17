@@ -1,2 +1,2 @@
-ruff==0.15.21
+ruff==0.15.22
 pytest-homeassistant-custom-component==0.13.346
