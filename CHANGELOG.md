@@ -6,9 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **test_config_flow.py** — 10 tests covering `validate_input` (success, API errors, HTTP errors, timeout, password hashing) and `hash_password` utility ([#36](https://github.com/JonBasse/ha-klereo/issues/36)).
-- **test_diagnostics.py** — 3 tests covering diagnostics output structure, sensitive field redaction, and `TO_REDACT` contents ([#37](https://github.com/JonBasse/ha-klereo/issues/37)).
-- **test_number.py** — 6 tests covering `KlereoNumber` creation, initial value, `async_set_native_value`, coordinator update, availability, and device info ([#38](https://github.com/JonBasse/ha-klereo/issues/38)).
+- **test_config_flow.py** — 10 tests covering `validate_input` (success, API errors, HTTP errors, timeout, password hashing) and `hash_password` utility ([#36](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/36)).
+- **test_diagnostics.py** — 3 tests covering diagnostics output structure, sensitive field redaction, and `TO_REDACT` contents ([#37](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/37)).
+- **test_number.py** — 6 tests covering `KlereoNumber` creation, initial value, `async_set_native_value`, coordinator update, availability, and device info ([#38](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/38)).
 - **test_api.py** — 6 new tests for `_request_with_retry` (transient error retry, retry exhaustion, non-401 propagation) and `_parse_response` (valid JSON, invalid JSON, HTTP errors).
 - Test suite now covers **56 tests** across 6 files (up from 31).
 
@@ -16,32 +16,32 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Extracted `hash_password()` helper in `const.py` — replaces 3 duplicated SHA-1 hashing call sites ([#29](https://github.com/JonBasse/ha-klereo/issues/29)).
-- Moved API wire constants (`API_URL_*`, `OUT_MODE_*`, `OUT_STATE_*`, `API_VERSION`, `API_COM_MODE`) from `const.py` to `api.py` where they belong ([#43](https://github.com/JonBasse/ha-klereo/issues/43)).
-- Extracted `setup_discovery()` helper in `entity.py` — replaces triplicated discovery boilerplate across sensor, switch, and number platforms ([#31](https://github.com/JonBasse/ha-klereo/issues/31)).
-- Config entry migration now uses HA's formal `async_migrate_entry` with `VERSION = 2` instead of inline migration in `async_setup_entry` ([#32](https://github.com/JonBasse/ha-klereo/issues/32)).
+- Extracted `hash_password()` helper in `const.py` — replaces 3 duplicated SHA-1 hashing call sites ([#29](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/29)).
+- Moved API wire constants (`API_URL_*`, `OUT_MODE_*`, `OUT_STATE_*`, `API_VERSION`, `API_COM_MODE`) from `const.py` to `api.py` where they belong ([#43](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/43)).
+- Extracted `setup_discovery()` helper in `entity.py` — replaces triplicated discovery boilerplate across sensor, switch, and number platforms ([#31](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/31)).
+- Config entry migration now uses HA's formal `async_migrate_entry` with `VERSION = 2` instead of inline migration in `async_setup_entry` ([#32](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/32)).
 
 ## [1.4.0] — 2026-03-05
 
 ### Fixed
 
-- Entities now correctly become **unavailable** when their data disappears from the API (all entity types) ([#34](https://github.com/JonBasse/ha-klereo/issues/34)).
-- `SensorStateClass.MEASUREMENT` is now applied per probe type — Cover Position and Generic sensors no longer produce misleading long-term statistics ([#26](https://github.com/JonBasse/ha-klereo/issues/26)).
-- `KlereoParamSensor` now shows human-readable names (e.g. "Filtration Mode") instead of raw API keys ([#27](https://github.com/JonBasse/ha-klereo/issues/27)).
+- Entities now correctly become **unavailable** when their data disappears from the API (all entity types) ([#34](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/34)).
+- `SensorStateClass.MEASUREMENT` is now applied per probe type — Cover Position and Generic sensors no longer produce misleading long-term statistics ([#26](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/26)).
+- `KlereoParamSensor` now shows human-readable names (e.g. "Filtration Mode") instead of raw API keys ([#27](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/27)).
 - `KlereoParamSensor` no longer applies `state_class: MEASUREMENT` indiscriminately.
 
 ### Changed
 
-- Switch and number commands now route through `KlereoCoordinator` methods (`async_set_output`, `async_set_param`) instead of calling the API client directly — centralizes error handling and post-command refresh ([#30](https://github.com/JonBasse/ha-klereo/issues/30)).
+- Switch and number commands now route through `KlereoCoordinator` methods (`async_set_output`, `async_set_param`) instead of calling the API client directly — centralizes error handling and post-command refresh ([#30](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/30)).
 
 ## [1.3.1] — 2026-03-05
 
 ### Fixed
 
-- Removed broad `except Exception` in coordinator that swallowed programming errors — unexpected exceptions now propagate with full tracebacks ([#46](https://github.com/JonBasse/ha-klereo/issues/46)).
-- Guarded `int(status)` in switch against `ValueError` for non-numeric API responses — logs a warning and defaults to off ([#25](https://github.com/JonBasse/ha-klereo/issues/25)).
-- Excluded `PARAM_TYPES` keys from sensor discovery to prevent duplicate entities (e.g. `ConsigneEau` appearing as both sensor and number) ([#28](https://github.com/JonBasse/ha-klereo/issues/28)).
-- Fixed early return in `_handle_coordinator_update` for `KlereoParamSensor` and `KlereoNumber` — entities now correctly become unavailable when their system disappears from the API instead of keeping stale state ([#24](https://github.com/JonBasse/ha-klereo/issues/24)).
+- Removed broad `except Exception` in coordinator that swallowed programming errors — unexpected exceptions now propagate with full tracebacks ([#46](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/46)).
+- Guarded `int(status)` in switch against `ValueError` for non-numeric API responses — logs a warning and defaults to off ([#25](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/25)).
+- Excluded `PARAM_TYPES` keys from sensor discovery to prevent duplicate entities (e.g. `ConsigneEau` appearing as both sensor and number) ([#28](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/28)).
+- Fixed early return in `_handle_coordinator_update` for `KlereoParamSensor` and `KlereoNumber` — entities now correctly become unavailable when their system disappears from the API instead of keeping stale state ([#24](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/24)).
 
 ## [1.3.0] — 2026-02-23
 
