@@ -1,0 +1,29 @@
+# Universal minimal CI — gitleaks runs on every repo regardless of language.
+# Keep context names stable: branch protection references them as "CI / <job> (*)".
+#
+# Conventions (managing-forgejo skill):
+#   - fully-qualify every `uses:` to github.com (bare names mis-resolve to data.forgejo.org)
+#   - gitleaks via pinned binary (the gitleaks-action calls the GitHub API and breaks here)
+#   - `pull_request:` stays UNFILTERED — a required check carried by a path-filtered
+#     workflow never reports, and since Renovate automerge (homelab#1041) that fails OPEN.
+#
+# Pre-existing findings are baselined in `.gitleaksignore` (homelab#1073). Verified at
+# wiring time that the baseline still catches a newly-introduced secret.
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --no-banner .

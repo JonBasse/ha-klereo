@@ -1,0 +1,13 @@
+# gitleaks baseline — findings PRÉ-EXISTANTS au câblage du check requis (homelab#1073).
+# Chaque ligne est un fingerprint `commit:file:rule:line`. Une ligne ici veut dire
+# « connu et arbitré », JAMAIS « inoffensif par défaut ».
+#
+# ⚠️ N'ajoute une ligne que pour un finding VÉRIFIÉ à la main. Un `gitleaks` vert dont
+# la baseline a grossi en silence ne prouve plus rien.
+
+# ── Faux positifs vérifiés ──────────────────────────────────────────────────
+# La règle `generic-api-key` matche le mot « key » dans des IDENTIFIANTS
+# (`normalize_key1`, `sweep_key`, `idempotency_key`) ; `curl-auth-header` matche des
+# RÉFÉRENCES de variables dans la doc (`Bearer $DAGU_API_KEY`) ; `Sec-WebSocket-Key`
+# est une clé de handshake, pas un secret ; `MOCK_PASSWORD_HASH` est un mock déclaré.
+b366cae1ae950e55adcf61a68f5394a43aae1dc5:tests/conftest.py:generic-api-key:11
