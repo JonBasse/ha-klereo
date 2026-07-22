@@ -24,3 +24,5 @@ docs/plans/
 .ruff_cache/
 .coverage
 htmlcov/
+# Claude Code — machine-local config + per-branch worktrees (homelab#1073)
+.claude/settings.local.json
