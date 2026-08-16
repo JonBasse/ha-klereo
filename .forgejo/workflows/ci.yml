@@ -1,14 +1,8 @@
-# Universal minimal CI — gitleaks runs on every repo regardless of language.
-# Keep context names stable: branch protection references them as "CI / <job> (*)".
-#
-# Conventions (managing-forgejo skill):
-#   - fully-qualify every `uses:` to github.com (bare names mis-resolve to data.forgejo.org)
-#   - gitleaks via pinned binary (the gitleaks-action calls the GitHub API and breaks here)
-#   - `pull_request:` stays UNFILTERED — a required check carried by a path-filtered
-#     workflow never reports, and since Renovate automerge (homelab#1041) that fails OPEN.
-#
-# Pre-existing findings are baselined in `.gitleaksignore` (homelab#1073). Verified at
-# wiring time that the baseline still catches a newly-introduced secret.
+# Job names are load-bearing: branch protection references them as "CI / <job> (*)".
+# Fully-qualify every `uses:` to github.com — bare names mis-resolve to data.forgejo.org.
+# gitleaks runs from a pinned binary; the gitleaks-action calls the GitHub API and fails here.
+# `pull_request:` stays unfiltered — a required check on a path-filtered workflow never
+# reports, and automerge reads a never-reported check as passing.
 name: CI
 on:
   push:

@@ -1,15 +1,6 @@
 name: Validate
 
-# Forgejo-native port of .github/workflows/validate.yml (#675, epic homelab#671).
-# .forgejo shadows .github (fallback, not union), so all jobs live here now.
-# Deltas vs GitHub: fully-qualified uses: URLs; dropped `cache: pip` (no cache
-# backend on the self-hosted runner). The GitHub-ecosystem `hacs` and `hassfest`
-# jobs are intentionally OMITTED here: hacs/action validates against github.com's
-# API view of the repo (401 "not loaded properly in HACS" on Forgejo — it's
-# intrinsically GitHub-coupled), and hassfest's workspace-mount convention
-# doesn't hold on the self-hosted runner ("No integrations found"). They remain
-# in .github/workflows/validate.yml; run them on GitHub only if ever publishing
-# this integration to HACS. ruff + pytest are the real gates and run here.
+# Fully-qualify every `uses:` to github.com — bare names mis-resolve to data.forgejo.org.
 
 on:
   push:
@@ -38,8 +29,3 @@ jobs:
           python-version: "3.14"
       - run: pip install -r requirements-dev.txt
       - run: pytest tests/ -v
-
-  # CI-result alerts are delivered by the repo-level `action_run_failure` /
-  # `action_run_recover` Telegram webhook (homelab#1008) — no in-workflow notify
-  # job needed. NOTE: action_run_recover is dead code on Forgejo 15.0.4
-  # (GetRunBefore stub, upstream user-research#63); it activates on upgrade.
