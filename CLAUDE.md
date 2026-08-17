@@ -92,10 +92,11 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 ```
 
 - **Always `.venv/bin/pip`, never the system pip.**
-- ⚠️ **`fb-worktree claim` leaves you an EMPTY `.venv` here.** It provisions via `uv sync`, and this
-  `pyproject.toml` declares no `[project]` — only `[tool.pytest]` and `[tool.ruff]`. Dev deps live
-  in `requirements-dev.txt` (pinned, Renovate-tracked). Install them yourself in a fresh worktree,
-  or run the main checkout's `~/Projects/ha-klereo/.venv/bin/pytest` against it.
+- ⚠️ **A fresh worktree gets an EMPTY `.venv` here.** Anything that provisions via `uv sync`
+  finds nothing to install: this `pyproject.toml` declares no `[project]` — only `[tool.pytest]`
+  and `[tool.ruff]`. Dev deps live in `requirements-dev.txt` (pinned, Renovate-tracked). Install
+  them yourself in the worktree, or run the main checkout's
+  `~/Projects/ha-klereo/.venv/bin/pytest` against it.
 - ruff: `target-version = "py314"`, `line-length = 120`, `select = ["E","F","W","I","UP"]`.
 - `docs/plans/` is **gitignored** — internal scratch, never committed.
 - Dependencies are bumped by Renovate against the shared `local>platform/renovate` preset.
@@ -115,7 +116,9 @@ Cross-repo rules are canonical in fizbot — **edit them there, not here**:
   § *One branch = one worktree*.
 - **Plan/spec lifecycle** — delete `docs/superpowers/{plans,specs}` in the merging PR; git history is
   the archive. Same file, § *Plan/spec lifecycle*.
-- **Commits** — use `fb-commit`; never `git add .`, never `git commit -am`.
+- **Commits** — `git add <paths>` naming every path, then `git commit`. Never `git add .`, never
+  `git commit -am`, never a bare `git commit` with implicit staging: a concurrent session shares
+  the index.
 - **Secrets** — none in this repo (public). CI runs `gitleaks` on every push and PR with
   pre-existing findings baselined in `.gitleaksignore`; diagnostics redact credentials via
   `TO_REDACT`. Never add a real Klereo credential to a test fixture.
