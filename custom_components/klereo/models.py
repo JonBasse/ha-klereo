@@ -74,8 +74,29 @@ class KlereoPoolDetails:
     probes: list[KlereoProbe] = field(default_factory=list)
     outs: list[KlereoOutput] = field(default_factory=list)
     regul_modes: dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
+    extra_params: dict[str, Any] = field(default_factory=dict)
+    access: int | None = None
     probe_index: dict[int, KlereoProbe] = field(default_factory=dict)
     output_index: dict[int, KlereoOutput] = field(default_factory=dict)
+
+    @property
+    def settings(self) -> dict[str, Any]:
+        """Return setpoints and regulation parameters from either container.
+
+        Three containers are known to carry these, and none of them is redundant:
+
+        - `RegulModes` — guessed from one user's GetIndex log, and the only one read
+          before #94. The introducing commit declares the guess in its own comment.
+        - `params` — what the upstream Jeedom plugin reads, at 40+ sites.
+        - `ExtraParams` — named alongside `params` by an external reporter reading their
+          own diagnostic export (GitHub #54, 2026-06-17), the first real payload anyone
+          has measured here.
+
+        Precedence runs most-established first, so the read can only ever *add* a value,
+        never alter one an existing install already displays.
+        """
+        return {**self.extra_params, **self.params, **self.regul_modes}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> KlereoPoolDetails:
@@ -94,6 +115,9 @@ class KlereoPoolDetails:
             probes=probes,
             outs=outs,
             regul_modes=dict(data.get("RegulModes", {})),
+            params=dict(data.get("params", {})),
+            extra_params=dict(data.get("ExtraParams", {})),
+            access=data.get("access"),
             probe_index={p.index: p for p in probes},
             output_index={o.index: o for o in outs},
         )

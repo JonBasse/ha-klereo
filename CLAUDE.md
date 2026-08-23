@@ -33,7 +33,7 @@ in the global CLAUDE.md). Bank is `fizbot`, shared across runtimes. Never call `
 | Registered as | `backend: forgejo` in fizbot `src/fizbot_data/repos.yaml` | — |
 | Issues | the owner's backlog — `fb-issue backlog ha-klereo`, `fb-issue new` | **inbound user bug reports**, read them |
 | Releases | tags | **releases HACS installs from** |
-| CI | `.forgejo/workflows/` | none — `.github/` was deleted (`e402f36`) |
+| CI | `.forgejo/workflows/` — `lint`, `test`, `gitleaks` | `.github/workflows/validate.yml` — `hacs`, `hassfest` (#89) |
 
 > ⚠️ **Issue numbers DIVERGE between the two — a bare `#38` is ambiguous.** Forgejo is at #83 and
 > GitHub at #58 (2026-08-10); they were the same repo before the migration, so low numbers collide
@@ -54,13 +54,24 @@ Users install by adding `https://github.com/JonBasse/ha-klereo` as a **custom re
 2026-08-01** by frenck and never merged; it is re-openable if the work is picked up again.
 Anything claiming "submitted, awaiting acceptance" is stale — that state ended 2026-08-01.
 
-> ⚠️ **The `hacs` and `hassfest` validation jobs currently run NOWHERE.** They were GitHub-only by
-> nature (`hacs/action` validates against github.com's API view of the repo; hassfest's
-> workspace-mount convention doesn't hold on the self-hosted runner), so they were deliberately
-> omitted from `.forgejo/workflows/validate.yml` — whose header comment still says they "remain in
-> `.github/workflows/validate.yml`". **That comment is stale:** `.github/` was deleted in
-> `e402f36`. Re-run them on GitHub before any renewed HACS-catalogue attempt; nothing here
-> currently checks HACS conformance.
+> **The `hacs` and `hassfest` jobs run on GitHub, and only there.** `hacs/action` validates
+> github.com's API view of the repository, so it cannot validate a repo it sees only through
+> Forgejo. The split is disjoint on purpose — `lint` + `test` + `gitleaks` on Forgejo,
+> `hacs` + `hassfest` in `.github/workflows/validate.yml` — so Renovate has nothing to bump twice,
+> which was the objection that deleted the file in `e402f36`.
+>
+> ⚠️ **There is deliberately NO `pull_request:` trigger in the GitHub workflow.** Pull requests live
+> on Forgejo; github.com never sees one, so a `pull_request` trigger there would describe a check
+> that cannot run. The trigger is an unfiltered `push:` — every branch is mirrored, so the verdict
+> arrives before a Forgejo merge, just not as a Forgejo check.
+>
+> 🔴 **Two things gate this, and both are credentials, not CI config** — measured 2026-08-23 (#89):
+> the push-mirror had to move off the classic `pat_git_mirror` (scope `repo`, **no** `workflow`,
+> so GitHub rejected the *entire ref*, freezing HACS distribution) onto **SSH + a per-repo deploy
+> key**; and repo-level GitHub Actions had to be re-enabled — `actions/permissions.enabled` was
+> `false` from the 2026-06-25 minutes sweep. ⚠️ `repos/{o}/{r}.disabled` is **not** that field and
+> reading it says nothing; probe `GET repos/{o}/{r}/actions/permissions`. Re-enabling costs zero
+> minutes: `ha-klereo` is the fleet's only **public** repo, and Actions minutes are free there.
 
 ---
 
@@ -84,8 +95,14 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
 - **`entity.py`** — `KlereoEntity` base (DeviceInfo) + `setup_discovery()`, the shared helper for
   dynamic entity creation. Entities appear without a restart.
 
-Six platforms: `sensor` (probes + `RegulModes` params) · `binary_sensor` · `switch` (always forces
+Six platforms: `sensor` (probes + regulation params) · `binary_sensor` · `switch` (always forces
 Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diagnostics` (redacted).
+
+> ⚠️ **Setpoints live in TWO containers and which one your API returns is unmeasured.** `RegulModes`
+> was guessed (the introducing commit says so in its own comment) and appears nowhere upstream, which
+> reads every setpoint from `params`. Both are read, `RegulModes` winning on conflict so the read can
+> only add. `params` reaches `sensor` only through the curated `PARAM_NAMES` list — it carries dozens
+> of counters and bounds, and taking every key would flood each install with entities. See #94.
 
 ---
 

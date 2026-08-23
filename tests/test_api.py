@@ -165,7 +165,9 @@ class TestCommandStatus:
 
         await api.command_status(4242)
 
-        _, kwargs = mock_session.request.call_args
-        args, _ = mock_session.request.call_args
+        args, kwargs = mock_session.request.call_args
+        # Asserted against the literal endpoint, not against the constant: comparing the
+        # constant to itself passes whatever the constant is set to.
+        assert args[1].endswith("/WaitCommand.php")
         assert args[1] == API_URL_COMMAND_STATUS
         assert kwargs["data"]["cmdID"] == 4242

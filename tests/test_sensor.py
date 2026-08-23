@@ -9,7 +9,7 @@ from custom_components.klereo.models import (
     KlereoSystemData,
     KlereoSystemInfo,
 )
-from custom_components.klereo.sensor import KlereoParamSensor, KlereoSensor
+from custom_components.klereo.sensor import KlereoParamSensor, KlereoSensor, _extract_sensors
 
 
 def _make_probe(**kwargs) -> KlereoProbe:
@@ -100,3 +100,51 @@ class TestKlereoParamSensor:
         info = sensor.device_info
         assert ("klereo", "SYS1") in info["identifiers"]
         assert info["name"] == "My Pool"
+
+
+class TestParamSensorDiscovery:
+    """Tests for which setting keys become read-only sensors.
+
+    `params` is a large container upstream reads at 40+ sites, so taking every key from it
+    would create dozens of entities in every install. Only curated keys are exposed.
+    """
+
+    def test_creates_sensor_for_curated_params_key(self, mock_coordinator):
+        """Should expose a `params` key that has a friendly name."""
+        details = KlereoPoolDetails(params={"ConsignePH": 7.2})
+        uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
+        assert uids == ["SYS1_param_ConsignePH"]
+
+    def test_ignores_uncurated_params_key(self, mock_coordinator):
+        """Should NOT expose an unknown `params` key.
+
+        This is the control that keeps the container change additive rather than an entity
+        flood: `params` carries consumption counters, bounds and internal flags.
+        """
+        details = KlereoPoolDetails(params={"PHMinus_Debit": 12, "EauMin": 15})
+        uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
+        assert uids == []
+
+    def test_still_exposes_uncurated_regul_modes_key(self, mock_coordinator):
+        """Should keep exposing unknown `RegulModes` keys — removing one deletes an entity."""
+        details = KlereoPoolDetails(regul_modes={"SomethingNew": 3})
+        uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
+        assert uids == ["SYS1_param_SomethingNew"]
+
+    def test_does_not_duplicate_a_key_present_in_both(self, mock_coordinator):
+        """Should create one sensor when both containers carry the same key."""
+        details = KlereoPoolDetails(
+            regul_modes={"ConsignePH": 7.2}, params={"ConsignePH": 7.4}
+        )
+        uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
+        assert uids == ["SYS1_param_ConsignePH"]
+
+    def test_param_sensor_refreshes_from_params_container(self, mock_coordinator):
+        """Should refresh a params-sourced sensor, not pin it to its first reading."""
+        mock_coordinator.data["SYS1"].details.regul_modes = {}
+        mock_coordinator.data["SYS1"].details.params = {"ConsignePH": 7.2}
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsignePH", 7.2)
+        sensor.async_write_ha_state = MagicMock()
+        mock_coordinator.data["SYS1"].details.params["ConsignePH"] = 7.4
+        sensor._handle_coordinator_update()
+        assert sensor._attr_native_value == 7.4
