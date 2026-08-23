@@ -77,6 +77,15 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
                     if isinstance(response_data, list) and response_data:
                         details_raw.update(response_data[0])
 
+                # Which containers the API actually sends is the open question behind
+                # #94: `RegulModes` was guessed from one user's log, while the upstream
+                # plugin reads every setpoint from `params`. Recording the shape on each
+                # refresh turns the next report into a measurement instead of a guess.
+                _LOGGER.debug(
+                    "Detail payload for system %s carries top-level keys: %s",
+                    sys_id, sorted(details_raw),
+                )
+
                 data[sys_id] = KlereoSystemData(
                     info=KlereoSystemInfo.from_dict(system),
                     details=KlereoPoolDetails.from_dict(details_raw),

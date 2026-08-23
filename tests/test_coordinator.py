@@ -129,3 +129,24 @@ class TestAsyncUpdateData:
         result = await coordinator._async_update_data()
         assert "SYS1" in result  # still present, just without merged details
         assert "SYS2" in result
+
+
+class TestPayloadShapeLogging:
+    """Tests for the debug trace that records which containers the API actually sends.
+
+    `RegulModes` vs `params` (#94) could not be settled from the code because nothing ever
+    recorded what a real payload looks like. This trace is the instrument that stops the
+    next reporter's container from being a guess.
+    """
+
+    async def test_logs_detail_payload_top_level_keys(self, coordinator, mock_api, caplog):
+        """Should log the top-level keys of each system's detail payload at debug level."""
+        mock_api.get_systems.return_value = {"response": [{"idSystem": "SYS1"}]}
+        mock_api.get_pool_details.return_value = {
+            "response": [{"probes": [], "outs": [], "params": {"ConsigneEau": 28}, "access": 10}]
+        }
+        with caplog.at_level("DEBUG", logger="custom_components.klereo.coordinator"):
+            await coordinator._async_update_data()
+
+        assert "params" in caplog.text
+        assert "access" in caplog.text

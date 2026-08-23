@@ -33,6 +33,17 @@ def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
             continue
         uid = f"{system_id}_param_{key}"
         items.append((uid, KlereoParamSensor(coordinator, system_id, key, value)))
+
+    # `params` is only read through the curated PARAM_NAMES list. Upstream reads that
+    # container at 40+ sites — consumption counters, setpoint bounds, internal flags — so
+    # taking every key would create dozens of entities in every install. `RegulModes`
+    # above stays unfiltered: it is what current installs already show, and narrowing it
+    # would delete entities users have.
+    for key, value in details.params.items():
+        if key in PARAM_TYPES or key in details.regul_modes or key not in PARAM_NAMES:
+            continue
+        uid = f"{system_id}_param_{key}"
+        items.append((uid, KlereoParamSensor(coordinator, system_id, key, value)))
     return items
 
 
@@ -117,7 +128,7 @@ class KlereoParamSensor(KlereoEntity, SensorEntity):
             self._attr_available = False
             return super()._handle_coordinator_update()
         self._attr_available = True
-        regul = system.details.regul_modes
-        if self._key in regul:
-            self._attr_native_value = regul[self._key]
+        settings = system.details.settings
+        if self._key in settings:
+            self._attr_native_value = settings[self._key]
         super()._handle_coordinator_update()

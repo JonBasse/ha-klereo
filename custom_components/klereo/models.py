@@ -74,8 +74,21 @@ class KlereoPoolDetails:
     probes: list[KlereoProbe] = field(default_factory=list)
     outs: list[KlereoOutput] = field(default_factory=list)
     regul_modes: dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
+    access: int | None = None
     probe_index: dict[int, KlereoProbe] = field(default_factory=dict)
     output_index: dict[int, KlereoOutput] = field(default_factory=dict)
+
+    @property
+    def settings(self) -> dict[str, Any]:
+        """Return setpoints and regulation parameters from either container.
+
+        The upstream Jeedom plugin reads every setpoint from `params`; `RegulModes` was a
+        guess made from one user's GetIndex log (#94). Both are read, and `RegulModes`
+        wins on conflict so the change can only ever *add* a value, never alter one an
+        existing install already displays.
+        """
+        return {**self.params, **self.regul_modes}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> KlereoPoolDetails:
@@ -94,6 +107,8 @@ class KlereoPoolDetails:
             probes=probes,
             outs=outs,
             regul_modes=dict(data.get("RegulModes", {})),
+            params=dict(data.get("params", {})),
+            access=data.get("access"),
             probe_index={p.index: p for p in probes},
             output_index={o.index: o for o in outs},
         )
