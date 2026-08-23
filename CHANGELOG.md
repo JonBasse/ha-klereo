@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **A rejected command looked exactly like a successful one.** `SetOut` and `SetParam` do not execute — they *queue*, and return a cmdID immediately, so their HTTP 200 means "accepted for execution", never "executed". The integration took that reply for a result, discarded the cmdID and refreshed. Every write is now confirmed through `WaitCommand`, and a status other than 9 raises an error in Home Assistant carrying the status label ([#95](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/95)).
+  - The costly one is **13, insufficient rights**: upstream bars outputs 2, 3, 8 and 15 below access level 20, so a non-professional account commanding its pH corrector got a silent success.
+  - Statuses 0 (pending) and 1 (running) are not failures and do not raise.
+  - A command whose outcome cannot be read — no cmdID in the reply, which is what an expired JWT returns — logs a warning and behaves as before. The reply's shape is not measured, and turning a guess into a hard failure would break every write on an assumption.
+  - A rejected command no longer triggers a data refresh; upstream refreshes only on status 9.
+
+### Added
+
+- `API_URL_COMMAND_STATUS`, `CMD_STATUS_OK`, `CMD_STATUS_IN_FLIGHT` and `CMD_STATUS_LABELS` in `api.py`, plus `KlereoApi.command_status()`.
+- 10 tests covering the command-status check (100 total, up from 90).
+
 ## [1.5.3] — 2026-08-23
 
 ### Fixed
