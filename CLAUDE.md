@@ -98,11 +98,16 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
 Six platforms: `sensor` (probes + regulation params) · `binary_sensor` · `switch` (always forces
 Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diagnostics` (redacted).
 
-> ⚠️ **Setpoints live in TWO containers and which one your API returns is unmeasured.** `RegulModes`
-> was guessed (the introducing commit says so in its own comment) and appears nowhere upstream, which
-> reads every setpoint from `params`. Both are read, `RegulModes` winning on conflict so the read can
-> only add. `params` reaches `sensor` only through the curated `PARAM_NAMES` list — it carries dozens
-> of counters and bounds, and taking every key would flood each install with entities. See #94.
+> ⚠️ **Setpoints live in THREE containers, and which one your API returns is still unmeasured.**
+> `RegulModes` was guessed (the introducing commit says so in its own comment) and appears nowhere
+> upstream, which reads every setpoint from `params`; `ExtraParams` was named by an external
+> reporter reading their own diagnostic export (GH #54, 2026-06-17) — the only real payload anyone
+> has measured here. All three are read, precedence `RegulModes` > `params` > `ExtraParams`, so the
+> read can only *add*, never alter a value an install already shows.
+>
+> `params` and `ExtraParams` reach `sensor` only through the curated `PARAM_NAMES` list — they carry
+> dozens of counters and bounds, and taking every key would flood each install with entities.
+> `regul_modes` stays unfiltered: narrowing it would **delete** entities users have. See #94.
 
 ---
 
@@ -110,7 +115,7 @@ Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diag
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest tests/ -v     # 77 tests / 9 files, all green 2026-08-10
+.venv/bin/pytest tests/ -v     # 128 tests / 11 files, all green 2026-08-23
 .venv/bin/ruff check .
 ```
 
