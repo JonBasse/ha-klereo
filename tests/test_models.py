@@ -50,6 +50,38 @@ class TestSettingsContainer:
         assert details.params == {"ConsigneEau": 28}
 
 
+class TestExtraParamsContainer:
+    """Tests for the THIRD container, reported from a real diagnostic JSON.
+
+    On 2026-06-17 an external reporter read their own diagnostic export and named the
+    counters as living "in the `params` and `ExtraParams` arrays" (GitHub #54). That is
+    the first measurement of a real payload this repo has: it confirms `params` exists,
+    and it names a container nobody had considered.
+    """
+
+    def test_reads_setpoint_from_extra_params(self):
+        """Should find a setpoint that only exists under `ExtraParams`."""
+        details = KlereoPoolDetails.from_dict({"ExtraParams": {"ConsigneEau": 28}})
+        assert details.settings["ConsigneEau"] == 28
+
+    def test_extra_params_stays_separate(self):
+        """Should keep `ExtraParams` out of `regul_modes`, like `params`."""
+        details = KlereoPoolDetails.from_dict({"ExtraParams": {"ConsigneEau": 28}})
+        assert details.regul_modes == {}
+        assert details.extra_params == {"ConsigneEau": 28}
+
+    def test_precedence_is_regul_modes_then_params_then_extra(self):
+        """Should resolve conflicts additively, most-established container first."""
+        details = KlereoPoolDetails.from_dict(
+            {
+                "RegulModes": {"a": "regul"},
+                "params": {"a": "params", "b": "params"},
+                "ExtraParams": {"a": "extra", "b": "extra", "c": "extra"},
+            }
+        )
+        assert details.settings == {"a": "regul", "b": "params", "c": "extra"}
+
+
 class TestAccessLevel:
     """Tests for the `access` level that upstream gates every setpoint on."""
 

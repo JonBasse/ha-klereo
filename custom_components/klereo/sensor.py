@@ -39,11 +39,14 @@ def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
     # taking every key would create dozens of entities in every install. `RegulModes`
     # above stays unfiltered: it is what current installs already show, and narrowing it
     # would delete entities users have.
-    for key, value in details.params.items():
-        if key in PARAM_TYPES or key in details.regul_modes or key not in PARAM_NAMES:
-            continue
-        uid = f"{system_id}_param_{key}"
-        items.append((uid, KlereoParamSensor(coordinator, system_id, key, value)))
+    seen = set(details.regul_modes)
+    for container in (details.params, details.extra_params):
+        for key, value in container.items():
+            if key in PARAM_TYPES or key in seen or key not in PARAM_NAMES:
+                continue
+            seen.add(key)
+            uid = f"{system_id}_param_{key}"
+            items.append((uid, KlereoParamSensor(coordinator, system_id, key, value)))
     return items
 
 
