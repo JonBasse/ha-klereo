@@ -46,13 +46,24 @@ version — `tea` for everything issue/PR, **read and write** · `fj` when the b
 
 ---
 
-## HACS status — custom repository, NOT the default catalogue
+## HACS status — custom repository today, default-catalogue submission OPEN
 
 Users install by adding `https://github.com/JonBasse/ha-klereo` as a **custom repository**
-(procedure in `README.md`). The default-catalogue submission
-[hacs/default#6025](https://github.com/hacs/default/pull/6025) was **closed as stale on
-2026-08-01** by frenck and never merged; it is re-openable if the work is picked up again.
-Anything claiming "submitted, awaiting acceptance" is stale — that state ended 2026-08-01.
+(procedure in `README.md`). That is how every current user got it, and it keeps working whatever
+happens to the submission below.
+
+**Default-catalogue submission: [hacs/default#10263](https://github.com/hacs/default/pull/10263)**,
+opened 2026-08-23, **12/12 checks green**, tracked in #102. Expect **months**, not weeks — the queue
+is ~720 PRs deep and sorts oldest-first.
+
+⚠️ It replaces `hacs/default#6025` (2026-03-07, closed as stale 2026-08-01 with an invitation to
+reopen). **#6025 is NOT re-openable** — its branch had to be rebased and GitHub refuses to reopen a
+PR whose branch was force-pushed, permanently. Anything saying otherwise is stale.
+
+🔴 **Never delete `.github/workflows/validate.yml` while a submission is in the queue.** HACS
+requires the actions to be passing **at review time**, not at submission time. Deleting that file on
+2026-07-15 silently voided the requirement for the last six weeks of #6025's wait, with no signal
+anywhere. See #89 and #102.
 
 > **The `hacs` and `hassfest` jobs run on GitHub, and only there.** `hacs/action` validates
 > github.com's API view of the repository, so it cannot validate a repo it sees only through
@@ -115,7 +126,7 @@ Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diag
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest tests/ -v     # 128 tests / 11 files, all green 2026-08-23
+.venv/bin/pytest tests/ -v     # 128 tests / 10 files, all green 2026-08-23
 .venv/bin/ruff check .
 ```
 
