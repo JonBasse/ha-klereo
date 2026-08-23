@@ -9,7 +9,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import KlereoApi, KlereoApiError
+from .api import (
+    CMD_STATUS_IN_FLIGHT,
+    CMD_STATUS_LABELS,
+    CMD_STATUS_OK,
+    KlereoApi,
+    KlereoApiError,
+)
 from .const import SCAN_INTERVAL_MINUTES
 from .models import KlereoPoolDetails, KlereoSystemData, KlereoSystemInfo
 
@@ -106,26 +112,94 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
                 f"Error communicating with Klereo API: {err}"
             ) from err
 
+    @staticmethod
+    def _command_id(result: Any) -> Any:
+        """Return the cmdID a queued write answered with, or None.
+
+        The response shape is NOT measured — this reads the plausible ones and gives up
+        quietly on anything else. An expired JWT, for one, answers
+        `{"status": "error", "detail": ...}` with no `response` key at all. Turning a
+        guessed shape into a hard failure would break every write on an assumption, which
+        is exactly the defect #94 records.
+        """
+        if not isinstance(result, dict):
+            return None
+        response = result.get("response")
+        if isinstance(response, dict):
+            for key in ("cmdID", "cmdId", "cmd_id", "id"):
+                if key in response:
+                    return response[key]
+            return None
+        if isinstance(response, int | str):
+            return response
+        return None
+
+    async def _async_confirm_command(self, result: Any, description: str) -> bool:
+        """Raise if a queued command was rejected; return whether it is confirmed done.
+
+        `SetOut` and `SetParam` queue and return immediately, so their HTTP 200 means
+        "accepted for execution", never "executed" — a refused command is otherwise
+        indistinguishable from a successful one. Upstream calls `waitCommand($cmdID)`
+        after every write and refreshes only on status 9 (`klereo.class.php` l.1661-1687).
+        """
+        cmd_id = self._command_id(result)
+        if cmd_id is None:
+            _LOGGER.warning(
+                "%s: no command id in the API response, so its outcome cannot be "
+                "verified. Response: %s", description, result,
+            )
+            return False
+
+        try:
+            status_result = await self.api.command_status(cmd_id)
+        except Exception as err:
+            _LOGGER.warning("%s: could not read command status: %s", description, err)
+            return False
+
+        status = status_result.get("response") if isinstance(status_result, dict) else None
+        if not isinstance(status, int):
+            _LOGGER.warning(
+                "%s: unreadable command status. Response: %s", description, status_result,
+            )
+            return False
+
+        if status == CMD_STATUS_OK:
+            return True
+
+        if status in CMD_STATUS_IN_FLIGHT:
+            _LOGGER.debug(
+                "%s: still %s", description, CMD_STATUS_LABELS.get(status, status),
+            )
+            return False
+
+        label = CMD_STATUS_LABELS.get(status)
+        detail = f"{label} (status {status})" if label else f"status {status}"
+        raise HomeAssistantError(f"{description} was rejected by Klereo: {detail}")
+
     async def async_set_output(
         self, system_id: str, out_index: int, mode: int, state: int
     ) -> Any:
-        """Send a set-output command and request a data refresh."""
+        """Send a set-output command, check it ran, and request a data refresh."""
+        description = f"Setting output {out_index}"
         try:
             result = await self.api.set_output(system_id, out_index, mode, state)
         except Exception as err:
             raise HomeAssistantError(
                 f"Failed to set output {out_index}: {err}"
             ) from err
+        await self._async_confirm_command(result, description)
         await self.async_request_refresh()
         return result
 
     async def async_set_param(self, system_id: str, param_id: str, value: Any) -> Any:
-        """Send a set-parameter command and request a data refresh."""
+        """Send a set-parameter command, check it ran, and request a data refresh."""
+        description = f"Setting parameter {param_id}"
         try:
             result = await self.api.set_param(system_id, param_id, value)
         except Exception as err:
             raise HomeAssistantError(
                 f"Failed to set parameter {param_id}: {err}"
             ) from err
+        await self._async_confirm_command(result, description)
         await self.async_request_refresh()
         return result

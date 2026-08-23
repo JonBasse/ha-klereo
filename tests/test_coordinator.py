@@ -2,6 +2,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.klereo.api import KlereoApi
 from custom_components.klereo.coordinator import KlereoCoordinator
@@ -130,6 +131,107 @@ class TestAsyncUpdateData:
         assert "SYS1" in result  # still present, just without merged details
         assert "SYS2" in result
 
+
+class TestCommandResultIsChecked:
+    """Tests that a rejected Klereo command stops looking like a successful one.
+
+    `SetOut` / `SetParam` queue and return immediately, so an HTTP 200 says only that the
+    command was *accepted for execution*. Status 13 (insufficient rights) is the costly
+    one: upstream bars outputs 2, 3, 8 and 15 below access 20, so a non-professional
+    account commanding its pH corrector gets a silent success today (#95).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_refresh(self, coordinator):
+        coordinator.async_request_refresh = AsyncMock()
+
+    async def test_raises_on_insufficient_rights(self, coordinator, mock_api):
+        """Should raise, naming the status, when the command is refused."""
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {"status": "ok", "response": 13}
+
+        with pytest.raises(HomeAssistantError, match="insufficient rights"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        mock_api.command_status.assert_awaited_once_with(77)
+
+    async def test_raises_on_bad_parameters(self, coordinator, mock_api):
+        """Should raise on status 11 too — the check is not specific to one code."""
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {"status": "ok", "response": 11}
+
+        with pytest.raises(HomeAssistantError, match="bad parameters"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+    async def test_does_not_raise_on_success(self, coordinator, mock_api):
+        """Should stay silent on status 9 and still refresh.
+
+        This is the positive control: without it, an exception reaching the caller would
+        not prove the right field is read — only that something raised.
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {"status": "ok", "response": 9}
+
+        await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    async def test_does_not_raise_while_still_in_flight(self, coordinator, mock_api):
+        """Should not raise on 0 (pending) or 1 (running) — those are not failures."""
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        for in_flight in (0, 1):
+            mock_api.command_status.return_value = {"status": "ok", "response": in_flight}
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+    async def test_does_not_raise_when_no_command_id_is_returned(self, coordinator, mock_api):
+        """Should behave exactly as before when no cmdID can be found.
+
+        The response shape is not measured — an expired JWT answers
+        `{"status": "error", "detail": ...}` with no `response` key at all. Raising on a
+        shape we guessed would break every write on a guess, which is the defect #94
+        records. Never worse than today is the rule here.
+        """
+        mock_api.set_output.return_value = {"status": "error", "detail": "expired"}
+
+        await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        mock_api.command_status.assert_not_awaited()
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    async def test_accepts_a_bare_command_id(self, coordinator, mock_api):
+        """Should read a cmdID returned as a bare scalar, not only wrapped in a dict."""
+        mock_api.set_output.return_value = {"status": "ok", "response": 77}
+        mock_api.command_status.return_value = {"status": "ok", "response": 9}
+
+        await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        mock_api.command_status.assert_awaited_once_with(77)
+
+    async def test_set_param_is_checked_too(self, coordinator, mock_api):
+        """Should check SetParam the same way — both writes queue."""
+        mock_api.set_param.return_value = {"status": "ok", "response": {"cmdID": 88}}
+        mock_api.command_status.return_value = {"status": "ok", "response": 15}
+
+        with pytest.raises(HomeAssistantError, match="execution timeout"):
+            await coordinator.async_set_param("SYS1", "ConsigneEau", 28)
+
+    async def test_does_not_refresh_after_a_rejected_command(self, coordinator, mock_api):
+        """Should not refresh when the command failed — upstream refreshes only on 9."""
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {"status": "ok", "response": 10}
+
+        with pytest.raises(HomeAssistantError):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        coordinator.async_request_refresh.assert_not_awaited()
+
+    async def test_unknown_status_still_raises(self, coordinator, mock_api):
+        """Should raise on a status code absent from the label table, naming the number."""
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {"status": "ok", "response": 99}
+
+        with pytest.raises(HomeAssistantError, match="99"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
 
 class TestPayloadShapeLogging:
     """Tests for the debug trace that records which containers the API actually sends.

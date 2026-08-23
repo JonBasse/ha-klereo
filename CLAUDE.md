@@ -86,6 +86,12 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
 - **`api.py`** — auth is SHA-1 password hash + JWT, with an `asyncio.Lock` on re-auth and automatic
   retry on 401/transient errors. Wire constants (`API_URL_*`, `OUT_MODE_*`, `OUT_STATE_*`) live
   here, not in `const.py`.
+
+  > ⚠️ **Every write is a TWO-step protocol.** `SetOut` / `SetParam` only *queue* a command and
+  > return a cmdID; `WaitCommand` says what actually happened. An HTTP 200 on step one is not a
+  > result — status `13` (insufficient rights) reads identically to success on the wire. Route
+  > writes through `KlereoCoordinator._async_confirm_command`, never straight at `api.set_*`. See
+  > #95.
 - **`entity.py`** — `KlereoEntity` base (DeviceInfo) + `setup_discovery()`, the shared helper for
   dynamic entity creation. Entities appear without a restart.
 

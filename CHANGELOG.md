@@ -10,13 +10,20 @@ All notable changes to this project will be documented in this file.
   - `ExtraParams` comes from an external reporter who read their own diagnostic export and named it alongside `params` ([GH #54](https://github.com/JonBasse/ha-klereo/issues/54), 2026-06-17) — the first real payload measured here, and independent confirmation that `params` is what the integration actually receives.
 - **Setpoint bounds came from a hard-coded 10-40.** They now come from the `EauMin` / `EauMax` the API sends for your installation; the hard-coded pair is only a fallback.
 - **Sentinel values were displayed as readings.** `-2000` (setpoint disabled) and `-1000` (unknown) no longer create an entity.
+- **A rejected command looked exactly like a successful one.** `SetOut` and `SetParam` do not execute — they *queue*, and return a cmdID immediately, so their HTTP 200 means "accepted for execution", never "executed". The integration took that reply for a result, discarded the cmdID and refreshed. Every write is now confirmed through `WaitCommand`, and a status other than 9 raises an error in Home Assistant carrying the status label ([#95](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/95)).
+  - The costly one is **13, insufficient rights**: upstream bars outputs 2, 3, 8 and 15 below access level 20, so a non-professional account commanding its pH corrector got a silent success.
+  - Statuses 0 (pending) and 1 (running) are not failures and do not raise.
+  - A command whose outcome cannot be read — no cmdID in the reply, which is what an expired JWT returns — logs a warning and behaves as before. The reply's shape is not measured, and turning a guess into a hard failure would break every write on an assumption.
+  - A rejected command no longer triggers a data refresh; upstream refreshes only on status 9.
 
 ### Added
 
 - The water setpoint is now gated the way upstream gates it, so it stops being offered where the hardware or the account does not have it: account `access` below 10, and `HeaterMode` 0 (no heat pump) or 3 (on/off heat pump, no setpoint). An **unknown** value never gates — a payload carrying neither field keeps the entity it has today.
-- Keys from `params` are exposed as read-only sensors only through the curated `PARAM_NAMES` list; upstream reads that container at 40+ sites, so taking every key would create dozens of entities in every install.
+- Keys from `params` and `ExtraParams` are exposed as read-only sensors only through the curated `PARAM_NAMES` list; upstream reads those containers at 40+ sites, so taking every key would create dozens of entities in every install.
 - A `debug` trace of the detail payload's top-level keys on each refresh — the instrument that stops the container from being a guess at the next report.
-- 28 tests (118 total, up from 90).
+- `API_URL_COMMAND_STATUS`, `CMD_STATUS_OK`, `CMD_STATUS_IN_FLIGHT` and `CMD_STATUS_LABELS` in `api.py`, plus `KlereoApi.command_status()`.
+- 38 tests across the three fixes (**128 total**, up from 90).
+- **HACS and `hassfest` validation run again**, on GitHub, where `hacs/action` can see the repository it is validating ([#89](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/89)). They had run nowhere since 2026-07-15. Two locks had to be lifted, neither of them CI configuration: the push-mirror moved to SSH + a per-repo deploy key (the classic PAT lacks the `workflow` scope, and GitHub rejects the *entire ref*), and repository-level GitHub Actions were re-enabled.
 
 ## [1.5.3] — 2026-08-23
 

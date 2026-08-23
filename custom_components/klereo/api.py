@@ -15,9 +15,36 @@ API_URL_GET_INDEX = f"{API_URL_BASE}/GetIndex.php"
 API_URL_GET_POOL_DETAILS = f"{API_URL_BASE}/GetPoolDetails.php"
 API_URL_SET_OUT = f"{API_URL_BASE}/SetOut.php"
 API_URL_SET_PARAM = f"{API_URL_BASE}/SetParam.php"
+API_URL_COMMAND_STATUS = f"{API_URL_BASE}/WaitCommand.php"
 
 API_VERSION = "393-J"
 API_COM_MODE = 1
+
+# Klereo writes are a TWO-step protocol, not one: `SetOut` / `SetParam` only *queue* the
+# command and return a cmdID immediately; `WaitCommand` reports what actually happened.
+# An HTTP 200 on the first step therefore says nothing about execution.
+# Codes from Klereo's own API documentation, relayed by the reporter of GitHub #58.
+CMD_STATUS_PENDING = 0
+CMD_STATUS_RUNNING = 1
+CMD_STATUS_OK = 9
+
+# Statuses that are not yet a verdict: the command is still on its way.
+CMD_STATUS_IN_FLIGHT = frozenset({CMD_STATUS_PENDING, CMD_STATUS_RUNNING})
+
+CMD_STATUS_LABELS = {
+    CMD_STATUS_PENDING: "pending",
+    CMD_STATUS_RUNNING: "running",
+    CMD_STATUS_OK: "executed successfully",
+    10: "command failed",
+    11: "bad parameters",
+    12: "unknown command",
+    13: "insufficient rights",
+    15: "execution timeout",
+    16: "aborted",
+    17: "pool not connected",
+    18: "service unavailable",
+    19: "box firmware too old",
+}
 
 TIMEOUT = 10
 USER_AGENT = "Jeedom plugin"
@@ -196,6 +223,18 @@ class KlereoApi:
                 "newState": state,
                 "comMode": API_COM_MODE,
             },
+        )
+
+    async def command_status(self, cmd_id: Any) -> Any:
+        """Ask what became of a queued command.
+
+        Args:
+            cmd_id: The cmdID returned by `set_output` or `set_param`.
+        """
+        return await self._request_with_retry(
+            "POST",
+            API_URL_COMMAND_STATUS,
+            data={"cmdID": cmd_id, "comMode": API_COM_MODE},
         )
 
     async def set_param(self, system_id: str, param_id: str, value: Any) -> Any:
