@@ -31,6 +31,26 @@ OUT_MODE_REGUL = 3
 # Output states (from Jeedom plugin _OUT_STATE_* constants)
 OUT_STATE_OFF = 0
 OUT_STATE_ON = 1
+# Any mode other than Manual reports and expects AUTO rather than ON/OFF.
+OUT_STATE_AUTO = 2
+
+# Output 4 (Heating) overloads newMode: it carries the KlereoTherm mode, not
+# the output mode. Sending OUT_MODE_MAN (0) there means "Off".
+# Source: Jeedom plugin klereo.class.php, _HEAT_MODE_* (l.1377-1380) and the
+# `elseif ($outIndex === 4)` branch (l.1525+).
+OUT_IDX_HEATING = 4
+
+HEAT_MODE_STOP = 0
+HEAT_MODE_AUTO = 1
+HEAT_MODE_COOLING = 2
+HEAT_MODE_HEATING = 3
+
+HEAT_MODES = {
+    HEAT_MODE_STOP: "Off",
+    HEAT_MODE_AUTO: "Auto",
+    HEAT_MODE_COOLING: "Cooling",
+    HEAT_MODE_HEATING: "Heating",
+}
 
 # Human-readable output mode labels (int → label)
 OUTPUT_MODES = {
@@ -161,8 +181,10 @@ class KlereoApi:
         Args:
             system_id: The pool system ID.
             out_index: Output index (0-15).
-            mode: Output mode (OUT_MODE_MAN=0, OUT_MODE_TIME_SLOTS=1, etc.).
-            state: Output state (OUT_STATE_OFF=0, OUT_STATE_ON=1).
+            mode: Output mode (OUT_MODE_MAN=0, OUT_MODE_TIME_SLOTS=1, etc.) —
+                except on OUT_IDX_HEATING, where it is a HEAT_MODE_* value.
+            state: Output state (OUT_STATE_OFF=0, OUT_STATE_ON=1,
+                OUT_STATE_AUTO=2 for any non-Manual mode).
         """
         return await self._request_with_retry(
             "POST",

@@ -99,6 +99,11 @@ Each output on your Klereo system is exposed as a switch:
 
 Turning a switch on or off sends a **Manual mode** command to the Klereo system. The switch state updates optimistically and is confirmed on the next data refresh.
 
+> **Heating (output 4) is the exception.** That output drives a KlereoTherm, whose mode field carries
+> `Off` / `Auto` / `Cooling` / `Heating` instead of the usual output modes. Turning the switch on sends
+> **Heating**, turning it off sends **Off**, and its mode select offers those four options rather than
+> Manual / Time Slots / Timer / Regulation.
+
 > **Note:** Some outputs (pH Corrector, Disinfectant, Flocculant, Hybrid Disinfectant) may require professional-level access on your Klereo account to control.
 
 ### Number Entities

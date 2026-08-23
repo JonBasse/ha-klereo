@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.3] — 2026-08-23
+
+### Fixed
+
+- **The Heating switch turned the heat pump off instead of on.** On output 4, `SetOut`'s `newMode` carries the KlereoTherm mode, not the output mode — so the `OUT_MODE_MAN` (= 0) that every other output needs means **Off** there. The API answered `{"status":"ok"}` either way, so the command failed silently. `switch.turn_on` now sends `HEAT_MODE_HEATING`/`OUT_STATE_AUTO` and `turn_off` sends `HEAT_MODE_STOP`/`OUT_STATE_OFF` ([#55](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/55), [GH #58](https://github.com/JonBasse/ha-klereo/issues/58)).
+- **The Heating mode select offered the wrong options.** Output 4 now lists `Off` / `Auto` / `Cooling` / `Heating` instead of Manual / Time Slots / Timer / Regulation, reads its current option from the same table, and pairs a non-Off mode with `newState = 2` (Automatic).
+- **Every non-Manual mode change sent the wrong `newState`.** The select reused the output's current ON/OFF status; only Manual carries an ON/OFF state, while Time Slots, Timer and Regulation all expect `OUT_STATE_AUTO` (2). Manual now clamps a non-ON status to OFF rather than forwarding a meaningless `2`.
+- The Heating switch reports **on** for status `2` (Automatic); on that output only `Off` means off.
+
+### Added
+
+- `OUT_STATE_AUTO`, `OUT_IDX_HEATING`, `HEAT_MODE_*` and `HEAT_MODES` in `api.py`, each carrying its upstream citation (`klereo.class.php` l.1377-1380 and the `outIndex === 4` branch at l.1525+).
+- 13 tests covering the heating output's switch and select, plus the AUTO-state rule on ordinary outputs (90 tests total, up from 77).
+
 ## [1.5.1] — 2026-03-05
 
 ### Added
