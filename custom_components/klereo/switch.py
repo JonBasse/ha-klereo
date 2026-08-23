@@ -6,7 +6,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .api import OUT_MODE_MAN, OUT_STATE_OFF, OUT_STATE_ON
+from .api import (
+    HEAT_MODE_HEATING,
+    HEAT_MODE_STOP,
+    OUT_IDX_HEATING,
+    OUT_MODE_MAN,
+    OUT_STATE_AUTO,
+    OUT_STATE_OFF,
+    OUT_STATE_ON,
+)
 from .const import OUTPUT_NAMES
 from .entity import KlereoEntity, setup_discovery
 from .models import KlereoOutput, KlereoPoolDetails
@@ -63,7 +71,14 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
         status = output.status
         if status is not None:
             try:
-                self._attr_is_on = int(status) == OUT_STATE_ON
+                # On the heating output, AUTO (2) means the KlereoTherm is
+                # running — Off is the only state that reads as off there.
+                # Elsewhere status 2 only means "under automatic control", which
+                # says nothing about the relay, so it is deliberately not mapped.
+                if self._output_index == OUT_IDX_HEATING:
+                    self._attr_is_on = int(status) != OUT_STATE_OFF
+                else:
+                    self._attr_is_on = int(status) == OUT_STATE_ON
             except (ValueError, TypeError):
                 _LOGGER.warning("Unexpected status value %r for output %s", status, self._output_index)
                 self._attr_is_on = False
@@ -83,16 +98,24 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs):
         """Turn the output on (Manual mode, ON state)."""
+        if self._output_index == OUT_IDX_HEATING:
+            mode, state = HEAT_MODE_HEATING, OUT_STATE_AUTO
+        else:
+            mode, state = OUT_MODE_MAN, OUT_STATE_ON
         self._attr_is_on = True
         self.async_write_ha_state()
         await self.coordinator.async_set_output(
-            self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_ON
+            self.system_id, self._output_index, mode, state
         )
 
     async def async_turn_off(self, **kwargs):
         """Turn the output off (Manual mode, OFF state)."""
+        if self._output_index == OUT_IDX_HEATING:
+            mode, state = HEAT_MODE_STOP, OUT_STATE_OFF
+        else:
+            mode, state = OUT_MODE_MAN, OUT_STATE_OFF
         self._attr_is_on = False
         self.async_write_ha_state()
         await self.coordinator.async_set_output(
-            self.system_id, self._output_index, OUT_MODE_MAN, OUT_STATE_OFF
+            self.system_id, self._output_index, mode, state
         )

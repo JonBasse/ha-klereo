@@ -4,8 +4,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.klereo.api import (
+    HEAT_MODE_AUTO,
+    HEAT_MODE_HEATING,
+    HEAT_MODE_STOP,
+    OUT_IDX_HEATING,
+    OUT_MODE_MAN,
     OUT_MODE_TIME_SLOTS,
     OUT_MODE_TIMER,
+    OUT_STATE_AUTO,
+    OUT_STATE_OFF,
     OUT_STATE_ON,
 )
 from custom_components.klereo.models import (
@@ -91,27 +98,27 @@ class TestKlereoOutputModeSelect:
         select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
         assert select._attr_current_option == "Manual"
 
-    async def test_select_option_preserves_state(self, mock_coordinator):
-        """Should send new mode with current ON/OFF state preserved."""
+    async def test_select_option_non_manual_sends_auto(self, mock_coordinator):
+        """Timer hands control to the box, so newState is AUTO, not the ON/OFF status."""
         output = _make_output(status=1)
         select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
         select.async_write_ha_state = MagicMock()
         await select.async_select_option("Timer")
         mock_coordinator.async_set_output.assert_called_once_with(
-            "SYS1", 0, OUT_MODE_TIMER, OUT_STATE_ON
+            "SYS1", 0, OUT_MODE_TIMER, OUT_STATE_AUTO
         )
         assert select._attr_current_option == "Timer"
 
-    async def test_select_option_off_state(self, mock_coordinator):
-        """Should preserve OFF state when changing mode."""
-        output = _make_output(status=0)
+    async def test_select_option_manual_preserves_off_state(self, mock_coordinator):
+        """Manual is the one mode that keeps the ON/OFF state."""
+        output = _make_output(status=0, mode=OUT_MODE_TIME_SLOTS)
         # Update the coordinator data to match
         mock_coordinator.data["SYS1"].details.output_index[0] = output
         select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
         select.async_write_ha_state = MagicMock()
-        await select.async_select_option("Time Slots")
+        await select.async_select_option("Manual")
         mock_coordinator.async_set_output.assert_called_once_with(
-            "SYS1", 0, OUT_MODE_TIME_SLOTS, 0
+            "SYS1", 0, OUT_MODE_MAN, OUT_STATE_OFF
         )
 
     def test_handle_coordinator_update_refreshes(self, mock_coordinator):
@@ -150,3 +157,101 @@ class TestKlereoOutputModeSelect:
         select.async_write_ha_state = MagicMock()
         with pytest.raises(HomeAssistantError, match="Failed to set output"):
             await select.async_select_option("Regulation")
+
+
+class TestKlereoHeatingModeSelect:
+    """Output 4's select must offer KlereoTherm modes, not output modes.
+
+    Upstream: klereo.class.php l.1377-1380 (_HEAT_MODE_*) and l.1525+
+    (`elseif ($outIndex === 4)`), where newState = newMode > 0 ? AUTO : OFF.
+    Forgejo #55 / GitHub #58.
+    """
+
+    @pytest.fixture
+    def heating_coordinator(self, mock_coordinator):
+        """Swap the fixture's output for the heating one (index 4)."""
+        output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_AUTO, mode=HEAT_MODE_AUTO)
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {OUT_IDX_HEATING: output}
+        return mock_coordinator
+
+    def test_options_are_heat_modes(self, heating_coordinator):
+        """Manual/Time Slots/Timer/Regulation are meaningless on output 4."""
+        output = _make_output(index=OUT_IDX_HEATING, mode=HEAT_MODE_AUTO)
+        select = KlereoOutputModeSelect(heating_coordinator, "SYS1", output)
+        assert select.options == ["Off", "Auto", "Cooling", "Heating"]
+
+    def test_current_option_reads_heat_mode(self, heating_coordinator):
+        """mode == 3 is Heating, not Regulation."""
+        output = _make_output(index=OUT_IDX_HEATING, mode=HEAT_MODE_HEATING)
+        select = KlereoOutputModeSelect(heating_coordinator, "SYS1", output)
+        assert select._attr_current_option == "Heating"
+
+    async def test_select_heating_sends_auto_state(self, heating_coordinator):
+        """A non-Off heat mode pairs with newState = AUTO (2), never the on/off status."""
+        output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_OFF, mode=HEAT_MODE_STOP)
+        select = KlereoOutputModeSelect(heating_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+        await select.async_select_option("Heating")
+        heating_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_AUTO
+        )
+
+    async def test_select_off_sends_off_state(self, heating_coordinator):
+        """Off pairs with newState = OFF (0)."""
+        output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_AUTO, mode=HEAT_MODE_HEATING)
+        select = KlereoOutputModeSelect(heating_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+        await select.async_select_option("Off")
+        heating_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_STOP, OUT_STATE_OFF
+        )
+
+    def test_other_outputs_keep_output_modes(self, mock_coordinator):
+        """Control: every other output still offers the output modes."""
+        output = _make_output(index=0, mode=0)
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
+        assert select.options == ["Manual", "Time Slots", "Timer", "Regulation"]
+
+
+class TestNonManualModesSendAutoState:
+    """Time Slots / Timer / Regulation pair with newState = AUTO on every output.
+
+    Upstream klereo.class.php l.1641-1655: only OUT_MODE_MAN carries the on/off
+    state; TIMER and TIME_SLOTS both send _OUT_STATE_AUTO. The filtration branch
+    (l.1500+) does the same for REGUL.
+    """
+
+    async def test_time_slots_sends_auto(self, mock_coordinator):
+        """Time Slots must send AUTO (2), not the preserved on/off status."""
+        output = _make_output(index=0, status=OUT_STATE_ON, mode=0)
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+        await select.async_select_option("Time Slots")
+        mock_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", 0, OUT_MODE_TIME_SLOTS, OUT_STATE_AUTO
+        )
+
+    async def test_regulation_sends_auto(self, mock_coordinator):
+        """Regulation must send AUTO (2) too."""
+        output = _make_output(index=1, status=OUT_STATE_OFF, mode=0)
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {1: output}
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+        await select.async_select_option("Regulation")
+        mock_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", 1, 3, OUT_STATE_AUTO
+        )
+
+    async def test_manual_still_preserves_on_off(self, mock_coordinator):
+        """Control: Manual is the one mode that keeps the on/off state."""
+        output = _make_output(index=0, status=OUT_STATE_ON, mode=OUT_MODE_TIMER)
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+        await select.async_select_option("Manual")
+        mock_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", 0, 0, OUT_STATE_ON
+        )

@@ -3,7 +3,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.klereo.api import OUT_MODE_MAN, OUT_STATE_OFF, OUT_STATE_ON
+from custom_components.klereo.api import (
+    HEAT_MODE_HEATING,
+    HEAT_MODE_STOP,
+    OUT_IDX_HEATING,
+    OUT_MODE_MAN,
+    OUT_STATE_AUTO,
+    OUT_STATE_OFF,
+    OUT_STATE_ON,
+)
 from custom_components.klereo.models import (
     KlereoOutput,
     KlereoPoolDetails,
@@ -123,3 +131,65 @@ class TestKlereoSwitch:
         found = switch._find_my_output()
         assert found is not None
         assert found.status == 1
+
+
+class TestKlereoHeatingSwitch:
+    """Output 4 carries the KlereoTherm mode in newMode, not the output mode.
+
+    Upstream: MrWaloo/jeedom-klereo core/class/klereo.class.php, _HEAT_MODE_*
+    at l.1377-1380 and the `elseif ($outIndex === 4)` branch at l.1525+.
+    Forgejo #55 / GitHub #58.
+    """
+
+    @pytest.fixture
+    def heating_coordinator(self, mock_coordinator):
+        """Swap the fixture's output for the heating one (index 4)."""
+        output = _make_output(index=OUT_IDX_HEATING, status=0, mode=0)
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {OUT_IDX_HEATING: output}
+        return mock_coordinator
+
+    async def test_turn_on_sends_heat_mode_not_manual(self, heating_coordinator):
+        """turn_on must send HEAT_MODE_HEATING/AUTO, never OUT_MODE_MAN (= Off here)."""
+        output = _make_output(index=OUT_IDX_HEATING, status=0, mode=0)
+        switch = KlereoSwitch(heating_coordinator, "SYS1", output)
+        switch.async_write_ha_state = MagicMock()
+        await switch.async_turn_on()
+        heating_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_AUTO
+        )
+        assert switch._attr_is_on is True
+
+    async def test_turn_off_sends_heat_mode_stop(self, heating_coordinator):
+        """turn_off must send HEAT_MODE_STOP/OFF."""
+        output = _make_output(index=OUT_IDX_HEATING, status=2, mode=3)
+        switch = KlereoSwitch(heating_coordinator, "SYS1", output)
+        switch.async_write_ha_state = MagicMock()
+        await switch.async_turn_off()
+        heating_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_STOP, OUT_STATE_OFF
+        )
+        assert switch._attr_is_on is False
+
+    async def test_other_outputs_keep_manual_mode(self, mock_coordinator):
+        """Control: the generic branch is untouched — this is why the light works."""
+        output = _make_output(index=0, status=0)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        switch.async_write_ha_state = MagicMock()
+        await switch.async_turn_on()
+        mock_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", 0, OUT_MODE_MAN, OUT_STATE_ON
+        )
+
+    def test_is_on_when_heating_state_is_auto(self, heating_coordinator):
+        """status == 2 (AUTO) means the KlereoTherm is running, not off."""
+        output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_AUTO, mode=3)
+        switch = KlereoSwitch(heating_coordinator, "SYS1", output)
+        assert switch._attr_is_on is True
+
+    def test_is_off_when_heating_state_is_off(self, heating_coordinator):
+        """status == 0 means stopped."""
+        output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_OFF, mode=0)
+        switch = KlereoSwitch(heating_coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
