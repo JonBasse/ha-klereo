@@ -89,8 +89,14 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
 - **`entity.py`** — `KlereoEntity` base (DeviceInfo) + `setup_discovery()`, the shared helper for
   dynamic entity creation. Entities appear without a restart.
 
-Six platforms: `sensor` (probes + `RegulModes` params) · `binary_sensor` · `switch` (always forces
+Six platforms: `sensor` (probes + regulation params) · `binary_sensor` · `switch` (always forces
 Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diagnostics` (redacted).
+
+> ⚠️ **Setpoints live in TWO containers and which one your API returns is unmeasured.** `RegulModes`
+> was guessed (the introducing commit says so in its own comment) and appears nowhere upstream, which
+> reads every setpoint from `params`. Both are read, `RegulModes` winning on conflict so the read can
+> only add. `params` reaches `sensor` only through the curated `PARAM_NAMES` list — it carries dozens
+> of counters and bounds, and taking every key would flood each install with entities. See #94.
 
 ---
 

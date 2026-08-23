@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **The water setpoint was read from a guessed container, so it appeared for nobody.** `ConsigneEau` is the only entry in `PARAM_TYPES` and therefore the integration's only `number` entity; it was read from `RegulModes`, a container the introducing commit declares guessed in its own comment and whose name appears nowhere in the upstream Jeedom plugin — which reads every setpoint from `params`. **Three** containers are now read — `RegulModes`, `params` and `ExtraParams` — in that order of precedence, so the change can only add a value, never alter one an existing install already shows ([#94](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/94)).
+  - `ExtraParams` comes from an external reporter who read their own diagnostic export and named it alongside `params` ([GH #54](https://github.com/JonBasse/ha-klereo/issues/54), 2026-06-17) — the first real payload measured here, and independent confirmation that `params` is what the integration actually receives.
+- **Setpoint bounds came from a hard-coded 10-40.** They now come from the `EauMin` / `EauMax` the API sends for your installation; the hard-coded pair is only a fallback.
+- **Sentinel values were displayed as readings.** `-2000` (setpoint disabled) and `-1000` (unknown) no longer create an entity.
+
+### Added
+
+- The water setpoint is now gated the way upstream gates it, so it stops being offered where the hardware or the account does not have it: account `access` below 10, and `HeaterMode` 0 (no heat pump) or 3 (on/off heat pump, no setpoint). An **unknown** value never gates — a payload carrying neither field keeps the entity it has today.
+- Keys from `params` are exposed as read-only sensors only through the curated `PARAM_NAMES` list; upstream reads that container at 40+ sites, so taking every key would create dozens of entities in every install.
+- A `debug` trace of the detail payload's top-level keys on each refresh — the instrument that stops the container from being a guess at the next report.
+- 28 tests (118 total, up from 90).
+
 ## [1.5.3] — 2026-08-23
 
 ### Fixed

@@ -55,7 +55,24 @@ OUTPUT_NAMES = {
     15: "Hybrid Disinfectant",
 }
 
-# Friendly names for RegulModes keys exposed as read-only param sensors.
+# Sentinel setpoint values used by the Klereo API. A setpoint carrying one of these is not
+# a value: -2000 means the setpoint is disabled, -1000 that it is unknown. Upstream
+# discards both (klereo.class.php l.873-896); exposing them would pin an entity to a
+# nonsense reading.
+PARAM_SENTINELS = frozenset({-2000, -1000})
+
+# Account access levels, from the upstream plugin (klereo.class.php l.463-471). The API
+# gates what a given account may read or write on this value.
+ACCESS_READ_ONLY = 5
+ACCESS_END_CUSTOMER = 10
+ACCESS_ADVANCED_USER = 16
+ACCESS_POOL_PROFESSIONAL = 20
+
+# KlereoTherm modes that carry no water setpoint: 0 = no heat pump at all, 3 = an on/off
+# heat pump that takes no setpoint. Upstream gates ConsigneEau on HeaterMode not in {0, 3}.
+HEATER_MODES_WITHOUT_SETPOINT = frozenset({0, 3})
+
+# Friendly names for setpoint / regulation keys exposed as read-only param sensors.
 # Keys in PARAM_TYPES are excluded (they become number entities instead).
 PARAM_NAMES = {
     "ModeFiltration": "Filtration Mode",
@@ -69,6 +86,15 @@ PARAM_NAMES = {
     "DureeTimerFiltration": "Filtration Timer Duration",
 }
 
+# Writable setpoints exposed as `number` entities.
+#   min/max         — fallback bounds, used only when the API sends none
+#   min_key/max_key — the API keys carrying the real bounds, preferred over min/max
+#   min_access      — the account access level below which the API refuses the write
+#   needs_heater    — skip when HeaterMode says the installation has no water setpoint
 PARAM_TYPES = {
-    "ConsigneEau": {"name": "Water Setpoint", "unit": "°C", "min": 10, "max": 40, "step": 0.5},
+    "ConsigneEau": {
+        "name": "Water Setpoint", "unit": "°C", "min": 10, "max": 40, "step": 0.5,
+        "min_key": "EauMin", "max_key": "EauMax",
+        "min_access": ACCESS_END_CUSTOMER, "needs_heater": True,
+    },
 }
