@@ -79,10 +79,10 @@ Probe sensors are created for each probe reported by your Klereo system. The fol
 
 Probes with unrecognized types are still created with a generic name (e.g. "Sensor 3").
 
-Additionally, regulation parameters from your pool data are exposed as read-only sensors. They are read from both
-containers the API is known to use — `RegulModes` and `params` — because which one your installation returns has
-never been measured. Keys from `params` are limited to a curated list, since that container also carries dozens of
-internal counters and bounds.
+Additionally, regulation parameters from your pool data are exposed as read-only sensors. They are read from all
+three containers the API is known to use — `RegulModes`, `params` and `ExtraParams` — because which one your
+installation returns has never been measured. Keys from `params` and `ExtraParams` are limited to a curated list,
+since those containers also carry dozens of internal counters and bounds.
 
 ### Switches
 

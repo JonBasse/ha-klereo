@@ -1,6 +1,12 @@
 name: Validate
 
 # Fully-qualify every `uses:` to github.com — bare names mis-resolve to data.forgejo.org.
+#
+# This file is HALF the gate, on purpose. `hacs` and `hassfest` cannot run here — `hacs/action`
+# validates github.com's API view of the repository, so it cannot validate one it sees only through
+# Forgejo — and they live in `.github/workflows/validate.yml` instead. The two sets are disjoint, so
+# Renovate has nothing to bump twice. Do NOT add them here, and do NOT delete the GitHub file on the
+# fleet-wide "GitHub Actions are off post-#671" rule: this repo is the exception. See #89.
 
 on:
   push:
