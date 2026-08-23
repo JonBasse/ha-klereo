@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 import pytest
 
-from custom_components.klereo.api import KlereoApi, KlereoApiError
+from custom_components.klereo.api import API_URL_COMMAND_STATUS, KlereoApi, KlereoApiError
 
 
 @pytest.fixture
@@ -149,3 +149,23 @@ class TestParseResponse:
         response = _make_response({}, status=503)
         with pytest.raises(aiohttp.ClientResponseError):
             await api._parse_response(response, "https://example.com")
+
+
+class TestCommandStatus:
+    """Tests for the second half of a Klereo write.
+
+    `SetOut` and `SetParam` do not execute — they queue, and return immediately with a
+    cmdID. Whether the command actually ran is a separate call (#95).
+    """
+
+    async def test_posts_the_command_id(self, api, mock_session):
+        """Should ask WaitCommand.php about a specific cmdID."""
+        mock_session.request.return_value = _make_response({"status": "ok", "response": 9})
+        api._token = "token"
+
+        await api.command_status(4242)
+
+        _, kwargs = mock_session.request.call_args
+        args, _ = mock_session.request.call_args
+        assert args[1] == API_URL_COMMAND_STATUS
+        assert kwargs["data"]["cmdID"] == 4242
