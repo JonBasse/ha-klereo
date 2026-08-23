@@ -8,13 +8,15 @@
 # advertises its issue tracker to every HACS install, and `disabled = false` on the repo. Deleting
 # this file again on the fleet-wide "GitHub Actions are off post-#671" rule removes the only gate
 # that checks what is actually distributed. See #89.
+#
+# ⚠️ There is deliberately NO `pull_request:` trigger. Pull requests live on Forgejo; github.com
+# never sees one, so a `pull_request` trigger here would be dead configuration describing a check
+# that cannot run — the exact defect #89 records. Every branch is mirrored, so an unfiltered
+# `push:` is what gives a verdict before a Forgejo merge.
 name: Validate
 
 on:
   push:
-    branches: [master]
-  pull_request:
-    branches: [master]
   workflow_dispatch:
 
 jobs:
