@@ -1,0 +1,35 @@
+# HACS + hassfest gate. These two jobs live HERE, not in `.forgejo/workflows/`, and the split is
+# deliberate: `hacs/action` validates github.com's API view of the repository, so it cannot
+# validate a repo it only sees through Forgejo. `lint` and `test` stay on Forgejo — the two sets
+# are disjoint, so Renovate has nothing to bump twice (the objection that removed this file in
+# e402f36).
+#
+# ⚠️ This repo is the one place in the fleet where GitHub is NOT a dead mirror: `manifest.json`
+# advertises its issue tracker to every HACS install, and `disabled = false` on the repo. Deleting
+# this file again on the fleet-wide "GitHub Actions are off post-#671" rule removes the only gate
+# that checks what is actually distributed. See #89.
+#
+# ⚠️ There is deliberately NO `pull_request:` trigger. Pull requests live on Forgejo; github.com
+# never sees one, so a `pull_request` trigger here would be dead configuration describing a check
+# that cannot run — the exact defect #89 records. Every branch is mirrored, so an unfiltered
+# `push:` is what gives a verdict before a Forgejo merge.
+name: Validate
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@22.5.0
+        with:
+          category: integration
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
