@@ -16,7 +16,7 @@ from .api import (
     OUT_STATE_ON,
 )
 from .const import OUTPUT_NAMES
-from .entity import KlereoEntity, setup_discovery
+from .entity import KlereoEntity, is_output_offered, setup_discovery
 from .models import KlereoOutput, KlereoPoolDetails
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,6 +26,8 @@ def _extract_switches(coordinator, system_id, details: KlereoPoolDetails):
     """Extract output switches from system details."""
     items = []
     for output in details.outs:
+        if not is_output_offered(output.index, details):
+            continue
         uid = f"{system_id}_output_{output.index}"
         items.append((uid, KlereoSwitch(coordinator, system_id, output)))
     return items

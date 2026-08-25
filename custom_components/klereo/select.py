@@ -16,7 +16,7 @@ from .api import (
     OUTPUT_MODES,
 )
 from .const import OUTPUT_NAMES
-from .entity import KlereoEntity, setup_discovery
+from .entity import KlereoEntity, is_output_offered, setup_discovery
 from .models import KlereoOutput, KlereoPoolDetails
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,6 +30,8 @@ def _extract_selects(coordinator, system_id, details: KlereoPoolDetails):
     """Extract output mode selects from system details."""
     items = []
     for output in details.outs:
+        if not is_output_offered(output.index, details):
+            continue
         uid = f"{system_id}_output_mode_{output.index}"
         items.append((uid, KlereoOutputModeSelect(coordinator, system_id, output)))
     return items
