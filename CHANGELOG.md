@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **The command confirmation added in 1.6.0 was shaped against a guess, and probably never fired.** `#95` was written without documentation and said so — `_command_id`'s comment declared *"The response shape is NOT measured"*. Klereo's own API documentation arrived on 2026-08-24 ([`docs/klereo-api.md`](docs/klereo-api.md), supplied by the reporter of [GH #58](https://github.com/JonBasse/ha-klereo/issues/58)) and describes `response` as a **JSON ARRAY** whose elements carry `cmdID`, `status`, `startTime`, `updateTime` and `detail` — while the code required `response` to be a **bare integer**. On the documented shape that check is false always, so the "rejected by Klereo" error was unreachable and 1.6.0 degraded to the pre-`#95` behaviour: write, do not verify ([#106](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/106)).
+  - **Both shapes are now read**, in `_command_id` and in the new `_command_status`. Which one is live is still unmeasured; reading both cannot regress whichever it turns out to be, and that property is what made this safe to change without hardware.
+  - The status is matched on **`cmdID`**, not on position — the documentation says each element represents a command, so a multi-element response is well-formed and taking `[0]` would report another command's verdict as ours.
+  - Klereo's free-text **`detail`** is now surfaced in the error, since it is the only part of a rejection that can name the actual cause.
+  - An empty `response: []` is treated as "no verdict yet", never as a rejection.
+- 🔴 **Why no existing test caught this:** all eight of them mocked `{"status": "ok", "response": 9}`, the same integer form the code assumed. They were measuring the code's agreement with its own assumption rather than with the API — no quantity of tests of that family would have found it. The 7 new tests are written against the documented shape, and the negative control is that reintroducing the bare-integer read reddens exactly those and leaves the 8 original ones green.
+
 ## [1.6.0] — 2026-08-23
 
 ### Fixed

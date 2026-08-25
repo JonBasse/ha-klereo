@@ -233,6 +233,125 @@ class TestCommandResultIsChecked:
         with pytest.raises(HomeAssistantError, match="99"):
             await coordinator.async_set_output("SYS1", 2, 0, 1)
 
+class TestDocumentedListShape:
+    """Tests the response shape Klereo's own API documentation describes (#106).
+
+    `#95` was written without documentation and said so: `_command_id`'s comment declared
+    *"The response shape is NOT measured"*. The documentation arrived on 2026-08-24
+    (`docs/klereo-api.md`) and describes `response` as a **JSON ARRAY** whose elements
+    carry `cmdID`, `status`, `startTime`, `updateTime` and `detail` — never a bare integer.
+
+    The tests in `TestCommandResultIsChecked` above all mock the integer form, so they were
+    green while agreeing with the code's own assumption rather than with the API. They are
+    kept: which of the two shapes is live is still unmeasured, and reading both is the only
+    remedy that cannot regress either way.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_refresh(self, coordinator):
+        coordinator.async_request_refresh = AsyncMock()
+
+    async def test_reads_the_command_id_from_a_list_response(self, coordinator, mock_api):
+        """Should find cmdID inside `response[0]`, the shape SetOut is documented to return."""
+        mock_api.set_output.return_value = {
+            "status": "ok",
+            "response": [{"cmdID": 77, "poolID": 1}],
+        }
+        mock_api.command_status.return_value = {"status": "ok", "response": 9}
+
+        await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        mock_api.command_status.assert_awaited_once_with(77)
+
+    async def test_raises_on_insufficient_rights_in_a_list_response(self, coordinator, mock_api):
+        """Should read `status` from inside the element, not from `response` itself."""
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {
+            "status": "ok",
+            "response": [{"cmdID": 77, "status": 13, "detail": ""}],
+        }
+
+        with pytest.raises(HomeAssistantError, match="insufficient rights"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+    async def test_does_not_raise_on_success_in_a_list_response(self, coordinator, mock_api, caplog):
+        """Positive control: status 9 inside the element is READ, not merely tolerated.
+
+        ⚠️ Asserting only "did not raise, and refreshed" does NOT discriminate here: an
+        unparsed response also fails to raise and also refreshes. The two outcomes are
+        byte-identical to the caller. The discriminator is the absence of the "unreadable
+        command status" warning — that is what separates "understood as success" from
+        "not understood at all".
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {
+            "status": "ok",
+            "response": [{"cmdID": 77, "status": 9, "startTime": 1, "updateTime": 2}],
+        }
+
+        await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        assert "unreadable command status" not in caplog.text
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    async def test_picks_the_element_matching_our_command_id(self, coordinator, mock_api):
+        """Should match on cmdID rather than blindly taking the first element.
+
+        The documentation says each element represents a command, so a response carrying
+        more than one is well-formed. Taking `[0]` would read another command's verdict —
+        a plausible, wrong answer, which is the failure this whole issue is about.
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {
+            "status": "ok",
+            "response": [
+                {"cmdID": 41, "status": 9},
+                {"cmdID": 77, "status": 13},
+            ],
+        }
+
+        with pytest.raises(HomeAssistantError, match="insufficient rights"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+    async def test_reports_klereos_detail_string_when_present(self, coordinator, mock_api):
+        """Should surface `detail`, the free-text field Klereo documents alongside status."""
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {
+            "status": "ok",
+            "response": [{"cmdID": 77, "status": 10, "detail": "pump unreachable"}],
+        }
+
+        with pytest.raises(HomeAssistantError, match="pump unreachable"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+    async def test_does_not_raise_while_in_flight_in_a_list_response(self, coordinator, mock_api, caplog):
+        """Should treat 0 and 1 inside the element as not-yet-a-verdict, as for the integer form.
+
+        Same discrimination problem as the success case: silence alone proves nothing, so
+        the assertion is that the status was parsed rather than skipped.
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        for in_flight in (0, 1):
+            mock_api.command_status.return_value = {
+                "status": "ok",
+                "response": [{"cmdID": 77, "status": in_flight}],
+            }
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        assert "unreadable command status" not in caplog.text
+
+    async def test_an_empty_list_is_not_a_verdict(self, coordinator, mock_api):
+        """Should not raise on `response: []` — absence of a verdict is not a rejection.
+
+        Absurdity control: an empty list is indistinguishable from "not answered yet", and
+        turning it into a failure would invent rejections nobody reported.
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {"status": "ok", "response": []}
+
+        await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+
 class TestPayloadShapeLogging:
     """Tests for the debug trace that records which containers the API actually sends.
 
