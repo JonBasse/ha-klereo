@@ -125,6 +125,12 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
         if not isinstance(result, dict):
             return None
         response = result.get("response")
+        # Klereo documents `response` as a JSON ARRAY whose elements carry `cmdID` and
+        # `poolID` (`docs/klereo-api.md`). #95 shipped without that document and read only
+        # the scalar and mapping forms, so the documented one fell through to None — the
+        # write then went unverified while reporting nothing (#106).
+        if isinstance(response, list):
+            response = response[0] if response else None
         if isinstance(response, dict):
             for key in ("cmdID", "cmdId", "cmd_id", "id"):
                 if key in response:
@@ -133,6 +139,31 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
         if isinstance(response, int | str):
             return response
         return None
+
+    @staticmethod
+    def _command_status(result: Any, cmd_id: Any) -> tuple[Any, str | None]:
+        """Return the `(status, detail)` a status response carries for `cmd_id`.
+
+        Two shapes are read and neither is measured against the live API. Klereo's
+        documentation describes `response` as a JSON ARRAY whose elements carry `cmdID`,
+        `status`, `startTime`, `updateTime` and `detail`; #95 shipped reading `response`
+        as a bare integer. Reading both cannot regress whichever one turns out to be real,
+        and that property is the whole reason this is safe to change without hardware.
+
+        The match is on `cmdID` rather than on position: the documentation says each
+        element represents a command, so a multi-element response is well-formed and
+        taking `[0]` would report another command's verdict as ours.
+        """
+        response = result.get("response") if isinstance(result, dict) else None
+        if isinstance(response, int):
+            return response, None
+        if isinstance(response, list):
+            entries = [entry for entry in response if isinstance(entry, dict)]
+            match = next((entry for entry in entries if entry.get("cmdID") == cmd_id), None)
+            entry = match if match is not None else (entries[0] if entries else None)
+            if entry is not None:
+                return entry.get("status"), entry.get("detail") or None
+        return None, None
 
     async def _async_confirm_command(self, result: Any, description: str) -> bool:
         """Raise if a queued command was rejected; return whether it is confirmed done.
@@ -156,7 +187,7 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             _LOGGER.warning("%s: could not read command status: %s", description, err)
             return False
 
-        status = status_result.get("response") if isinstance(status_result, dict) else None
+        status, klereo_detail = self._command_status(status_result, cmd_id)
         if not isinstance(status, int):
             _LOGGER.warning(
                 "%s: unreadable command status. Response: %s", description, status_result,
@@ -174,6 +205,10 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
 
         label = CMD_STATUS_LABELS.get(status)
         detail = f"{label} (status {status})" if label else f"status {status}"
+        # `detail` is Klereo's own free-text field. It is the only part of a rejection that
+        # can name the actual cause, so it is surfaced verbatim when present.
+        if klereo_detail:
+            detail = f"{detail} — {klereo_detail}"
         raise HomeAssistantError(f"{description} was rejected by Klereo: {detail}")
 
     async def async_set_output(
