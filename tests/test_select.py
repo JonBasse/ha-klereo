@@ -68,11 +68,10 @@ class TestKlereoOutputModeSelect:
         select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
         assert select._attr_name == "Output 99 Mode"
 
-    def test_options_list(self, mock_coordinator):
-        """Should expose all four mode options."""
-        output = _make_output()
-        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
-        assert select._attr_options == ["Manual", "Time Slots", "Timer", "Regulation"]
+    # `test_options_list` lived here and asserted exactly four options. It is superseded by
+    # `TestDocumentedOutputModes::test_exposes_every_writable_mode` (#105): Klereo
+    # documents eight writable modes, so "all four" was a statement about the integration's
+    # table, not about the API.
 
     def test_current_option_manual(self, mock_coordinator):
         """Should read 'Manual' from mode=0."""
@@ -92,11 +91,10 @@ class TestKlereoOutputModeSelect:
         select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
         assert select._attr_current_option == "Regulation"
 
-    def test_current_option_none_defaults_manual(self, mock_coordinator):
-        """Should default to Manual when mode is None."""
-        output = _make_output(mode=None)
-        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
-        assert select._attr_current_option == "Manual"
+    # `test_current_option_none_defaults_manual` lived here and asserted that a missing mode
+    # reads as "Manual". That was the defect of #105 written down as an expectation — an
+    # absent value rendered as a specific, plausible, wrong one. It is superseded by
+    # `TestDocumentedOutputModes::test_a_missing_mode_is_not_reported_as_manual`.
 
     async def test_select_option_non_manual_sends_auto(self, mock_coordinator):
         """Timer hands control to the box, so newState is AUTO, not the ON/OFF status."""
@@ -159,6 +157,99 @@ class TestKlereoOutputModeSelect:
             await select.async_select_option("Regulation")
 
 
+class TestDocumentedOutputModes:
+    """Tests the ten output modes Klereo's API documentation describes (#105).
+
+    `OUTPUT_MODES` carried four. The documentation (`docs/klereo-api.md`) lists ten, of
+    which two are marked *USAGE INTERNE — ne pas utiliser*. The upstream plugin, written
+    independently, validates exactly `{0,1,2,3,4,6,8,9}` for writes — the same ten minus
+    the same two (`klereo.class.php:1198`). That agreement is what makes this fixable
+    without hardware.
+
+    The defect was not a missing option: it was `self._modes[0]` as a fallback, which
+    reported any unknown mode as **Manual** — a plausible, wrong value indistinguishable
+    from an output genuinely in Manual.
+    """
+
+    def test_exposes_every_writable_mode(self, mock_coordinator):
+        """Should offer the eight modes Klereo accepts, in documented order."""
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output())
+        assert select._attr_options == [
+            "Manual",
+            "Time Slots",
+            "Timer",
+            "Regulation",
+            "Filtration Sync",
+            "Maintenance",
+            "Pulse",
+            "Automatic",
+        ]
+
+    def test_does_not_offer_the_internal_use_modes(self, mock_coordinator):
+        """Should never offer 5 or 7 — the documentation marks both 'ne pas utiliser'.
+
+        Offering them would let a user send a value Klereo documents as forbidden.
+        """
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output())
+        assert len(select._attr_options) == 8
+
+    @pytest.mark.parametrize(
+        ("mode", "label"),
+        [(4, "Filtration Sync"), (6, "Maintenance"), (8, "Pulse"), (9, "Automatic")],
+    )
+    def test_reads_the_modes_that_used_to_read_as_manual(self, mock_coordinator, mode, label):
+        """Should report the real mode for the four that fell through to Manual."""
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output(mode=mode))
+        assert select._attr_current_option == label
+
+    @pytest.mark.parametrize("mode", [5, 7])
+    def test_an_internal_use_mode_is_not_reported_as_manual(self, mock_coordinator, mode):
+        """Should report nothing rather than Manual for a mode it cannot offer."""
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output(mode=mode))
+        assert select._attr_current_option is None
+
+    def test_an_unknown_mode_is_not_reported_as_manual(self, mock_coordinator):
+        """Absurdity control: a mode absent from the documentation must not read as Manual.
+
+        The documentation is not guaranteed exhaustive, so this is the case that must keep
+        working after the table is widened — widening it is not what fixes the defect.
+        """
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output(mode=99))
+        assert select._attr_current_option is None
+
+    def test_an_unreadable_mode_is_not_reported_as_manual(self, mock_coordinator):
+        """Should report nothing when the API sends a mode that will not parse as an int."""
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output(mode="banana"))
+        assert select._attr_current_option is None
+
+    def test_a_missing_mode_is_not_reported_as_manual(self, mock_coordinator):
+        """Should report nothing when the API sends no mode at all.
+
+        Same defect as the others: 'we do not know' rendered as a specific, wrong answer.
+        """
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output(mode=None))
+        assert select._attr_current_option is None
+
+    async def test_can_select_a_newly_exposed_mode(self, mock_coordinator):
+        """Should write mode 4 with AUTO state — only Manual carries an ON/OFF state."""
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output())
+        select.hass = MagicMock()
+        select.async_write_ha_state = MagicMock()
+
+        await select.async_select_option("Filtration Sync")
+
+        mock_coordinator.async_set_output.assert_awaited_once_with("SYS1", 0, 4, 2)
+
+    def test_the_heating_output_keeps_its_four_klereotherm_modes(self, mock_coordinator):
+        """Negative control on scope: widening the output table must not touch output 4.
+
+        Output 4 carries the KlereoTherm mode, and upstream validates `{0,1,2,3}` there on
+        the very same line that validates the eight elsewhere.
+        """
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output(index=4))
+        assert select._attr_options == ["Off", "Auto", "Cooling", "Heating"]
+
+
 class TestKlereoHeatingModeSelect:
     """Output 4's select must offer KlereoTherm modes, not output modes.
 
@@ -209,10 +300,21 @@ class TestKlereoHeatingModeSelect:
         )
 
     def test_other_outputs_keep_output_modes(self, mock_coordinator):
-        """Control: every other output still offers the output modes."""
+        """Control: every other output still offers the output modes, not the heating ones.
+
+        Asserted on membership rather than on the full list: this test exists to prove the
+        two mode *families* stay apart, and #105 widened the output family from four to
+        eight. Pinning the whole list here would make it fail on every future addition for
+        a reason that has nothing to do with what it guards. The complete list is asserted
+        once, in `TestDocumentedOutputModes`.
+        """
         output = _make_output(index=0, mode=0)
         select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
-        assert select.options == ["Manual", "Time Slots", "Timer", "Regulation"]
+        assert "Manual" in select.options
+        assert "Regulation" in select.options
+        # "Off" and "Cooling" exist only in HEAT_MODES — their absence is the discriminator.
+        assert "Off" not in select.options
+        assert "Cooling" not in select.options
 
 
 class TestNonManualModesSendAutoState:
