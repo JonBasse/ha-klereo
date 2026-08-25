@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.7.0] — 2026-08-25
 
 ### Fixed
 
@@ -26,6 +26,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Widening the table was safe without hardware because two independently written sources agree on the exact set Klereo accepts for writes — the documentation's ten minus its two internal-use entries, and the upstream plugin's `{0,1,2,3,4,6,8,9}` (`klereo.class.php:1198`).
+
+### Added
+
+- **Klereo's own API documentation is now committed** at [`docs/klereo-api.md`](docs/klereo-api.md) — supplied by the reporter of [GH #58](https://github.com/JonBasse/ha-klereo/issues/58) on 2026-08-24 and, until then, held only in a tracker comment. Everything this integration knew about the wire format came from re-implementing the Jeedom plugin or from guessing; this is the first primary source. Its header states what it leaves open, including the setpoint-container question it does **not** settle.
+- 28 tests across the three fixes (**156 total**, up from 128).
 
 ## [1.6.0] — 2026-08-23
 
