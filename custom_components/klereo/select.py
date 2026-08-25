@@ -76,15 +76,34 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
 
     def _update_from_output(self, output: KlereoOutput):
         """Update state from output data."""
-        mode = output.mode
-        if mode is not None:
-            try:
-                self._attr_current_option = self._modes.get(int(mode), self._modes[0])
-            except (ValueError, TypeError):
-                _LOGGER.warning("Unexpected mode value %r for output %s", mode, self._output_index)
-                self._attr_current_option = self._modes[0]
-        else:
-            self._attr_current_option = self._modes[0]
+        self._attr_current_option = self._label_for_mode(output.mode)
+
+    def _label_for_mode(self, mode) -> str | None:
+        """Return the label for a reported mode, or None when there is no honest one.
+
+        ⚠️ This used to fall back to `self._modes[0]` — "Manual" on an ordinary output,
+        "Off" on the heating one. That turned "we do not know" into a specific, plausible,
+        wrong answer, indistinguishable from an output genuinely in that mode. Klereo
+        documents ten modes and two of them are internal-use, so an unlabelled mode is a
+        normal occurrence, not a corrupt payload (#105).
+
+        None is the honest report: Home Assistant renders it as unknown.
+        """
+        if mode is None:
+            return None
+        try:
+            code = int(mode)
+        except (ValueError, TypeError):
+            _LOGGER.warning("Unexpected mode value %r for output %s", mode, self._output_index)
+            return None
+
+        label = self._modes.get(code)
+        if label is None:
+            _LOGGER.debug(
+                "Output %s reports mode %s, which Klereo does not document as selectable",
+                self._output_index, code,
+            )
+        return label
 
     def _find_my_output(self) -> KlereoOutput | None:
         """Find this output's data in the coordinator data."""

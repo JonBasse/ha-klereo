@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **An output in a mode the integration did not know was reported as "Manual".** `OUTPUT_MODES` carried four modes; Klereo's API documentation lists **ten** ([`docs/klereo-api.md`](docs/klereo-api.md)). Anything outside the four fell through to `self._modes[0]` — so an output genuinely in *Synchro filtration* appeared in Manual, a plausible value indistinguishable from the real thing, with nothing logged ([#105](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/105)).
+  - **Four modes are now exposed and selectable**: Filtration Sync (4), Maintenance (6), Pulse (8) and Automatic (9), alongside the existing Manual, Time Slots, Timer and Regulation.
+  - Modes **5 and 7 are deliberately never offered** — the documentation marks both *"USAGE INTERNE !! Ne pas utiliser"*. An output reporting one now reads as unknown rather than as Manual.
+  - **The fallback is gone, and that is the actual fix.** Widening the table alone would have left the next undocumented mode reading as Manual. An unknown, unreadable or missing mode now reports nothing at all, which Home Assistant renders as unknown.
+  - The heating output (4) is untouched and keeps its four KlereoTherm modes — upstream validates `{0,1,2,3}` there on the same line that validates the eight elsewhere.
+- Two existing tests asserted the old behaviour and are superseded rather than adapted: one pinned "all four options", the other asserted that a *missing* mode reads as Manual — the defect itself, written down as an expectation.
+
+### Changed
+
+- Widening the table was safe without hardware because two independently written sources agree on the exact set Klereo accepts for writes — the documentation's ten minus its two internal-use entries, and the upstream plugin's `{0,1,2,3,4,6,8,9}` (`klereo.class.php:1198`).
+
 ## [1.6.0] — 2026-08-23
 
 ### Fixed

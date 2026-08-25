@@ -49,11 +49,22 @@ CMD_STATUS_LABELS = {
 TIMEOUT = 10
 USER_AGENT = "Jeedom plugin"
 
-# Output modes (from Jeedom plugin _OUT_MODE_* constants)
+# Output modes. Klereo's API documentation lists ten (`docs/klereo-api.md`); the upstream
+# plugin, written independently, validates exactly {0,1,2,3,4,6,8,9} for writes
+# (klereo.class.php l.1198) — the same ten minus 5 and 7, which the documentation marks
+# "USAGE INTERNE !! Ne pas utiliser". Two sources agreeing on that precise exclusion is
+# what allowed this table to be widened without measuring the live API (#105).
+# Only the eight writable ones are named and labelled: 5 and 7 are deliberately absent, so
+# they resolve to no label rather than to a wrong one.
 OUT_MODE_MAN = 0
 OUT_MODE_TIME_SLOTS = 1
 OUT_MODE_TIMER = 2
 OUT_MODE_REGUL = 3
+OUT_MODE_FILTRATION_SYNC = 4
+OUT_MODE_MAINTENANCE = 6
+OUT_MODE_PULSE = 8
+# "Automate" upstream and in the documentation — a PLC-driven mode, not the AUTO *state*.
+OUT_MODE_AUTOMATIC = 9
 
 # Output states (from Jeedom plugin _OUT_STATE_* constants)
 OUT_STATE_OFF = 0
@@ -85,6 +96,10 @@ OUTPUT_MODES = {
     OUT_MODE_TIME_SLOTS: "Time Slots",
     OUT_MODE_TIMER: "Timer",
     OUT_MODE_REGUL: "Regulation",
+    OUT_MODE_FILTRATION_SYNC: "Filtration Sync",
+    OUT_MODE_MAINTENANCE: "Maintenance",
+    OUT_MODE_PULSE: "Pulse",
+    OUT_MODE_AUTOMATIC: "Automatic",
 }
 
 
