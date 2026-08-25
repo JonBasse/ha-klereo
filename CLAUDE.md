@@ -90,6 +90,12 @@ anywhere. See #89 and #102.
 
 API base `https://connect.klereo.fr/php`. Everything lives under `custom_components/klereo/`.
 
+> 📘 **Klereo's own API documentation is committed at [`docs/klereo-api.md`](docs/klereo-api.md)**
+> — obtained 2026-08-24 from the reporter of GitHub #58, and the only official source this project
+> has. Read it before inferring anything about the wire from the Jeedom plugin. ⚠️ Its field lists
+> for `GetIndex` / `GetPoolsDetails` are **elided in the source**, so it does **not** settle the
+> setpoint-container question below — that file's header names what it leaves open.
+
 - **`models.py`** — typed dataclasses (`KlereoProbe`, `KlereoOutput`, `KlereoSystemData`, …).
   The coordinator returns `dict[str, KlereoSystemData]`, **never raw API dicts** — keep it that way.
 - **`coordinator.py`** — `KlereoCoordinator`. **Commands route through coordinator methods, never
