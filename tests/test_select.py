@@ -21,7 +21,7 @@ from custom_components.klereo.models import (
     KlereoSystemData,
     KlereoSystemInfo,
 )
-from custom_components.klereo.select import KlereoOutputModeSelect
+from custom_components.klereo.select import KlereoOutputModeSelect, _extract_selects
 
 
 def _make_output(**kwargs) -> KlereoOutput:
@@ -255,3 +255,61 @@ class TestNonManualModesSendAutoState:
         mock_coordinator.async_set_output.assert_called_once_with(
             "SYS1", 0, 0, OUT_STATE_ON
         )
+
+
+class TestProOutputsAreGatedOnAccess:
+    """Tests that outputs 2, 3, 8 and 15 stop being offered to accounts that cannot use them.
+
+    Klereo's documentation says `newMode` is "NON VALABLE POUR LES SORTIES 2,3,4,8,15".
+    1.5.3 handled output 4; the other four were never handled. Upstream does not try to
+    reinterpret `newMode` there either — it refuses to command them below professional
+    access (`klereo.class.php:1188`), which is the only defensible position while the
+    semantics on those outputs remain unknown.
+
+    Since #95 a write to one of them surfaces status 13 instead of failing silently, so
+    the user now sees errors on entities that should never have been offered.
+    """
+
+    def _details(self, access, indices=(0, 2, 3, 4, 8, 15)):
+        return KlereoPoolDetails(
+            outs=[_make_output(index=i) for i in indices],
+            access=access,
+        )
+
+    def _indices(self, coordinator, details):
+        return sorted(e._output_index for _, e in _extract_selects(coordinator, "SYS1", details))
+
+    def test_pro_outputs_are_dropped_below_professional_access(self, mock_coordinator):
+        """Should not offer 2, 3, 8 and 15 to an end-customer account."""
+        result = self._indices(mock_coordinator, self._details(access=10))
+        assert result == [0, 4]
+
+    def test_pro_outputs_are_kept_at_professional_access(self, mock_coordinator):
+        """Positive control: access 20 keeps every output.
+
+        Without this, "the entities are gone" would be compatible with a gate that removes
+        them for everyone — which would be a worse bug than the one being fixed.
+        """
+        result = self._indices(mock_coordinator, self._details(access=20))
+        assert result == [0, 2, 3, 4, 8, 15]
+
+    def test_pro_outputs_are_kept_above_professional_access(self, mock_coordinator):
+        """Should compare on ordering, not equality — Klereo accounts are 25 and above."""
+        result = self._indices(mock_coordinator, self._details(access=25))
+        assert result == [0, 2, 3, 4, 8, 15]
+
+    def test_an_unknown_access_never_gates(self, mock_coordinator):
+        """🔴 Should keep every output when `access` is absent from the payload.
+
+        `access` is optional (`models.py`), and "we do not know" must never remove an
+        entity a working installation already has. This mirrors `_is_offered` in
+        `number.py`, whose docstring states the same rule: only a value we can read, and
+        that says no, removes anything.
+        """
+        result = self._indices(mock_coordinator, self._details(access=None))
+        assert result == [0, 2, 3, 4, 8, 15]
+
+    def test_ordinary_outputs_are_never_gated(self, mock_coordinator):
+        """Absurdity control: a read-only account keeps lighting, filtration and heating."""
+        details = self._details(access=5, indices=(0, 1, 4, 5))
+        assert self._indices(mock_coordinator, details) == [0, 1, 4, 5]

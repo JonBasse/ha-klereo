@@ -55,6 +55,13 @@ OUTPUT_NAMES = {
     15: "Hybrid Disinfectant",
 }
 
+# Outputs whose `newMode` does not carry the output mode. Klereo's documentation says
+# newMode is "NON VALABLE POUR LES SORTIES 2,3,4,8,15"; output 4 is handled separately
+# because its meaning there IS known (the KlereoTherm mode, #58). For these four it is
+# not, so upstream does not reinterpret it either — it refuses to command them below
+# professional access (klereo.class.php:1188). See #104.
+PRO_ONLY_OUTPUTS = frozenset({2, 3, 8, 15})
+
 # Sentinel setpoint values used by the Klereo API. A setpoint carrying one of these is not
 # a value: -2000 means the setpoint is disabled, -1000 that it is unknown. Upstream
 # discards both (klereo.class.php l.873-896); exposing them would pin an entity to a
