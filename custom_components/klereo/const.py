@@ -70,6 +70,23 @@ PRO_ONLY_OUTPUTS = frozenset({2, 3, 8, 15})
 # so a later entry can only add a key and never overwrite one an install already shows.
 SETTING_CONTAINERS = ("ExtraParams", "params", "RegulModes")
 
+# Which probe drives each regulation loop. Klereo documents these four top-level fields in
+# `docs/klereo-api.md`, each carrying an index into `probes[]`; a pool can hold several
+# temperature probes and nothing else says which one the box regulates on. Confirmed on a
+# live `GetIndex` in GitHub #57 (2026-08-26).
+REGULATION_REFERENCE_FIELDS = {
+    "EauCapteur": "water_temperature",
+    "pHCapteur": "ph",
+    "TraitCapteur": "disinfectant",
+    "PressionCapteur": "pressure",
+}
+
+# 🔴 `-1` means "this regulation has no reference probe" — the measured payload carries
+# `PressionCapteur: -1` on a pool with no pressure sensor. It is NOT `PARAM_SENTINELS`:
+# those mark a disabled or unknown SETPOINT, and a setpoint of -1 is a real value. Reusing
+# them here would be a false friend that happens to work.
+NO_REFERENCE_PROBE = -1
+
 # Sentinel setpoint values used by the Klereo API. A setpoint carrying one of these is not
 # a value: -2000 means the setpoint is disabled, -1000 that it is unknown. Upstream
 # discards both (klereo.class.php l.873-896); exposing them would pin an entity to a

@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .const import REGULATION_REFERENCE_FIELDS
+
 
 @dataclass
 class KlereoProbe:
@@ -104,6 +106,37 @@ class KlereoAlert:
         )
 
 
+def _parse_regulation_probes(data: dict[str, Any]) -> dict[str, int]:
+    """Return {regulation: probe index} for the reference fields this payload carries.
+
+    An ABSENT field is left out rather than defaulted: `0` is a valid probe index, so a
+    default would invent a reference on every installation that sends none.
+
+    An integer written as a string is accepted, the way `_label_for_mode` accepts one —
+    "16" addresses probe 16 unambiguously, and refusing it would drop a reference we can
+    read. Anything else is dropped: a float index would have to be truncated, and a
+    truncation is a guess about which probe was meant. `True` is rejected explicitly,
+    since Python would otherwise read it as probe 1.
+
+    `-1` is kept as-is. It is a real answer — "this regulation has no reference probe" —
+    and dropping it here would make it indistinguishable from an absent field, which is
+    exactly what the reader downstream has to tell apart.
+    """
+    probes = {}
+    for api_key, name in REGULATION_REFERENCE_FIELDS.items():
+        value = data.get(api_key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            probes[name] = value
+        elif isinstance(value, str):
+            try:
+                probes[name] = int(value)
+            except ValueError:
+                continue
+    return probes
+
+
 @dataclass
 class KlereoPoolDetails:
     """Parsed pool details for a single system."""
@@ -118,6 +151,7 @@ class KlereoPoolDetails:
     access: int | None = None
     probe_index: dict[int, KlereoProbe] = field(default_factory=dict)
     output_index: dict[int, KlereoOutput] = field(default_factory=dict)
+    regulation_probes: dict[str, int] = field(default_factory=dict)
 
     @property
     def settings(self) -> dict[str, Any]:
@@ -173,6 +207,7 @@ class KlereoPoolDetails:
             access=data.get("access"),
             probe_index={p.index: p for p in probes},
             output_index={o.index: o for o in outs},
+            regulation_probes=_parse_regulation_probes(data),
         )
 
 

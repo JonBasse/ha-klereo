@@ -79,6 +79,30 @@ Probe sensors are created for each probe reported by your Klereo system. The fol
 
 Probes with unrecognized types are still created with a generic name (e.g. "Sensor 3").
 
+#### Which probe drives which regulation
+
+A pool often carries more than one probe of the same kind — a water temperature probe and an air
+temperature probe both read °C — and only one of them is the one your Klereo box actually regulates
+on. The box says which, and probe sensors carry it as a `regulation_reference` attribute:
+
+| Value | Meaning |
+|---|---|
+| `water_temperature` | this probe is the reference for heating regulation |
+| `ph` | this probe is the reference for pH regulation |
+| `disinfectant` | this probe is the reference for chlorine / redox regulation |
+| `pressure` | this probe is the reference for pressure regulation |
+
+The attribute is a **list**, because in principle one probe could drive more than one loop, and it is
+**absent** on any probe that drives none — which is most of them. In a template:
+
+```jinja
+{{ 'water_temperature' in (state_attr('sensor.klereo_water_temperature', 'regulation_reference') or []) }}
+```
+
+Not every installation reports these fields, and a regulation your pool does not have — pressure, on a
+pool with no pressure sensor — simply names no probe. In both cases the attribute is absent, and no
+sensor changes.
+
 Additionally, regulation parameters from your pool data are exposed as read-only sensors. They are read from all
 three containers the API is known to use — `RegulModes`, `params` and `ExtraParams` — because installations differ
 in which ones they send: measured payloads carry `RegulModes` and `params` always, and `ExtraParams` on some

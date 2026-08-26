@@ -579,3 +579,135 @@ class TestProductConsumption:
         sensor = self._sensor(mock_coordinator, "PHMinus_Today",
                               params={"PHMinus_TodayTime": 900, "PHMinus_Debit": "n/a"})
         assert sensor.native_value is None
+
+
+class TestRegulationReferenceProbes:
+    """Klereo names which probe drives each regulation loop; nothing read it until now.
+
+    `docs/klereo-api.md` documents four top-level fields carrying a `probes[].index`:
+    `EauCapteur` (water temperature), `pHCapteur` (pH), `TraitCapteur` (disinfectant) and
+    `PressionCapteur` (pressure). A pool can carry several temperature probes and nothing
+    told the user which one the box actually regulates on — they had to guess, and the
+    probe list differs between installations.
+
+    Measured on a live `GetIndex` in GitHub #57 (2026-08-26): `EauCapteur: 16`,
+    `pHCapteur: 17`, `TraitCapteur: 18`, `PressionCapteur: -1`, with probes 16, 17 and 18
+    all present and of the matching types.
+
+    It is an ATTRIBUTE, not a new entity: the reading is already exposed, it is its role
+    that was missing. Forgejo #107.
+    """
+
+    def _probe_attrs(self, mock_coordinator, index, probes, **fields):
+        details = KlereoPoolDetails(
+            probes=probes,
+            probe_index={p.index: p for p in probes},
+            regulation_probes=fields,
+        )
+        mock_coordinator.data["SYS1"].details = details
+        sensor = KlereoSensor(mock_coordinator, "SYS1", details.probe_index[index])
+        return sensor.extra_state_attributes
+
+    def _measured(self):
+        """The three probes of the measured payload, with their real types."""
+        return [
+            _make_probe(index=16, type=5, filtered_value=27.0),
+            _make_probe(index=17, type=3, filtered_value=7.22),
+            _make_probe(index=18, type=4, filtered_value=655),
+        ]
+
+    def test_the_measured_payload_marks_its_three_reference_probes(self, mock_coordinator):
+        """Probe 16 drives water temperature, 17 the pH, 18 the disinfectant."""
+        probes = self._measured()
+        fields = {"water_temperature": 16, "ph": 17, "disinfectant": 18, "pressure": -1}
+        assert self._probe_attrs(mock_coordinator, 16, probes, **fields)[
+            "regulation_reference"] == ["water_temperature"]
+        assert self._probe_attrs(mock_coordinator, 17, probes, **fields)[
+            "regulation_reference"] == ["ph"]
+        assert self._probe_attrs(mock_coordinator, 18, probes, **fields)[
+            "regulation_reference"] == ["disinfectant"]
+
+    def test_a_probe_no_regulation_names_carries_no_attribute(self, mock_coordinator):
+        """The key is absent, not present and empty — an empty list reads as a claim."""
+        probes = [*self._measured(), _make_probe(index=1, type=1, filtered_value=23.7)]
+        attrs = self._probe_attrs(mock_coordinator, 1, probes, water_temperature=16)
+        assert "regulation_reference" not in attrs
+        assert attrs["type"] == 1
+
+    def test_minus_one_means_no_reference_probe_and_is_not_an_anomaly(
+        self, mock_coordinator, caplog
+    ):
+        """🔴 `-1` says "this regulation has no reference sensor", not "unknown".
+
+        Both end up creating no attribute, so the attribute alone cannot tell them apart.
+        The discriminator is the log: a regulation with no probe is a NORMAL installation
+        and must stay at debug, while an index naming a probe the payload does not carry
+        is a payload that contradicts itself and earns a warning. Confusing the two would
+        cry wolf on every pool without a pressure sensor.
+        """
+        with caplog.at_level("DEBUG", logger="custom_components.klereo.sensor"):
+            self._probe_attrs(mock_coordinator, 16, self._measured(),
+                              water_temperature=16, pressure=-1)
+        assert not [r for r in caplog.records if r.levelname == "WARNING"]
+        assert "pressure" in caplog.text
+
+    def test_an_index_naming_no_probe_warns(self, mock_coordinator, caplog):
+        """🔴 A reference pointing at a probe the payload does not carry IS an anomaly."""
+        with caplog.at_level("DEBUG", logger="custom_components.klereo.sensor"):
+            attrs = self._probe_attrs(mock_coordinator, 16, self._measured(),
+                                      water_temperature=16, ph=99)
+        assert attrs["regulation_reference"] == ["water_temperature"]
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "99" in warnings[0].getMessage()
+
+    def test_a_probe_named_by_two_regulations_lists_both(self, mock_coordinator):
+        """The attribute is always a list, so the unseen case needs no special path."""
+        probes = self._measured()
+        attrs = self._probe_attrs(mock_coordinator, 16, probes,
+                                  water_temperature=16, pressure=16)
+        assert attrs["regulation_reference"] == ["pressure", "water_temperature"]
+
+    def test_no_fields_at_all_marks_nothing(self, mock_coordinator):
+        """⚠️ The four fields are optional. A payload without them loses no entity."""
+        attrs = self._probe_attrs(mock_coordinator, 16, self._measured())
+        assert "regulation_reference" not in attrs
+
+    def test_the_reference_follows_a_later_payload(self, mock_coordinator):
+        """The box can be reconfigured; the attribute must not pin the first reading."""
+        probes = self._measured()
+        details = KlereoPoolDetails(
+            probes=probes,
+            probe_index={p.index: p for p in probes},
+            regulation_probes={"water_temperature": 16},
+        )
+        mock_coordinator.data["SYS1"].details = details
+        sensor = KlereoSensor(mock_coordinator, "SYS1", probes[0])
+        sensor.async_write_ha_state = MagicMock()
+        assert sensor.extra_state_attributes["regulation_reference"] == ["water_temperature"]
+        details.regulation_probes = {"water_temperature": 17}
+        sensor._handle_coordinator_update()
+        assert "regulation_reference" not in sensor.extra_state_attributes
+
+
+class TestRegulationReferenceParsing:
+    """The four fields are read off the top level of the details payload."""
+
+    def test_the_measured_field_names_are_parsed(self):
+        """Klereo's own names, verbatim from `docs/klereo-api.md` and GitHub #57."""
+        details = KlereoPoolDetails.from_dict({
+            "EauCapteur": 16, "pHCapteur": 17, "TraitCapteur": 18, "PressionCapteur": -1,
+        })
+        assert details.regulation_probes == {
+            "water_temperature": 16, "ph": 17, "disinfectant": 18, "pressure": -1,
+        }
+
+    def test_an_absent_field_is_absent_not_zero(self):
+        """🔴 A missing field must not become `0`, which is a valid probe index."""
+        details = KlereoPoolDetails.from_dict({"EauCapteur": 16})
+        assert details.regulation_probes == {"water_temperature": 16}
+
+    def test_an_unreadable_index_is_dropped(self):
+        """A non-integer index resolves to nothing and must not reach the lookup."""
+        details = KlereoPoolDetails.from_dict({"EauCapteur": "16", "pHCapteur": None})
+        assert details.regulation_probes == {"water_temperature": 16}
