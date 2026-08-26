@@ -98,3 +98,63 @@ class TestAccessLevel:
         """
         details = KlereoPoolDetails.from_dict({})
         assert details.access is None
+
+
+class TestAlertParsing:
+    """Tests for parsing the `alerts` array into typed entries."""
+
+    def test_parses_the_measured_entry(self):
+        """Should carry every field of the one payload anyone has measured (GitHub #57)."""
+        details = KlereoPoolDetails.from_dict(
+            {
+                "alerts": [
+                    {
+                        "index": 0,
+                        "code": 29,
+                        "param": 0,
+                        "updateTime": "2026-08-26 11:24:58",
+                        "level": 2,
+                    }
+                ],
+                "alertCount": 0,
+            }
+        )
+
+        assert len(details.alerts) == 1
+        alert = details.alerts[0]
+        assert (alert.code, alert.param, alert.index, alert.level) == (29, 0, 0, 2)
+        assert alert.updated == "2026-08-26 11:24:58"
+        assert details.reported_alert_count == 0
+
+    def test_keeps_the_timestamp_as_the_string_it_is(self):
+        """Should NOT parse `updateTime` into a datetime.
+
+        It is a string here and an integer epoch everywhere else in this API, and no
+        timezone is stated anywhere. Parsing it would require inventing one, which
+        silently shifts every timestamp by hours.
+        """
+        details = KlereoPoolDetails.from_dict(
+            {"alerts": [{"code": 29, "updateTime": "2026-08-26 11:24:58"}]}
+        )
+
+        assert details.alerts[0].updated == "2026-08-26 11:24:58"
+
+    def test_an_absent_key_parses_to_no_alerts(self):
+        """Should read a healthy payload — the key is not sent when nothing is wrong."""
+        details = KlereoPoolDetails.from_dict({"probes": [], "outs": []})
+
+        assert details.alerts == []
+        assert details.reported_alert_count is None
+
+    def test_skips_an_entry_carrying_no_code(self):
+        """Should drop a malformed entry rather than raise, as probes and outs do.
+
+        Same rule as `probes`/`outs`, which skip entries with no `index`: one unusable
+        element must not cost the whole refresh. `code` is the only field every branch of
+        the rendering needs.
+        """
+        details = KlereoPoolDetails.from_dict(
+            {"alerts": [{"param": 3}, {"code": 14, "param": 1}, "not-a-dict"]}
+        )
+
+        assert [a.code for a in details.alerts] == [14]

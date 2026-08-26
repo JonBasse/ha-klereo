@@ -105,3 +105,94 @@ PARAM_TYPES = {
         "min_access": ACCESS_END_CUSTOMER, "needs_heater": True,
     },
 }
+
+
+# ── Alerts ──────────────────────────────────────────────────────────────────────────
+#
+# Klereo returns active alerts in the `alerts` array of `GetIndex` / `GetPoolsDetails`.
+# `docs/klereo-api.md` does NOT document them — its field lists are elided — so the whole
+# of what follows is ported from the upstream Jeedom plugin (`klereo.class.php` l.517-597),
+# cross-checked against the one payload anyone has measured (GitHub #57, @sbdomo,
+# 2026-08-26).
+#
+# Two things that measurement settled, and neither was guessable:
+#
+#   * the key is ABSENT when there are no alerts, not present and empty. So "no alerts"
+#     and "we could not read them" look identical in the payload, and only one of them is
+#     a reason to show nothing. The entity is therefore created unconditionally: an alert
+#     sensor that disappears when the pool is healthy is worse than one reading 0.
+#   * `alertCount` and `len(alerts)` DISAGREE — the reporter's payload carries
+#     `alertCount: 0` beside one active alert, and says so ("I don't know why alertcount
+#     is 0 and not 1"). Upstream never reads that field either: it computes
+#     `count($pool['alerts'])` (l.511). The state is derived from the array; the reported
+#     figure is exposed as an attribute so a divergence is visible rather than silent.
+
+# Alert code → label (`klereo.class.php` l.517-568). Codes absent from this table are
+# reported by their number rather than mapped to a neighbouring label — upstream does the
+# same ("Code alerte inconnu par le plugin"). Gaps (4, 9, 15-20, 24, 27, 32, 33) are the
+# upstream table's own; do not fill them.
+ALERT_LABELS = {
+    0: "No alert",
+    1: "Sensor failure",
+    2: "Relay configuration problem",
+    3: "pH/Redox probes swapped",
+    5: "Low batteries",
+    6: "Calibration",
+    7: "Minimum",
+    8: "Maximum",
+    10: "Not received",
+    11: "Frost protection",
+    12: "Unknown alert #12",
+    13: "Excess water consumption",
+    14: "Water leak",
+    21: "Internal memory fault",
+    22: "Circulation problem",
+    23: "Insufficient filtration schedule",
+    25: "High pH, disinfectant ineffective",
+    26: "Filtration undersized",
+    28: "Regulation stopped",
+    29: "Filtration in MANUAL-OFF mode",
+    30: "INSTALLATION mode",
+    31: "Shock treatment",
+    34: "Regulation suspended or disabled",
+    35: "Maintenance",
+    36: "Daily injection limit reached",
+    37: "Multi-sensor failure",
+    38: "Electrolyser link failure",
+    39: "Daily brominator limit reached",
+    40: "Electrolyser",
+    41: "Heat pump link failure",
+    42: "Inconsistent sensor configuration",
+    43: "Electrolyser in safe mode",
+    44: "Dosing pump maintenance",
+    45: "Learning not performed",
+    46: "No analysis water flow",
+    47: "Inconsistent cover configuration",
+    48: "Filtration not controlled",
+    49: "Check the clock",
+    50: "Heat pump",
+    51: "Heat pump",
+    52: "Heat pump",
+    53: "Filtration link failure",
+    54: "Filtration pump",
+    55: "Gen3 or Gen5 multi-sensor missing",
+    56: "Filtration state unknown — risk of treatment without filtration",
+    57: "Gen3 or Gen4 multi-sensor missing",
+    58: "Incorrect pump configuration",
+    59: "Communication problem with the consumption metering module",
+    60: "Variable-speed pump display locked",
+    61: "Heat pump fault",
+}
+
+# 🔴 `param` means a DIFFERENT thing per code, and a raw number is wrong most of the time.
+# Codes not listed here carry no documented meaning for `param`, so it is not described at
+# all rather than described wrongly (`klereo.class.php` l.575-596).
+ALERT_PARAM_IS_PROBE = frozenset({1, 7, 8, 10, 36})   # param = CapteurID
+ALERT_PARAM_IS_FLOW = frozenset({13, 14})             # param = DebitID
+ALERT_PARAM_IS_OUTPUT = frozenset({35})               # param = OutID
+ALERT_PARAM_IS_PUMP = frozenset({53})                 # param = PumpID
+ALERT_PARAM_IS_ERROR_CODE = frozenset({50, 51, 52, 54, 61})  # ErrCode{E,P,F}X, PumpErrCode
+ALERT_PARAM_PREFIXES = {40: "BSVError", 41: "Communication"}
+# Code 6 names what is being calibrated; code 5 always means the RFID module, whatever
+# `param` carries — upstream ignores it there.
+ALERT_PARAM_CALIBRATION = {0: "pH", 1: "Disinfectant"}
