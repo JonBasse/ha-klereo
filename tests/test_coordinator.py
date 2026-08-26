@@ -352,6 +352,127 @@ class TestDocumentedListShape:
         await coordinator.async_set_output("SYS1", 2, 0, 1)
 
 
+class TestMeasuredObjectShape:
+    """Tests for the shape `WaitCommand` was MEASURED to return: a bare object.
+
+    #106 read two shapes — the bare integer #95 shipped, and the JSON array
+    `docs/klereo-api.md` documents — on the stated ground that reading both could not
+    regress whichever turned out to be real. Neither is. The first real payload anyone
+    has measured (GitHub #55, @StephanH27, 2026-08-26) carries `response` as a single
+    object, four times out of four.
+
+    ⚠️ Every test above this class passes on the broken code, because each one builds its
+    own fixture out of the two *assumed* shapes. A test whose fixture is the assumption it
+    should be controlling discriminates nothing — which is why this class quotes the
+    reported payload verbatim rather than paraphrasing it.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_refresh(self, coordinator):
+        coordinator.async_request_refresh = AsyncMock()
+
+    async def test_reads_the_status_from_the_reported_payload_verbatim(
+        self, coordinator, mock_api, caplog
+    ):
+        """Should understand the exact response @StephanH27 reported, status 9 included.
+
+        Positive control, and the whole point of the issue: silence alone does not
+        discriminate here, since an unparsed response is also silent and also refreshes.
+        The absence of the "unreadable command status" warning is what separates
+        "understood as success" from "not understood at all".
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 4351826}}
+        mock_api.command_status.return_value = {
+            "status": "ok",
+            "response": {
+                "cmdID": 4351826,
+                "status": 9,
+                "startTime": 1787652057,
+                "updateTime": 1787652059,
+                "detail": "Ok",
+            },
+        }
+
+        await coordinator.async_set_output("SYS1", 4, 3, 2)
+
+        assert "unreadable command status" not in caplog.text
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    async def test_raises_on_insufficient_rights_in_an_object_response(self, coordinator, mock_api):
+        """Should raise on status 13 in the object form.
+
+        This is the defect's actual cost: with the object unparsed, a rejection for
+        insufficient rights reads exactly like a success, on every install, since #95.
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {
+            "status": "ok",
+            "response": {"cmdID": 77, "status": 13, "detail": ""},
+        }
+
+        with pytest.raises(HomeAssistantError, match="insufficient rights"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+    async def test_reports_klereos_detail_string_from_an_object_response(self, coordinator, mock_api):
+        """Should surface `detail` from the object form, as it does from the list form."""
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {
+            "status": "ok",
+            "response": {"cmdID": 77, "status": 10, "detail": "pump unreachable"},
+        }
+
+        with pytest.raises(HomeAssistantError, match="pump unreachable"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+    async def test_does_not_raise_while_in_flight_in_an_object_response(
+        self, coordinator, mock_api, caplog
+    ):
+        """Should treat 0 and 1 in the object form as not-yet-a-verdict.
+
+        The measured payload reaches status 9 in 1 to 2 seconds (four samples, GitHub
+        #55), so a caller polling early genuinely sees these — they are not hypothetical.
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        for in_flight in (0, 1):
+            caplog.clear()
+            mock_api.command_status.return_value = {
+                "status": "ok",
+                "response": {"cmdID": 77, "status": in_flight},
+            }
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+            assert "unreadable command status" not in caplog.text
+
+    async def test_does_not_read_another_commands_verdict(self, coordinator, mock_api, caplog):
+        """Should refuse an object whose `cmdID` is not ours rather than report its status.
+
+        Negative control. The list branch matches on `cmdID` for exactly this reason; an
+        object naming a different command is the same hazard, and answering "rejected"
+        from another command's verdict is worse than answering nothing.
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {
+            "status": "ok",
+            "response": {"cmdID": 41, "status": 13},
+        }
+
+        await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+        assert "unreadable command status" in caplog.text
+
+    async def test_reads_an_object_that_carries_no_command_id(self, coordinator, mock_api, caplog):
+        """Should still read `status` when the object names no command at all.
+
+        Absurdity control on the matching rule above: `cmdID` is used to REJECT a verdict
+        proven to belong elsewhere, not to require a field whose presence is unmeasured on
+        every install. Only a *mismatching* id disqualifies an object.
+        """
+        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+        mock_api.command_status.return_value = {"status": "ok", "response": {"status": 13}}
+
+        with pytest.raises(HomeAssistantError, match="insufficient rights"):
+            await coordinator.async_set_output("SYS1", 2, 0, 1)
+
+
 class TestPayloadShapeLogging:
     """Tests for the debug trace that records which containers the API actually sends.
 

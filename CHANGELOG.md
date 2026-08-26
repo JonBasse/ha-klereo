@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- 🔴 **Command confirmation never fired — on any install, since 1.6.0.** 1.7.0 fixed `_command_id` to read the `response` shapes `docs/klereo-api.md` documents, and left `_command_status` reading only the bare integer and the JSON array. The first payload anyone has **measured** (GitHub [#55](https://github.com/JonBasse/ha-klereo/issues/55), 2026-08-26, four samples) is neither: `response` is a single **object**, `{"cmdID": …, "status": 9, "startTime": …, "updateTime": …, "detail": "Ok"}`. It fell through to "no status", so every write logged `unreadable command status` and returned unconfirmed ([#115](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/115)).
+  - The cost is not the log line: a **status 13 (insufficient rights) never raised**, which is the exact silent failure `#95` built this mechanism to remove, and `#104` later had to work around at the gating level. Statuses 10, 11, 17 and 19 were equally mute.
+  - **The object form is now read**, matched on `cmdID` the way the array branch already was. A `cmdID` naming a *different* command disqualifies the verdict; a missing one does not, since no install has been measured to always send it.
+  - Reading a third shape cannot regress the two already read — the same property that made 1.7.0's change safe without hardware.
+- 🔴 **Why 11 passing tests proved nothing.** Every test in `TestCommandConfirmation` and `TestDocumentedListShape` builds its own fixture from the two *assumed* shapes, so all of them stayed green while the mechanism was inert. A test whose fixture is the assumption it should be controlling discriminates nothing. The 6 new tests quote the reported payload **verbatim**, and the negative control is that removing the `cmdID` guard reddens exactly the one test written for it.
+- This does **not** explain the heat pump that still fails to start on a status 9, also reported in GH #55. The verdict becomes readable; it does not become different.
+
+### Added
+
+- 6 tests for the measured object shape (**162 total**, up from 156).
+
 ## [1.7.0] — 2026-08-25
 
 ### Fixed
