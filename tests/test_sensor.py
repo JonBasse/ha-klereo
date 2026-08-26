@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.klereo.const import PARAM_COUNTER_TYPES
+from custom_components.klereo.const import PARAM_COUNTER_TYPES, SENSOR_TYPES
 from custom_components.klereo.models import (
     KlereoAlert,
     KlereoPoolDetails,
@@ -579,3 +579,23 @@ class TestProductConsumption:
         sensor = self._sensor(mock_coordinator, "PHMinus_Today",
                               params={"PHMinus_TodayTime": 900, "PHMinus_Debit": "n/a"})
         assert sensor.native_value is None
+
+
+class TestProbeTypeNamesAreNotInverted:
+    """🔴 Pins the two probe types that were once mapped to each other's names.
+
+    A release before v1.5.2 mapped type 1 to Water and type 5 to Air. Fixing it repaired
+    the displayed name and nothing else: Home Assistant derives an `entity_id` from the
+    name at CREATION and never revisits it, so every installation created under the wrong
+    mapping still carries `sensor.klereo_water_temperature` on its air probe — for good
+    (Forgejo #121, measured on a live 1.5.2 installation).
+
+    That is why this guard is worth its two lines. An entity name is a public API from the
+    first install onwards, more frozen than any constant in this repository: inverting
+    these two again would be invisible on screen for existing users and permanent for new
+    ones. The negative control is that swapping the two entries reddens this test alone.
+    """
+
+    def test_type_1_is_air_and_type_5_is_water(self):
+        assert SENSOR_TYPES[1]["name"] == "Air Temperature"
+        assert SENSOR_TYPES[5]["name"] == "Water Temperature"

@@ -17,6 +17,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **The README explains what to do when an entity's ID does not match its name** ([#121](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/121)). Home Assistant derives an entity ID from its name once, at creation, and never revisits it — so an installation set up before v1.5.2, when two probe types were mapped to each other's names, still carries `sensor.klereo_water_temperature` on its **air** probe. The displayed name has been right since the fix; the ID is frozen wrong for good.
+  - 🔴 **Nothing looks wrong.** Both entities exist, carry plausible readings in the right unit, and the UI shows the name, which is correct. It only bites someone who writes the entity ID into a template or an automation and quietly gets the other probe — a pool reading 23.7 °C instead of 28.3 °C is credible in any season.
+  - The note **explains how to tell the two readings apart from the values themselves**, rather than asking anyone to take a name on trust: water has a large thermal mass and barely moves, air swings several degrees across a day. The steadier one is the water. Being the warmer one is *not* a reliable test — an unheated pool on a hot afternoon is the cooler of the two.
+  - **A note, not a `repairs` entry.** Renaming entity IDs from code would break the automations the freeze exists to protect, and nothing distinguishes an ID frozen wrong from one the user chose. A repair flow firing on someone who renamed their entities deliberately would be a new nuisance in exchange for a defect nobody has reported.
+  - A test now pins the two probe-type names explicitly, so the inversion cannot come back: it would be invisible on screen for existing users and permanent for new ones. An entity name is a public API from the first install onwards.
 - The README no longer says which settings container an installation returns "has never been measured". It has been, three times, and installations differ: `RegulModes` and `params` are always present, `ExtraParams` on some installations only.
 
 ### Fixed
