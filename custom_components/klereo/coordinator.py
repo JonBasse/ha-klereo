@@ -144,19 +144,32 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     def _command_status(result: Any, cmd_id: Any) -> tuple[Any, str | None]:
         """Return the `(status, detail)` a status response carries for `cmd_id`.
 
-        Two shapes are read and neither is measured against the live API. Klereo's
-        documentation describes `response` as a JSON ARRAY whose elements carry `cmdID`,
-        `status`, `startTime`, `updateTime` and `detail`; #95 shipped reading `response`
-        as a bare integer. Reading both cannot regress whichever one turns out to be real,
-        and that property is the whole reason this is safe to change without hardware.
+        Three shapes are read, and only the third is measured. #95 shipped reading
+        `response` as a bare integer; #106 added the JSON ARRAY `docs/klereo-api.md`
+        documents, on the ground that reading both could not regress whichever turned out
+        to be real. **Neither is.** The first measured payload (GitHub #55, 2026-08-26)
+        carries `response` as a single OBJECT:
+
+            {"status": "ok", "response": {"cmdID": 4351826, "status": 9,
+             "startTime": 1787652057, "updateTime": 1787652059, "detail": "Ok"}}
+
+        That object fell through to `None`, so `_async_confirm_command` logged "unreadable
+        command status" and returned False for EVERY write on EVERY install — a status 13
+        (insufficient rights) was indistinguishable from a success, which is the exact
+        silence #95 was built to remove. `_command_id` had read the object form since #106;
+        this one had not, and nothing compared the two.
 
         The match is on `cmdID` rather than on position: the documentation says each
         element represents a command, so a multi-element response is well-formed and
-        taking `[0]` would report another command's verdict as ours.
+        taking `[0]` would report another command's verdict as ours. `cmdID` DISQUALIFIES
+        a verdict proven to belong elsewhere; it is not required to be present, since no
+        install has been measured to always send it.
         """
         response = result.get("response") if isinstance(result, dict) else None
         if isinstance(response, int):
             return response, None
+        if isinstance(response, dict):
+            return KlereoCoordinator._status_of(response, cmd_id)
         if isinstance(response, list):
             entries = [entry for entry in response if isinstance(entry, dict)]
             match = next((entry for entry in entries if entry.get("cmdID") == cmd_id), None)
@@ -164,6 +177,14 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             if entry is not None:
                 return entry.get("status"), entry.get("detail") or None
         return None, None
+
+    @staticmethod
+    def _status_of(entry: dict[str, Any], cmd_id: Any) -> tuple[Any, str | None]:
+        """Return `(status, detail)` from one command entry, unless it names another command."""
+        entry_id = entry.get("cmdID")
+        if entry_id is not None and entry_id != cmd_id:
+            return None, None
+        return entry.get("status"), entry.get("detail") or None
 
     async def _async_confirm_command(self, result: Any, description: str) -> bool:
         """Raise if a queued command was rejected; return whether it is confirmed done.
