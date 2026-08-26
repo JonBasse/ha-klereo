@@ -5,6 +5,7 @@ import pytest
 
 from custom_components.klereo.api import (
     HEAT_MODE_AUTO,
+    HEAT_MODE_COOLING,
     HEAT_MODE_HEATING,
     HEAT_MODE_STOP,
     OUT_IDX_HEATING,
@@ -14,6 +15,7 @@ from custom_components.klereo.api import (
     OUT_STATE_AUTO,
     OUT_STATE_OFF,
     OUT_STATE_ON,
+    OUTPUT_MODES,
 )
 from custom_components.klereo.models import (
     KlereoOutput,
@@ -415,3 +417,119 @@ class TestProOutputsAreGatedOnAccess:
         """Absurdity control: a read-only account keeps lighting, filtration and heating."""
         details = self._details(access=5, indices=(0, 1, 4, 5))
         assert self._indices(mock_coordinator, details) == [0, 1, 4, 5]
+
+
+class TestCoolingModesAreGatedOnHeaterType:
+    """Output 4 must only offer Auto and Cooling to hardware that can do them.
+
+    Upstream builds the list from the heating TYPE (`klereo.class.php` l.929):
+
+        '0|Arrêt' . (in_array($HeaterMode, [2, 4]) ? ';1|Automatique;2|Refroidissement' : '')
+                  . ';3|Chauffage'
+
+    `HeaterMode` 2 (KlereoTherm heat pump) and 4 (other heat pump) can run automatically
+    and cool. 0 (no heat pump), 1 (heat pump or on/off heater) and 3 (on/off heating, no
+    setpoint) can only heat or stop — and Bioul's installation is a 1, which is why
+    "Cooling" is offered today to hardware that does not cool.
+
+    🔴 The gate is written as a positive list of the types KNOWN to be heat-only, not as
+    upstream's "everything that is not 2 or 4". The two differ exactly on a value we
+    cannot read — absent, unparseable, or an integer Klereo has not documented — and
+    "unknown never bars" (#94, #104) bites the other way round here: narrowing on a
+    missing reading would DELETE a control that works today, while the defect being fixed
+    is benign (an inert option). Forgejo #124.
+    """
+
+    def _coordinator(self, mock_coordinator, settings=None, container="params"):
+        """Point the fixture at output 4 and put `settings` in one of the containers."""
+        output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_AUTO, mode=HEAT_MODE_AUTO)
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {OUT_IDX_HEATING: output}
+        setattr(details, container, settings or {})
+        return mock_coordinator
+
+    def _options(self, mock_coordinator, settings=None, container="params"):
+        coordinator = self._coordinator(mock_coordinator, settings, container)
+        output = coordinator.data["SYS1"].details.output_index[OUT_IDX_HEATING]
+        return KlereoOutputModeSelect(coordinator, "SYS1", output).options
+
+    @pytest.mark.parametrize("heater_mode", [2, 4])
+    def test_a_real_heat_pump_keeps_all_four_modes(self, mock_coordinator, heater_mode):
+        """Positive control: types 2 and 4 are the ones that CAN cool.
+
+        Without this arm, "the list shrank" would be compatible with a gate that shrinks
+        it for everybody — which would be worse than the bug being fixed.
+        """
+        options = self._options(mock_coordinator, {"HeaterMode": heater_mode})
+        assert options == ["Off", "Auto", "Cooling", "Heating"]
+
+    @pytest.mark.parametrize("heater_mode", [0, 1, 3])
+    def test_a_heat_only_type_is_not_offered_auto_or_cooling(self, mock_coordinator, heater_mode):
+        """🔴 The reported defect: type 1 is Bioul's, and it cannot cool."""
+        options = self._options(mock_coordinator, {"HeaterMode": heater_mode})
+        assert options == ["Off", "Heating"]
+
+    def test_a_missing_heater_mode_never_bars(self, mock_coordinator):
+        """🔴 A payload carrying no `HeaterMode` keeps the four modes it has today."""
+        options = self._options(mock_coordinator, {})
+        assert options == ["Off", "Auto", "Cooling", "Heating"]
+
+    @pytest.mark.parametrize("heater_mode", [7, "1", None, "", [], 2.0])
+    def test_an_unreadable_heater_mode_never_bars(self, mock_coordinator, heater_mode):
+        """🔴 An undocumented or unparseable value is "unknown", not "heat-only".
+
+        This is where the gate deliberately departs from upstream's `not in [2, 4]`:
+        an integer Klereo has never documented tells us nothing about the hardware, and
+        over-filtering is the dangerous direction.
+        """
+        options = self._options(mock_coordinator, {"HeaterMode": heater_mode})
+        assert options == ["Off", "Auto", "Cooling", "Heating"]
+
+    def test_the_heater_mode_is_read_from_any_container(self, mock_coordinator):
+        """Should read `HeaterMode` through `settings`, not out of `params` alone.
+
+        Three containers carry these keys and all three were seen in one response
+        (GitHub #57, 2026-08-26). `number.py` already reads the merged view; reading
+        `params` alone here would gate on one install and not on its neighbour.
+        """
+        for container in ("regul_modes", "extra_params"):
+            options = self._options(mock_coordinator, {"HeaterMode": 1}, container=container)
+            assert options == ["Off", "Heating"], container
+
+    def test_the_gate_re_evaluates_on_a_later_payload(self, mock_coordinator):
+        """A `HeaterMode` that arrives after discovery must still narrow the list.
+
+        The entity is created once and never re-created, so a gate computed only in
+        `__init__` would keep the four modes for the lifetime of the install.
+        """
+        coordinator = self._coordinator(mock_coordinator, {})
+        output = coordinator.data["SYS1"].details.output_index[OUT_IDX_HEATING]
+        select = KlereoOutputModeSelect(coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+        assert select.options == ["Off", "Auto", "Cooling", "Heating"]
+
+        coordinator.data["SYS1"].details.params = {"HeaterMode": 1}
+        select._handle_coordinator_update()
+        assert select.options == ["Off", "Heating"]
+
+    def test_offering_is_narrowed_but_reading_is_not(self, mock_coordinator):
+        """A heat-only type still REPORTING Cooling must be shown as Cooling.
+
+        Refusing to read a mode we chose not to offer would turn "our gate is wrong on
+        this install" into "unknown" — the #105 failure, one level up. The reported value
+        is evidence; hiding it costs the only signal that the gate is mis-typed.
+        """
+        coordinator = self._coordinator(mock_coordinator, {"HeaterMode": 1})
+        output = _make_output(index=OUT_IDX_HEATING, mode=HEAT_MODE_COOLING)
+        coordinator.data["SYS1"].details.output_index[OUT_IDX_HEATING] = output
+        select = KlereoOutputModeSelect(coordinator, "SYS1", output)
+        assert select._attr_current_option == "Cooling"
+        assert "Cooling" not in select.options
+
+    def test_ordinary_outputs_are_never_gated_on_the_heater_type(self, mock_coordinator):
+        """Scope control: `HeaterMode` says nothing about outputs other than 4."""
+        details = mock_coordinator.data["SYS1"].details
+        details.params = {"HeaterMode": 1}
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", _make_output(index=0))
+        assert select.options == list(OUTPUT_MODES.values())

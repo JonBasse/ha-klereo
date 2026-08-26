@@ -87,6 +87,18 @@ ACCESS_POOL_PROFESSIONAL = 20
 # heat pump that takes no setpoint. Upstream gates ConsigneEau on HeaterMode not in {0, 3}.
 HEATER_MODES_WITHOUT_SETPOINT = frozenset({0, 3})
 
+# KlereoTherm types that can only heat or stop: 0 = no heat pump at all, 1 = heat pump or
+# on/off heater, 3 = on/off heating without setpoint. Upstream builds the mode list from
+# the same field (klereo.class.php l.929) and offers Auto + Cooling only to 2 (KlereoTherm
+# heat pump) and 4 (other heat pump).
+#
+# 🔴 Written as a positive list of the types KNOWN to be heat-only, which is the INVERSE
+# of upstream's `not in [2, 4]`. The two differ exactly on a value we cannot read — absent,
+# unparseable, or an integer Klereo has not documented — and there "unknown never bars"
+# wins: narrowing on a missing reading would delete a control that works today, while the
+# defect it fixes is benign (an option the box accepts and never executes). #124.
+HEATER_MODES_WITHOUT_COOLING = frozenset({0, 1, 3})
+
 # Friendly names for setpoint / regulation keys exposed as read-only param sensors.
 # Keys in PARAM_TYPES are excluded (they become number entities instead).
 PARAM_NAMES = {

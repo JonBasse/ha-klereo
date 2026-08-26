@@ -7,6 +7,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import (
+    HEAT_MODE_HEATING,
+    HEAT_MODE_STOP,
     HEAT_MODES,
     OUT_IDX_HEATING,
     OUT_MODE_MAN,
@@ -15,7 +17,7 @@ from .api import (
     OUT_STATE_ON,
     OUTPUT_MODES,
 )
-from .const import OUTPUT_NAMES
+from .const import HEATER_MODES_WITHOUT_COOLING, OUTPUT_NAMES
 from .entity import KlereoEntity, is_output_offered, setup_discovery
 from .models import KlereoOutput, KlereoPoolDetails
 
@@ -58,7 +60,7 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
         self._is_heating = self._output_index == OUT_IDX_HEATING
         self._modes = HEAT_MODES if self._is_heating else OUTPUT_MODES
         self._mode_by_label = _HEAT_MODE_BY_LABEL if self._is_heating else _MODE_BY_LABEL
-        self._attr_options = list(self._modes.values())
+        self._attr_options = self._offered_options()
 
         self._attr_unique_id = f"{system_id}_output_mode_{self._output_index}"
         self._attr_name = f"{OUTPUT_NAMES.get(self._output_index, f'Output {self._output_index}')} Mode"
@@ -68,6 +70,10 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
     @callback
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
+        # Re-read the gate: `HeaterMode` may arrive in a later payload, and an entity is
+        # created once and never re-created. Computing it only in `__init__` would keep
+        # the unfiltered list for the lifetime of the installation.
+        self._attr_options = self._offered_options()
         output = self._find_my_output()
         if output:
             self._attr_available = True
@@ -75,6 +81,38 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
         else:
             self._attr_available = False
         super()._handle_coordinator_update()
+
+    def _offered_options(self) -> list[str]:
+        """Return the modes this installation's hardware can actually be set to.
+
+        Only the heating output is gated, and only on the heating TYPE: upstream offers
+        Auto and Cooling to `HeaterMode` 2 and 4 alone (`klereo.class.php` l.929). An
+        on/off heater is offered "Cooling" today; it accepts the command, answers status
+        9, and does nothing — a write that cannot be caught by the two-step confirmation
+        of #115, because nothing refuses it (#124).
+
+        🔴 An unknown `HeaterMode` NEVER bars. Over-filtering is the dangerous direction
+        here: it would remove a control an installation uses today, to fix an option that
+        is merely inert. Same rule as `is_output_offered`, biting the other way round.
+        """
+        if not self._is_heating:
+            return list(self._modes.values())
+
+        system = self.coordinator.data.get(self.system_id)
+        heater_mode = system.details.settings.get("HeaterMode") if system else None
+        try:
+            is_heat_only = heater_mode in HEATER_MODES_WITHOUT_COOLING
+        except TypeError:
+            # An unhashable value is as unknown as a missing one, and must not bar either.
+            is_heat_only = False
+        if not is_heat_only:
+            return list(HEAT_MODES.values())
+
+        _LOGGER.debug(
+            "HeaterMode %s cannot cool: offering only Off and Heating on output %s",
+            heater_mode, self._output_index,
+        )
+        return [HEAT_MODES[HEAT_MODE_STOP], HEAT_MODES[HEAT_MODE_HEATING]]
 
     def _update_from_output(self, output: KlereoOutput):
         """Update state from output data."""
