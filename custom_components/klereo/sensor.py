@@ -18,6 +18,7 @@ from .const import (
     ALERT_PARAM_PREFIXES,
     BINARY_SENSOR_TYPES,
     DERIVED_COUNTER_TYPES,
+    NO_REFERENCE_PROBE,
     OUTPUT_NAMES,
     PARAM_COUNTER_TYPES,
     PARAM_NAMES,
@@ -132,10 +133,46 @@ class KlereoSensor(KlereoEntity, SensorEntity):
         if value is None:
             value = probe.direct_value
         self._attr_native_value = value
-        self._attr_extra_state_attributes = {
+        attributes = {
             "type": probe.type,
             "status": probe.status,
         }
+        references = self._regulations_i_drive()
+        if references:
+            # Absent rather than empty: an empty list reads as a claim that we looked and
+            # found none, which is not what an installation sending no reference fields
+            # is telling us.
+            attributes["regulation_reference"] = references
+        self._attr_extra_state_attributes = attributes
+
+    def _regulations_i_drive(self) -> list[str]:
+        """Return the regulation loops this probe is the reference sensor for.
+
+        Always a list. A probe named by two loops has never been measured, and a list
+        needs no special path for it — where a string would need a rule invented on the
+        spot, the first time it happens, in production.
+        """
+        system = self.coordinator.data.get(self.system_id)
+        if system is None:
+            return []
+        details = system.details
+        driven = []
+        for name, index in sorted(details.regulation_probes.items()):
+            if index == NO_REFERENCE_PROBE:
+                # A normal installation, not an anomaly: the measured payload carries
+                # `PressionCapteur: -1` on a pool with no pressure sensor. Warning here
+                # would cry wolf on every one of them.
+                _LOGGER.debug("Regulation %s has no reference probe", name)
+                continue
+            if index not in details.probe_index:
+                _LOGGER.warning(
+                    "Regulation %s names probe %s, which this installation does not report",
+                    name, index,
+                )
+                continue
+            if index == self._index:
+                driven.append(name)
+        return driven
 
     def _find_my_probe(self) -> KlereoProbe | None:
         """Find this probe's data in the coordinator data."""
