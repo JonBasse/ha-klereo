@@ -5,13 +5,13 @@
   ],
   "customManagers": [
     {
-      "description": "gitleaks est tiré d'une URL de release dans `.forgejo/workflows/ci.yml`, pas d'un manifeste : aucun manager intégré ne lit ça, donc Renovate ne proposait aucun bump — sans erreur ni ligne de log (homelab#1349, fizbot#1995). Ce dépôt est public et distribué par HACS, donc son scan de secrets est la seule barrière avant publication : le laisser dériver n'était pas neutre. Bloc identique, champ pour champ, à celui de `JonBasse/homelab` — `fb-radar fleet` compare les copies par empreinte (tout sauf `description`), et toute divergence ici classerait homelab comme `covered-divergent`. ⚠️ Le motif ne sélectionne que `.forgejo/workflows/` : `.github/workflows/validate.yml` (jobs `hacs` + `hassfest`, cf. #89/#102) ne porte aucun pin gitleaks et reste hors de portée.",
       "customType": "regex",
+      "description": "gitleaks est récupéré par une URL de release, invisible à tout manager natif (#1349). Le motif est ancré sur l'affectation `version=` ET sur le curl gitleaks de la ligne suivante, pas sur l'URL : la forme URL-directe portait la version DEUX fois sur une seule ligne et un motif ancré sur l'URL n'en réécrivait que la première — un bump 8.30.1 → 8.31.0 aurait produit `download/v8.31.0/gitleaks_8.30.1_…`, qui rend 404 (homelab#1499, armé et jamais sonné parce que v8.30.1 date du 2026-03-21). Avec une source unique le défaut disparaît par construction. Déplacer l'étape sans ce motif, ou l'inverse, arrête le suivi de gitleaks en silence.",
       "managerFilePatterns": [
         "/^\\.forgejo/workflows/.+\\.ya?ml$/"
       ],
       "matchStrings": [
-        "gitleaks/releases/download/v(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)/"
+        "version=(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\\n[^\\n]*curl[^\\n]*gitleaks/gitleaks/releases/download/"
       ],
       "depNameTemplate": "gitleaks/gitleaks",
       "datasourceTemplate": "github-releases",

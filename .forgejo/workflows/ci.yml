@@ -17,7 +17,23 @@ jobs:
       - uses: https://github.com/actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: gitleaks
+      # 🔴 ONE source for the version, interpolated twice — never the version
+      # written twice literally. The old form carried `v8.30.1` and
+      # `gitleaks_8.30.1_` on the SAME line, and a customManager anchored on the
+      # URL rewrites only the first: a bump to 8.31.0 would have produced
+      # `download/v8.31.0/gitleaks_8.30.1_…`, which 404s. Armed since
+      # 2026-03-21 and never fired, because gitleaks published nothing to bump
+      # (JonBasse/homelab#1499). `-sSfL` over `-sSL` so a 404 actually fails the
+      # step, and `gitleaks version` is the assertion that the binary landed.
+      # The customManager in renovate.json is anchored on the `version=` line —
+      # move one without the other and the pin goes unwatched, with no error and
+      # no PR.
+      - name: Install gitleaks
         run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar xz gitleaks
-          ./gitleaks git --no-banner .
+          version=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Scan full history for secrets
+        run: gitleaks git --no-banner .
