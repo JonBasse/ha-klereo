@@ -189,6 +189,61 @@ Verify your credentials work at [connect.klereo.fr](https://connect.klereo.fr). 
 
 Check Home Assistant logs for errors from the `klereo` integration: **Settings** > **System** > **Logs**. Ensure your Klereo system is online and accessible.
 
+### An entity's ID does not match its name
+
+**This only affects installations set up before v1.5.2.** If you installed the integration after that,
+skip this section.
+
+Home Assistant builds an entity's ID from its name **once, when the entity is first created**, and then
+never changes it — deliberately, so that renaming something does not break your automations. An early
+release of this integration had two probe types mapped to each other's names, and although the mapping
+was corrected before v1.5.2, the IDs created under it are frozen. On an installation from that era you
+can see:
+
+| Entity ID | Name shown in the UI | What the value actually is |
+|---|---|---|
+| `sensor.klereo_water_temperature` | Air Temperature | the **air** temperature |
+| `sensor.klereo_air_temperature` | Water Temperature | the **water** temperature |
+
+**The name shown in the UI is always the correct one.** It is recomputed from the probe's type every
+time Home Assistant starts; the entity ID is not. Nothing looks wrong on a dashboard, which is what
+makes this easy to miss — it only bites if you write the entity ID into a template, an automation or a
+card, and then quietly get the wrong reading.
+
+#### Telling the two apart from the values
+
+You do not have to take the names on trust. The two readings are measured in different places and behave
+differently, so the values themselves tell you which is which:
+
+- **Water temperature** comes from a probe in the pool. Water has a large thermal mass, so this reading
+  moves slowly — a fraction of a degree over an hour, and only a degree or two between day and night.
+- **Air temperature** comes from a probe in the technical room. Air has almost no thermal mass, so this
+  reading swings by several degrees over a single day and reacts within minutes to a door being opened.
+
+**The steadier of the two is the water**, whatever the entity ID says. In a heated pool it is usually
+also the higher one — on the installation this was measured on, the air probe read 23.7 °C while the
+water probe read 28.3 °C — but do not rely on that alone: an unheated pool on a hot afternoon can easily
+be the cooler of the two. **The one that barely moves is the water.**
+
+To confirm it directly, open **Developer Tools** > **States**, filter on `klereo`, and compare each
+entity's ID with its `friendly_name` attribute. The [Sensors](#sensors) table above lists which probe
+type produces which name, and a [diagnostics download](#diagnostics) shows each probe's `type` — `1` is
+air, `5` is water.
+
+#### Fixing it
+
+Rename the entity yourself: **Settings** > **Devices & Services** > **Klereo** > the entity > the gear
+icon > **Entity ID**. Then update anything that referenced the old ID.
+
+The integration will not do this for you. Renaming entity IDs from code would break exactly the
+automations the freeze exists to protect — including any you may already have written to work around
+this — and there is no way for the code to tell an ID frozen wrong from one you chose on purpose.
+
+⚠️ This is not limited to the temperature probes. **Any** entity whose name changed in a later release
+keeps the ID it was born with, so an entity now labelled *Cover Position* may still be called
+`sensor.klereo_unknown_sensor_13_index_8`. The same rule applies: trust the name, rename the ID if it
+bothers you.
+
 ### Switch commands don't take effect immediately
 
 The Klereo cloud API relays commands to your pool equipment. There may be a delay before the command executes. The integration requests a data refresh after each command, but the equipment state may not change instantly.
