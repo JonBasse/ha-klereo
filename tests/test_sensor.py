@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from custom_components.klereo.const import PARAM_COUNTER_TYPES
 from custom_components.klereo.models import (
     KlereoAlert,
     KlereoPoolDetails,
@@ -367,3 +368,214 @@ class TestAlertParamSemantics:
         assert sensor._attr_extra_state_attributes["alerts"][0]["label"] == (
             "Unknown alert code 999"
         )
+
+
+class TestRunTimeCounters:
+    """Klereo counts what each piece of equipment has DONE, in seconds, in `params`.
+
+    Measured twice: named by an external reporter reading his own diagnostics export
+    (GitHub #54, 2026-06-17) and confirmed on a live payload from the Bioul installation
+    (2026-08-26). Upstream reads the same keys at `klereo.class.php` l.322-405.
+
+    The value is exposed RAW, in seconds, rather than divided by 3600 the way upstream
+    does: the seconds are what the wire carries, Home Assistant renders a duration by
+    itself, and a sensor whose value equals the payload is one a bug report can quote.
+    Forgejo #54.
+    """
+
+    def _extract(self, mock_coordinator, **containers):
+        """Install the payload in the coordinator, then discover from it.
+
+        Both halves matter: discovery reads the details it is handed, and the entities
+        then read the coordinator. Handing one payload to discovery while the coordinator
+        holds another tests a mismatch no installation can produce.
+        """
+        details = KlereoPoolDetails(**containers)
+        mock_coordinator.data["SYS1"].details = details
+        return _extract_sensors(mock_coordinator, "SYS1", details)
+
+    def _uids(self, mock_coordinator, **containers):
+        return [uid for uid, _ in self._extract(mock_coordinator, **containers)]
+
+    def _sensor(self, mock_coordinator, key, **containers):
+        for uid, entity in self._extract(mock_coordinator, **containers):
+            if uid == f"SYS1_param_{key}":
+                return entity
+        return None
+
+    def test_the_exit_criterion_of_the_ticket(self, mock_coordinator):
+        """A payload carrying `PHMinus_TodayTime` under `params` creates the sensor."""
+        assert self._uids(mock_coordinator, params={"PHMinus_TodayTime": 900}) == [
+            "SYS1_param_PHMinus_TodayTime", "SYS1_alerts",
+        ]
+
+    def test_a_counter_is_exposed_in_seconds_as_an_increasing_total(self, mock_coordinator):
+        """Seconds, `duration`, `total_increasing` — no arithmetic on a wire value."""
+        sensor = self._sensor(mock_coordinator, "Filtration_TodayTime",
+                              params={"Filtration_TodayTime": 13320})
+        assert sensor.native_value == 13320
+        assert sensor.native_unit_of_measurement == "s"
+        assert sensor.device_class == "duration"
+        assert sensor.state_class == "total_increasing"
+
+    def test_the_counter_is_named_after_its_equipment(self, mock_coordinator):
+        """Not `_humanize_key`, which would render `Filtration_TodayTime` verbatim."""
+        sensor = self._sensor(mock_coordinator, "Chauff_TotalTime",
+                              params={"Chauff_TotalTime": 1})
+        assert sensor.name == "Heating Time Total"
+
+    def test_electrolysis_production_is_exposed_in_milligrams(self, mock_coordinator):
+        """Upstream divides `Elec_GramDone` by 1000 and labels it `g`, so the wire is mg."""
+        sensor = self._sensor(mock_coordinator, "Elec_GramDone", params={"Elec_GramDone": 42000})
+        assert sensor.native_value == 42000
+        assert sensor.native_unit_of_measurement == "mg"
+        assert sensor.device_class == "weight"
+
+    def test_the_curated_counter_list_is_exactly_these_keys(self, mock_coordinator):
+        """🔴 Pins the curation itself.
+
+        `params` carries 113 keys on the measured installation. The counters are admitted
+        BY NAME, never by a suffix pattern — a `*_TodayTime` rule would look identical on
+        this payload and admit whatever Klereo adds next, sight unseen. Every name below
+        comes from `klereo.class.php`; none is inferred.
+        """
+        assert set(PARAM_COUNTER_TYPES) == {
+            "Filtration_TodayTime", "Filtration_TotalTime",
+            "PHMinus_TodayTime", "PHMinus_TotalTime",
+            "ElectroChlore_TodayTime", "ElectroChlore_TotalTime",
+            "HybChl_TodayTime", "HybChl_TotalTime",
+            "Chauff_TodayTime", "Chauff_TotalTime",
+            "Elec_GramDone",
+        }
+
+    def test_an_uncurated_counter_lookalike_creates_nothing(self, mock_coordinator):
+        """🔴 Negative control on the curation: the suffix alone must not admit a key."""
+        assert self._uids(mock_coordinator, params={"Backwash_TodayTime": 60}) == ["SYS1_alerts"]
+
+    def test_a_counter_nested_in_an_unread_structure_creates_nothing(self, mock_coordinator):
+        """🔴 Negative control on the container: only the three settings containers are read.
+
+        Without this, "the sensor appeared" would be compatible with a reader that walks
+        the payload looking for the name anywhere it occurs.
+        """
+        assert self._uids(mock_coordinator, params={"podinfo": {"PHMinus_TodayTime": 900}}) == [
+            "SYS1_alerts",
+        ]
+
+    def test_the_hybrid_counter_is_read_from_extra_params(self, mock_coordinator):
+        """Upstream reads `HybChl_*` out of `ExtraParams`, not `params` (l.356)."""
+        assert self._uids(mock_coordinator, extra_params={"HybChl_TotalTime": 7200}) == [
+            "SYS1_param_HybChl_TotalTime", "SYS1_alerts",
+        ]
+
+
+class TestProductConsumption:
+    """What the reporter actually asked for: litres of product, not hours of pump.
+
+    Klereo does not send a volume. It sends a run time and a pump flow rate, and upstream
+    multiplies them (`klereo.class.php` l.335-380):
+
+        today = <Equipment>_TodayTime × <rate> / 36      → mL
+        total = <Equipment>_TotalTime × <rate> / 36000   → L
+
+    This is the one place arithmetic is unavoidable, and the rule that follows from it is
+    the rule for the whole platform: we compute only what the API does not send.
+
+    Both flow-rate keys were confirmed on 2026-08-26 in GitHub #55, on a third
+    installation: `PHMinus_Debit` and `Chlore_Debit` sit in `params` beside the counters.
+    They are still gated on presence rather than assumed, because the counters follow the
+    installed equipment and a pool with no pH- pump has neither — and because that gate is
+    a read: no flow rate, no consumption entity, while the run-time sensor stays, since it
+    never needed one.
+    """
+
+    def _extract(self, mock_coordinator, **containers):
+        """Install the payload in the coordinator, then discover from it."""
+        details = KlereoPoolDetails(**containers)
+        mock_coordinator.data["SYS1"].details = details
+        return _extract_sensors(mock_coordinator, "SYS1", details)
+
+    def _uids(self, mock_coordinator, **containers):
+        return [uid for uid, _ in self._extract(mock_coordinator, **containers)]
+
+    def _sensor(self, mock_coordinator, key, **containers):
+        for uid, entity in self._extract(mock_coordinator, **containers):
+            if uid == f"SYS1_consumption_{key}":
+                return entity
+        return None
+
+    def test_daily_consumption_is_time_times_flow_rate(self, mock_coordinator):
+        """900 s at 12 → 300 mL, upstream's `× rate / 36`."""
+        sensor = self._sensor(mock_coordinator, "PHMinus_Today",
+                              params={"PHMinus_TodayTime": 900, "PHMinus_Debit": 12})
+        assert sensor.native_value == 300
+        assert sensor.native_unit_of_measurement == "mL"
+        assert sensor.device_class == "volume"
+        assert sensor.state_class == "total_increasing"
+
+    def test_total_consumption_uses_the_thousandfold_divisor(self, mock_coordinator):
+        """The total is litres, not millilitres — upstream's `/ 36000`."""
+        sensor = self._sensor(mock_coordinator, "PHMinus_Total",
+                              params={"PHMinus_TotalTime": 90000, "PHMinus_Debit": 12})
+        assert sensor.native_value == 30
+        assert sensor.native_unit_of_measurement == "L"
+
+    def test_the_chlorine_pumps_share_one_flow_rate_key(self, mock_coordinator):
+        """Both chlorine pumps are metered by `Chlore_Debit`, not a per-pump key."""
+        sensor = self._sensor(mock_coordinator, "ElectroChlore_Today",
+                              params={"ElectroChlore_TodayTime": 1800, "Chlore_Debit": 2})
+        assert sensor.native_value == 100
+
+    def test_the_hybrid_pump_crosses_two_containers(self, mock_coordinator):
+        """`HybChl_*` is in `ExtraParams` and its flow rate is in `params`.
+
+        Reading `params` alone — as this ticket originally proposed — would compute
+        nothing for a hybrid installation, and the failure would look like absent hardware.
+        """
+        sensor = self._sensor(mock_coordinator, "HybChl_Today",
+                              extra_params={"HybChl_TodayTime": 900},
+                              params={"Chlore_Debit": 12})
+        assert sensor.native_value == 300
+
+    def test_no_flow_rate_means_no_consumption_but_keeps_the_run_time(self, mock_coordinator):
+        """🔴 The gate. A payload with the counter and no rate loses only the derived one."""
+        assert self._uids(mock_coordinator, params={"PHMinus_TodayTime": 900}) == [
+            "SYS1_param_PHMinus_TodayTime", "SYS1_alerts",
+        ]
+
+    def test_no_counter_means_no_consumption(self, mock_coordinator):
+        """🔴 A flow rate on its own describes a pump that has not run and is not metered."""
+        assert self._uids(mock_coordinator, params={"PHMinus_Debit": 12}) == ["SYS1_alerts"]
+
+    def test_only_the_pump_the_payload_carries_is_metered(self, mock_coordinator):
+        """The two chlorine pumps are exclusive, and the payload already says which.
+
+        Upstream branches on `HybrideMode == 1` to choose between them. We do not read it:
+        the counters follow the installed equipment — Bioul carries `ElectroChlore_*` and
+        no `HybChl_*` — so keying on the counter's presence is a reading where reading
+        `HybrideMode` would be a second, weaker source for the same fact.
+        """
+        uids = self._uids(mock_coordinator,
+                          params={"ElectroChlore_TodayTime": 1800, "Chlore_Debit": 2})
+        assert "SYS1_consumption_ElectroChlore_Today" in uids
+        assert "SYS1_consumption_HybChl_Today" not in uids
+
+    def test_consumption_refreshes_with_the_payload(self, mock_coordinator):
+        """Should recompute on update, not pin the value taken at discovery."""
+        sensor = self._sensor(mock_coordinator, "PHMinus_Today",
+                              params={"PHMinus_TodayTime": 900, "PHMinus_Debit": 12})
+        sensor.async_write_ha_state = MagicMock()
+        assert sensor.native_value == 300
+        mock_coordinator.data["SYS1"].details.params["PHMinus_TodayTime"] = 1800
+        sensor._handle_coordinator_update()
+        assert sensor.native_value == 600
+
+    def test_an_unreadable_reading_is_unknown_not_a_crash(self, mock_coordinator):
+        """A non-numeric flow rate yields None, the honest report, not a traceback.
+
+        Same rule as `_label_for_mode` in #105: we do not turn "we cannot read this" into
+        a specific, plausible, wrong number.
+        """
+        sensor = self._sensor(mock_coordinator, "PHMinus_Today",
+                              params={"PHMinus_TodayTime": 900, "PHMinus_Debit": "n/a"})
+        assert sensor.native_value is None

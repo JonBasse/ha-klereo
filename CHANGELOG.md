@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Consumption counters and product consumption** — the oldest request on the tracker, open since March and asked by three reporters ([#54](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/54) / [GH #54](https://github.com/JonBasse/ha-klereo/issues/54)).
+  - **Run time**, as sensors: filtration, pH- pump, liquid chlorine pump, hybrid chlorine pump and heating, each as *Today* and *Total*, plus chlorine produced by electrolysis. Exposed in the API's own units — **seconds**, and milligrams for the electrolysis — rather than divided down to hours the way the Jeedom plugin does: Home Assistant renders a duration by itself, and a sensor whose value equals the payload is one a bug report can quote.
+  - 🔴 **Product consumption in millilitres and litres**, which is what was actually asked for — litres of pH-, not hours of pump. Klereo does not send a volume: it sends a run time and a dosing-pump flow rate, and the app multiplies them. This is the one figure here the API does not carry, and it is the rule the platform now follows: **we compute only what is not on the wire.**
+  - **Each sensor appears only if the payload carries its keys**, so an installation shows the equipment it has and nothing else. A consumption sensor additionally needs the flow rate: no flow rate, no consumption entity — and the run-time sensor stays, because it never needed one. That gate is a reading, not a guess.
+  - It is also what keeps the two chlorine pumps exclusive. Upstream branches on a `HybrideMode` flag to choose between the liquid and the hybrid pump; the payload already says which one exists, and a second source for a fact we can read directly is a drift waiting to happen.
+  - **The keys are admitted by name, never by a `*_TodayTime` suffix rule.** A suffix rule would look identical on all three measured payloads and then admit whatever Klereo adds next, sight unseen — the mistake [#94](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/94) exists to record. Every name comes from the upstream plugin, and every one is now confirmed on a live payload — the flow-rate keys included, read in [GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55) on 2026-08-26.
+  - ⚠️ **No pH+ counter exists.** The original report asked for pH+ alongside pH- and chlorine; neither the upstream plugin nor any measured payload carries one.
+  - 17 tests. Five negative controls, each reddening its own witness: removing the flow-rate gate, dropping the counter units, removing the curated list, swapping the daily and total divisors, and turning an unreadable reading into `0` instead of unknown.
+
+### Changed
+
+- The README no longer says which settings container an installation returns "has never been measured". It has been, three times, and installations differ: `RegulModes` and `params` are always present, `ExtraParams` on some installations only.
+
 ### Fixed
 
 - 🔴 **The heating output offered `Auto` and `Cooling` to hardware that has neither.** Output 4's mode select handed out all four KlereoTherm modes regardless of the heating type installed, so an on/off heater was offered *Cooling* ([#124](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/124)). Upstream has never done this: `klereo.class.php` l.929 builds the list from `HeaterMode`, and only 2 (KlereoTherm heat pump) and 4 (other heat pump) get Auto and Cooling. Type 1 — a heat pump *or* an on/off heater — is what the measured installation has.
