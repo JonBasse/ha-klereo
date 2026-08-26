@@ -169,6 +169,29 @@ Turning a switch on or off sends a **Manual mode** command to the Klereo system.
 
 > **Note:** Some outputs (pH Corrector, Disinfectant, Flocculant, Hybrid Disinfectant) may require professional-level access on your Klereo account to control.
 
+### Climate
+
+If your installation reports a heating output, a single `climate` entity is created for the
+KlereoTherm heat pump. It aggregates what the other entities already expose, in the form Home
+Assistant's thermostat card expects:
+
+| | Source |
+|---|---|
+| Current temperature | the water probe your box regulates on (see [above](#which-probe-drives-which-regulation)) |
+| Target temperature | the `ConsigneEau` setpoint, with the API's own `EauMin` / `EauMax` bounds |
+| Mode | the KlereoTherm mode — `off`, `auto`, `cool`, `heat` |
+
+**Which modes you are offered depends on your heating hardware**, exactly as for the mode select:
+`auto` and `cool` only appear on a real heat pump. A thermostat offering "cool" on an on/off heater
+would accept the command and change nothing.
+
+**If your box reports the water setpoint as disabled**, the entity is still created and still
+switches the heat pump — it simply offers no target temperature, rather than showing you a control
+whose every write the box discards. You will see this if the setpoint is turned off at the box.
+
+The existing switch, mode select and setpoint number entities are **not** replaced; this one is
+added beside them, so nothing you have already automated changes.
+
 ### Number Entities
 
 Writable regulation setpoints are exposed as number entities:

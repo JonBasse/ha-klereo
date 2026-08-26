@@ -95,6 +95,10 @@ PARAM_SENTINELS = frozenset({-2000, -1000})
 
 # Account access levels, from the upstream plugin (klereo.class.php l.463-471). The API
 # gates what a given account may read or write on this value.
+# The probe type carrying the pool water temperature. Named rather than spelled `5` at the
+# call site: #121 records what an inverted probe-type mapping costs once it ships.
+WATER_TEMPERATURE_PROBE_TYPE = 5
+
 ACCESS_READ_ONLY = 5
 ACCESS_END_CUSTOMER = 10
 ACCESS_ADVANCED_USER = 16
