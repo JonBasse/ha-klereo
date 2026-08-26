@@ -16,7 +16,7 @@ from .api import (
     KlereoApi,
     KlereoApiError,
 )
-from .const import SCAN_INTERVAL_MINUTES
+from .const import SCAN_INTERVAL_MINUTES, SETTING_CONTAINERS
 from .models import KlereoPoolDetails, KlereoSystemData, KlereoSystemInfo
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,6 +91,22 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
                     "Detail payload for system %s carries top-level keys: %s",
                     sys_id, sorted(details_raw),
                 )
+                # 🔴 The line above answered LESS than it looked like it did. Its first
+                # real reading (GitHub #57, 2026-08-26) showed `RegulModes`, `params` and
+                # `ExtraParams` all present at once — which retired the question "which
+                # container does this install return?" and left the one that actually
+                # blocks #54 untouched: which KEYS each of them carries. Top-level names
+                # cannot say where `ConsigneEau` or `PHMinus_TodayTime` live.
+                #
+                # An instrument one level too shallow reads as an answer, which is why
+                # this cost a second round-trip to a reporter. Logging the contents makes
+                # the NEXT debug log anyone pastes settle it, whatever they pasted it for.
+                for container in SETTING_CONTAINERS:
+                    contents = details_raw.get(container)
+                    if isinstance(contents, dict):
+                        _LOGGER.debug(
+                            "  %s carries keys: %s", container, sorted(contents),
+                        )
 
                 data[sys_id] = KlereoSystemData(
                     info=KlereoSystemInfo.from_dict(system),
