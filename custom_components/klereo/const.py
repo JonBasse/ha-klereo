@@ -113,6 +113,87 @@ PARAM_NAMES = {
     "DureeTimerFiltration": "Filtration Timer Duration",
 }
 
+
+# ── Consumption counters (#54) ──────────────────────────────────────────────────────
+#
+# Klereo counts what each piece of equipment has DONE, in seconds, in `params` — and for
+# the hybrid chlorine pump in `ExtraParams`, which is where upstream reads it
+# (`klereo.class.php` l.356). Measured three times: named by an external reporter reading
+# his own diagnostics export (GitHub #54, 2026-06-17), then on live payloads from the
+# Bioul installation and from GitHub #55, both 2026-08-26.
+#
+# 🔴 The keys are admitted BY NAME, never by a `*_TodayTime` suffix rule. A suffix rule
+# would look identical on all three payloads and then admit whatever Klereo adds next,
+# sight unseen — the mistake #94 exists to record. Every name below is one upstream reads.
+COUNTER_EQUIPMENT = {
+    "Filtration": "Filtration",
+    "PHMinus": "pH-",
+    "ElectroChlore": "Liquid Chlorine",
+    "HybChl": "Hybrid Chlorine",
+    "Chauff": "Heating",
+}
+_COUNTER_PERIODS = {"TodayTime": "Today", "TotalTime": "Total"}
+
+# Run time, exposed RAW in seconds rather than divided by 3600 the way upstream does:
+# the seconds are what the wire carries, Home Assistant renders a duration by itself, and
+# a sensor whose value equals the payload is one a bug report can quote.
+PARAM_COUNTER_TYPES = {
+    f"{prefix}_{suffix}": {
+        "name": f"{label} Time {period}",
+        "unit": "s", "device_class": "duration", "state_class": "total_increasing",
+    }
+    for prefix, label in COUNTER_EQUIPMENT.items()
+    for suffix, period in _COUNTER_PERIODS.items()
+}
+
+# Chlorine produced by electrolysis. Upstream divides by 1000 and labels the result `g`,
+# so the wire carries milligrams — exposed raw, for the same reason as the seconds above.
+PARAM_COUNTER_TYPES["Elec_GramDone"] = {
+    "name": "Electrolysis Chlorine Produced Today",
+    "unit": "mg", "device_class": "weight", "state_class": "total_increasing",
+}
+
+# The counters reach the `sensor` platform through the same curated `PARAM_NAMES` gate as
+# every other `params` key — the gate is what keeps 113 keys from becoming 113 entities.
+# Their names come from `PARAM_COUNTER_TYPES` so there is one source, not two.
+PARAM_NAMES.update({key: spec["name"] for key, spec in PARAM_COUNTER_TYPES.items()})
+
+# Product consumption — what the reporter of #54 actually asked for, and the one thing
+# here the API does not send. Klereo carries a run time and a pump flow rate; upstream
+# multiplies them (`klereo.class.php` l.335-380):
+#
+#     today = <Equipment>_TodayTime × <rate> / 36      → mL
+#     total = <Equipment>_TotalTime × <rate> / 36000   → L
+#
+# That asymmetry is the rule for the whole platform: we compute only what is not on the
+# wire. Both chlorine pumps are metered by the single `Chlore_Debit`.
+#
+# 🔴 Each entity is gated on BOTH its keys being present, which is a reading and not a
+# guess: an installation without a pH- pump carries neither the counter nor the rate. It
+# is also what keeps the two chlorine pumps exclusive without reading `HybrideMode` —
+# upstream branches on that flag, but the payload already says which pump exists, and a
+# second source for a fact we can read directly is a drift waiting to happen.
+DERIVED_COUNTER_TYPES = {
+    f"{prefix}_{period}": {
+        "name": f"{label} Consumption {period}",
+        "source": f"{prefix}_{suffix}",
+        "rate": rate,
+        "divisor": divisor,
+        "unit": unit,
+        "device_class": "volume",
+        "state_class": "total_increasing",
+    }
+    for prefix, label, rate in (
+        ("PHMinus", "pH-", "PHMinus_Debit"),
+        ("ElectroChlore", "Liquid Chlorine", "Chlore_Debit"),
+        ("HybChl", "Hybrid Chlorine", "Chlore_Debit"),
+    )
+    for suffix, period, divisor, unit in (
+        ("TodayTime", "Today", 36, "mL"),
+        ("TotalTime", "Total", 36000, "L"),
+    )
+}
+
 # Writable setpoints exposed as `number` entities.
 #   min/max         — fallback bounds, used only when the API sends none
 #   min_key/max_key — the API keys carrying the real bounds, preferred over min/max

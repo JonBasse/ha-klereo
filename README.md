@@ -80,9 +80,40 @@ Probe sensors are created for each probe reported by your Klereo system. The fol
 Probes with unrecognized types are still created with a generic name (e.g. "Sensor 3").
 
 Additionally, regulation parameters from your pool data are exposed as read-only sensors. They are read from all
-three containers the API is known to use — `RegulModes`, `params` and `ExtraParams` — because which one your
-installation returns has never been measured. Keys from `params` and `ExtraParams` are limited to a curated list,
-since those containers also carry dozens of internal counters and bounds.
+three containers the API is known to use — `RegulModes`, `params` and `ExtraParams` — because installations differ
+in which ones they send: measured payloads carry `RegulModes` and `params` always, and `ExtraParams` on some
+installations only. Keys from `params` and `ExtraParams` are limited to a curated list, since `params` alone
+carries over a hundred keys on a measured installation.
+
+#### Consumption counters
+
+Klereo counts how long each piece of equipment has run, and those counters are exposed as sensors:
+
+| Sensor | Unit |
+|---|---|
+| Filtration Time Today / Total | seconds |
+| pH- Time Today / Total | seconds |
+| Liquid Chlorine Time Today / Total | seconds |
+| Hybrid Chlorine Time Today / Total | seconds |
+| Heating Time Today / Total | seconds |
+| Electrolysis Chlorine Produced Today | mg |
+
+They are reported in the API's own units — Home Assistant renders seconds as a duration and converts them in
+cards and statistics, so nothing is lost by not rounding them to hours here.
+
+**Product consumption** — how much pH- and chlorine your pool has actually used — is derived from those run times
+and the dosing pump's flow rate, which is how the Klereo Connect app computes it too:
+
+| Sensor | Unit |
+|---|---|
+| pH- Consumption Today / Total | mL / L |
+| Liquid Chlorine Consumption Today / Total | mL / L |
+| Hybrid Chlorine Consumption Today / Total | mL / L |
+
+Each counter only appears if your installation reports it, so you see the equipment you have and nothing else. A
+consumption sensor additionally needs the pump's flow rate (`PHMinus_Debit` / `Chlore_Debit`); if your box does not
+send it, the run-time sensor still appears and the consumption one does not, rather than showing a computed
+figure with a guessed flow rate.
 
 ### Switches
 

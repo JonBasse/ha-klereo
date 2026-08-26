@@ -17,7 +17,9 @@ from .const import (
     ALERT_PARAM_IS_PUMP,
     ALERT_PARAM_PREFIXES,
     BINARY_SENSOR_TYPES,
+    DERIVED_COUNTER_TYPES,
     OUTPUT_NAMES,
+    PARAM_COUNTER_TYPES,
     PARAM_NAMES,
     PARAM_TYPES,
     SENSOR_TYPES,
@@ -61,6 +63,17 @@ def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
             seen.add(key)
             uid = f"{system_id}_param_{key}"
             items.append((uid, KlereoParamSensor(coordinator, system_id, key, value)))
+
+    # Product consumption is the one figure Klereo does not send: it exists only as a run
+    # time multiplied by a pump flow rate. Each entity is gated on BOTH keys being read,
+    # never assumed — an installation without a pH- pump carries neither, and that same
+    # gate is what keeps the two chlorine pumps exclusive without reading `HybrideMode`.
+    settings = details.settings
+    for key, spec in DERIVED_COUNTER_TYPES.items():
+        if spec["source"] not in settings or spec["rate"] not in settings:
+            continue
+        uid = f"{system_id}_consumption_{key}"
+        items.append((uid, KlereoDerivedSensor(coordinator, system_id, key, spec)))
 
     # Unconditionally, NOT on the presence of `alerts`: the key is absent when there is
     # nothing to report (GitHub #57), so keying the entity on it would make an alert
@@ -144,6 +157,15 @@ class KlereoParamSensor(KlereoEntity, SensorEntity):
         self._attr_name = PARAM_NAMES.get(key, _humanize_key(key))
         self._attr_native_value = initial_value
 
+        # Counters carry a unit and a class; an ordinary regulation parameter carries
+        # neither, and giving it a plausible one would be a guess.
+        counter = PARAM_COUNTER_TYPES.get(key, {})
+        self._attr_native_unit_of_measurement = counter.get("unit")
+        self._attr_device_class = counter.get("device_class")
+        state_class = counter.get("state_class")
+        if state_class:
+            self._attr_state_class = SensorStateClass(state_class)
+
     @callback
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
@@ -156,6 +178,62 @@ class KlereoParamSensor(KlereoEntity, SensorEntity):
         if self._key in settings:
             self._attr_native_value = settings[self._key]
         super()._handle_coordinator_update()
+
+
+class KlereoDerivedSensor(KlereoEntity, SensorEntity):
+    """A product volume computed from a run time and a pump flow rate.
+
+    The only entity on this platform whose value is not on the wire. Klereo sends how long
+    the dosing pump ran and how fast it pumps; the litres are upstream's arithmetic
+    (`klereo.class.php` l.335-380), and reproducing it here is what answers #54's actual
+    request — litres of pH-, not hours of pump.
+    """
+
+    def __init__(self, coordinator, system_id, key, spec):
+        """Initialize the derived sensor."""
+        super().__init__(coordinator, system_id)
+        self._key = key
+        self._spec = spec
+
+        self._attr_unique_id = f"{system_id}_consumption_{key}"
+        self._attr_name = spec["name"]
+        self._attr_native_unit_of_measurement = spec["unit"]
+        self._attr_device_class = spec["device_class"]
+        self._attr_state_class = SensorStateClass(spec["state_class"])
+        self._attr_native_value = self._compute()
+
+    @callback
+    def _handle_coordinator_update(self):
+        """Handle updated data from the coordinator."""
+        system = self.coordinator.data.get(self.system_id)
+        if system is None:
+            self._attr_available = False
+            return super()._handle_coordinator_update()
+        self._attr_available = True
+        self._attr_native_value = self._compute()
+        super()._handle_coordinator_update()
+
+    def _compute(self):
+        """Return the volume, or None when either reading is missing or unreadable.
+
+        None is the honest report. Turning "we cannot read this" into a number would be
+        the #105 failure applied to a consumption total, where a plausible-looking litre
+        count is exactly what nobody would question.
+        """
+        system = self.coordinator.data.get(self.system_id)
+        if system is None:
+            return None
+        settings = system.details.settings
+        try:
+            seconds = float(settings[self._spec["source"]])
+            rate = float(settings[self._spec["rate"]])
+        except (KeyError, TypeError, ValueError):
+            _LOGGER.debug(
+                "Cannot compute %s: %s or %s is missing or unreadable",
+                self._key, self._spec["source"], self._spec["rate"],
+            )
+            return None
+        return round(seconds * rate / self._spec["divisor"], 2)
 
 
 def _describe_alert_param(alert: KlereoAlert, details: KlereoPoolDetails) -> str | None:
