@@ -104,8 +104,13 @@ Turning a switch on or off sends a **Manual mode** command to the Klereo system.
 
 > **Heating (output 4) is the exception.** That output drives a KlereoTherm, whose mode field carries
 > `Off` / `Auto` / `Cooling` / `Heating` instead of the usual output modes. Turning the switch on sends
-> **Heating**, turning it off sends **Off**, and its mode select offers those four options rather than
+> **Heating**, turning it off sends **Off**, and its mode select offers those options rather than
 > Manual / Time Slots / Timer / Regulation.
+>
+> **Which of them you are offered depends on your heating hardware.** `Auto` and `Cooling` only appear
+> on a real heat pump — Klereo's `HeaterMode` 2 or 4. An on/off heater or a heating circuit without a
+> setpoint gets `Off` and `Heating` alone, because it has nothing else it can do. If your installation
+> reports no heating type at all, all four stay offered rather than silently losing a control you use.
 
 > **Note:** Some outputs (pH Corrector, Disinfectant, Flocculant, Hybrid Disinfectant) may require professional-level access on your Klereo account to control.
 

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- 🔴 **The heating output offered `Auto` and `Cooling` to hardware that has neither.** Output 4's mode select handed out all four KlereoTherm modes regardless of the heating type installed, so an on/off heater was offered *Cooling* ([#124](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/124)). Upstream has never done this: `klereo.class.php` l.929 builds the list from `HeaterMode`, and only 2 (KlereoTherm heat pump) and 4 (other heat pump) get Auto and Cooling. Type 1 — a heat pump *or* an on/off heater — is what the measured installation has.
+  - 🔴 **Nothing signalled it, and nothing could have.** Picking the inert option gets `{"status":"ok"}` and a box status of 9. There is no refusal to catch: it is a command the hardware accepts and does not execute. ⚠️ The two-step confirmation repaired in 1.8.0 ([#115](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/115)) reads that 9 and **confirms** it — verification proves transmission, never effect. Third occurrence of the same shape, after [#104](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/104) and [#105](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/105).
+  - **An unknown heating type still gets all four modes.** The gate is written as a positive list of the types *known* to be heat-only — 0, 1 and 3 — which is the inverse of upstream's "everything that is not 2 or 4". The two differ exactly on a value we cannot read, and there over-filtering is the dangerous direction: it would delete a control an installation uses today, to fix an option that is merely inert. Same rule as [#94](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/94) and #104, biting the other way round.
+  - **Offering is narrowed; reading is not.** A heat-only installation that nevertheless *reports* Cooling is still shown as Cooling. Refusing to read a mode we chose not to offer would turn "our gate is wrong here" into "unknown" — the #105 failure, one level up — and that report is the only signal that the gate is mis-typed.
+  - The gate is re-read on every refresh, not only at discovery: an entity is created once, so a `HeaterMode` arriving in a later payload would otherwise never take effect.
+  - It does **not** touch output 4's switch. Turning an on/off heater on with `HEAT_MODE_HEATING` stays correct for every type — that is the 1.5.3 fix. It does not guess `aqPACType` either; no measured payload carries it.
+  - 16 tests. Two negative controls, one per direction, and they discriminate: neutralising the filter reddens the three heat-only types and nothing else; treating an *unknown* type as heat-only reddens the "unknown never bars" arms **and two pre-existing tests** — which is the harm made visible, since those fixtures are installations carrying no `HeaterMode` at all.
+
 ## [1.8.1] — 2026-08-26
 
 ### Security
