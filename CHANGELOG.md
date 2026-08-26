@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+
+- 🔴 **Diagnostics exports leaked the account username, the box `pin` and Klereo's customer reference.** Redaction covered the password and the session token and nothing else — so an export contained `username` in clear, which is the half of the credential the password is not ([#122](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/122)).
+  - This is not theoretical exposure: the project **asks reporters to paste diagnostics into public issues** on the strength of "credentials are redacted automatically". Anyone who did as they were told published their login.
+  - ⚠️ **A user had already judged this correctly.** Pasting a payload in GitHub [#57](https://github.com/JonBasse/ha-klereo/issues/57), the reporter hand-redacted `pin`, `compta` and the pool nickname to `XXX` rather than trust the promise. `TO_REDACT` now encodes his judgement.
+  - `username`, `pin`, `compta`, `idAddress`, `podSerial`, `Address` and `emailNotify` are now redacted. The system id, pool nickname, access level and every probe/output/parameter reading are deliberately **not** — an export redacted into uselessness is one nobody pastes, and the export is what unblocks these reports.
+  - The README now **lists** what is and is not redacted instead of promising "sensitive data", and warns that a raw **debug log** carries no redaction at all.
+  - 🔴 **Exports already published are not repaired by this.** Redaction happens at generation time; a file pasted yesterday still reads as it did.
+  - 6 tests, one per field rather than one batch — a batch that loses a field to a typo still passes on the others, which is how a redaction set comes to cover less than it claims. The negative control is that over-redacting the system id or pool nickname reddens its own test: breaking the export would not be a fix.
+
 ## [1.8.0] — 2026-08-26
 
 ### Fixed
