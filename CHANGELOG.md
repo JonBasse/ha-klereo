@@ -15,7 +15,13 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- 6 tests for the measured object shape (**162 total**, up from 156).
+- **Klereo's alerts are now a sensor.** `state` is the number of active alerts, and the full list — code, label, the meaning of its parameter, `level`, timestamp — is in its attributes, so `> 0` is a trigger and the attributes say what is wrong ([#57](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/57), requested by an external reporter who also chose this shape over one entity per alert code).
+  - ~50 alert labels ported from the upstream Jeedom plugin. `docs/klereo-api.md` does not document alerts at all — its field lists are elided — so upstream is the only source, cross-checked against the one payload anyone has measured (GitHub [#57](https://github.com/JonBasse/ha-klereo/issues/57), 2026-08-26).
+  - 🔴 **The state is `len(alerts)`, never Klereo's `alertCount`.** The measured payload carries `alertCount: 0` beside one active alert — the reporter noticed it himself. Reading that field would show a healthy `0` over a real alert, on the entity whose whole job is to not be a false green. Upstream computes the count the same way; the reported figure is exposed as an attribute so a divergence stays visible instead of silent.
+  - 🔴 **`param` means a different thing per code**, and rendering it raw would be wrong for most: a probe index for 1, 7, 8, 10 and 36; a flow id for 13 and 14; an output index for 35; an error code for 50-52, 54 and 61; a pump id for 53. Probe and output params resolve against **this installation's own** payload rather than a ported lookup table. A code with no documented `param` meaning gets no description rather than a plausible one.
+  - **The entity exists even when nothing is wrong.** The `alerts` key is *absent* from a healthy payload, not present and empty, so keying the entity on it would create a sensor that appears only during a fault and takes its history away on recovery.
+  - An alert code absent from the table is counted and shown by its number. The upstream table has real gaps and Klereo can add codes; dropping an unknown alert would hide a real one.
+- 6 tests for the measured object shape and 25 for the alert sensor (**187 total**, up from 156).
 
 ## [1.7.0] — 2026-08-25
 

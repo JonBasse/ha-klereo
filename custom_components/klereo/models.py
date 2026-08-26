@@ -68,6 +68,43 @@ class KlereoSystemInfo:
 
 
 @dataclass
+class KlereoAlert:
+    """One entry of the `alerts` array Klereo returns beside the pool payload.
+
+    Measured once (GitHub #57, @sbdomo, 2026-08-26):
+
+        {"index": 0, "code": 29, "param": 0,
+         "updateTime": "2026-08-26 11:24:58", "level": 2}
+
+    ⚠️ `updated` is a STRING, `"YYYY-MM-DD HH:MM:SS"` — the only such field in the whole
+    payload, where `Now`, `lastPing`, `startTime` and every probe `*Time` are integers. It
+    is kept verbatim rather than parsed: no timezone is stated anywhere, and inventing one
+    would silently shift every timestamp.
+
+    ⚠️ `level` appears in NO source — not the upstream plugin, not `docs/klereo-api.md`,
+    not the issue. It is carried through unnamed because its meaning is unknown; do not
+    map it to a severity.
+    """
+
+    code: int
+    param: Any = None
+    index: int | None = None
+    level: int | None = None
+    updated: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> KlereoAlert:
+        """Parse one alert entry from the API."""
+        return cls(
+            code=data["code"],
+            param=data.get("param"),
+            index=data.get("index"),
+            level=data.get("level"),
+            updated=data.get("updateTime"),
+        )
+
+
+@dataclass
 class KlereoPoolDetails:
     """Parsed pool details for a single system."""
 
@@ -76,6 +113,8 @@ class KlereoPoolDetails:
     regul_modes: dict[str, Any] = field(default_factory=dict)
     params: dict[str, Any] = field(default_factory=dict)
     extra_params: dict[str, Any] = field(default_factory=dict)
+    alerts: list[KlereoAlert] = field(default_factory=list)
+    reported_alert_count: int | None = None
     access: int | None = None
     probe_index: dict[int, KlereoProbe] = field(default_factory=dict)
     output_index: dict[int, KlereoOutput] = field(default_factory=dict)
@@ -111,9 +150,23 @@ class KlereoPoolDetails:
             for o in data.get("outs", [])
             if o.get("index") is not None
         ]
+        # 🔴 The `alerts` key is ABSENT when there is nothing to report — not present and
+        # empty (GitHub #57, 2026-08-26). So an empty list here means "none active", and
+        # it is indistinguishable in the payload from "we failed to read them". That is
+        # why the entity built on this is created unconditionally rather than on the key.
+        alerts = [
+            KlereoAlert.from_dict(a)
+            for a in data.get("alerts", [])
+            if isinstance(a, dict) and a.get("code") is not None
+        ]
         return cls(
             probes=probes,
             outs=outs,
+            alerts=alerts,
+            # Kept beside `alerts`, never used as the count: the one measured payload
+            # carries `alertCount: 0` next to one active alert. Upstream ignores the field
+            # too (`klereo.class.php` l.511).
+            reported_alert_count=data.get("alertCount"),
             regul_modes=dict(data.get("RegulModes", {})),
             params=dict(data.get("params", {})),
             extra_params=dict(data.get("ExtraParams", {})),
