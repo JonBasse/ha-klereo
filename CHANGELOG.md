@@ -24,6 +24,14 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **A release's three places can no longer diverge in silence** ([#101](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/101)). Publishing correctly requires `manifest.json`, a `CHANGELOG.md` section and a `vX.Y.Z` tag to say the same number, and nothing verified it. `scripts/check_release_agreement.py` now does, as a CI job on every push.
+  - **It checks every tag, not only the current version.** Checking the manifest alone would not have caught **v1.5.2 — tagged and published with no CHANGELOG section at all**, because by the time anyone looked the manifest had moved on. ⚠️ That section is **not** invented retroactively: its content is lost, a plausible one would turn a visible hole into a false certainty, and it is allowlisted instead — which keeps the check able to fail on a *new* hole rather than being permanently red.
+  - 🔴 **No tags found is a failure, never a pass.** A shallow checkout leaves nothing to disagree, so the check would otherwise report success having verified nothing.
+  - **The published half is a ritual step, not a CI job, and that is measured rather than chosen.** The issue proposed a `release: [published]` trigger; this repository has **zero** Forgejo releases — only tags — so that trigger would never fire, and a check that cannot fire is worse than none.
+  - 🔴 **Its first version reported a correctly-published release as broken.** It compared a local *commit* sha against GitHub's *tag object* sha, which differ on an annotated tag — every tag here is one. Both unit-test fixtures agreed with whatever the code asked them for; only running it against the real v1.8.1 showed it. The check now resolves the ref to a commit on both sides.
+  - `CLAUDE.md` points at the script instead of describing it — prose describing a control is what #89 already cost this repository once.
+  - 19 tests, plus the negative control the issue asked for, run against the real tree: bumping `manifest.json` without touching `CHANGELOG.md` fails the check, removing v1.5.2 from the allowlist fails it, and both real published releases pass.
+
 - **The new `climate` entity reports availability through a property, not `_attr_available`.** `CoordinatorEntity.available` is itself a property, so it shadows that attribute entirely and assigning to it changes nothing an entity ever reports. 🔴 **The integration's other five platforms all do exactly that**, so their entities never go unavailable when their probe or output disappears from the payload — and nine tests assert the attribute the code just assigned, staying green over a mechanism that does nothing. Measured 2026-08-26 with a positive control, and filed as [#130](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/130) rather than repaired here: fixing it changes what five platforms report, which deserves its own release note and not a line in a feature PR.
 
 ### Changed
