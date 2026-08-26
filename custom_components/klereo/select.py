@@ -7,8 +7,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import (
-    HEAT_MODE_HEATING,
-    HEAT_MODE_STOP,
     HEAT_MODES,
     OUT_IDX_HEATING,
     OUT_MODE_MAN,
@@ -17,8 +15,8 @@ from .api import (
     OUT_STATE_ON,
     OUTPUT_MODES,
 )
-from .const import HEATER_MODES_WITHOUT_COOLING, OUTPUT_NAMES
-from .entity import KlereoEntity, is_output_offered, setup_discovery
+from .const import OUTPUT_NAMES
+from .entity import KlereoEntity, is_output_offered, offered_heat_modes, setup_discovery
 from .models import KlereoOutput, KlereoPoolDetails
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,34 +83,17 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
     def _offered_options(self) -> list[str]:
         """Return the modes this installation's hardware can actually be set to.
 
-        Only the heating output is gated, and only on the heating TYPE: upstream offers
-        Auto and Cooling to `HeaterMode` 2 and 4 alone (`klereo.class.php` l.929). An
-        on/off heater is offered "Cooling" today; it accepts the command, answers status
-        9, and does nothing — a write that cannot be caught by the two-step confirmation
-        of #115, because nothing refuses it (#124).
-
-        🔴 An unknown `HeaterMode` NEVER bars. Over-filtering is the dangerous direction
-        here: it would remove a control an installation uses today, to fix an option that
-        is merely inert. Same rule as `is_output_offered`, biting the other way round.
+        Only the heating output is gated, and only on the heating TYPE — the table lives
+        in `offered_heat_modes`, shared with the `climate` entity so there is one copy of
+        it and not two (#124, #118).
         """
         if not self._is_heating:
             return list(self._modes.values())
 
         system = self.coordinator.data.get(self.system_id)
-        heater_mode = system.details.settings.get("HeaterMode") if system else None
-        try:
-            is_heat_only = heater_mode in HEATER_MODES_WITHOUT_COOLING
-        except TypeError:
-            # An unhashable value is as unknown as a missing one, and must not bar either.
-            is_heat_only = False
-        if not is_heat_only:
+        if system is None:
             return list(HEAT_MODES.values())
-
-        _LOGGER.debug(
-            "HeaterMode %s cannot cool: offering only Off and Heating on output %s",
-            heater_mode, self._output_index,
-        )
-        return [HEAT_MODES[HEAT_MODE_STOP], HEAT_MODES[HEAT_MODE_HEATING]]
+        return [HEAT_MODES[mode] for mode in offered_heat_modes(system.details)]
 
     def _update_from_output(self, output: KlereoOutput):
         """Update state from output data."""

@@ -22,6 +22,10 @@ All notable changes to this project will be documented in this file.
   - ⚠️ **No pH+ counter exists.** The original report asked for pH+ alongside pH- and chlorine; neither the upstream plugin nor any measured payload carries one.
   - 17 tests. Five negative controls, each reddening its own witness: removing the flow-rate gate, dropping the counter units, removing the curated list, swapping the daily and total divisors, and turning an unreadable reading into `0` instead of unknown.
 
+### Fixed
+
+- **The new `climate` entity reports availability through a property, not `_attr_available`.** `CoordinatorEntity.available` is itself a property, so it shadows that attribute entirely and assigning to it changes nothing an entity ever reports. 🔴 **The integration's other five platforms all do exactly that**, so their entities never go unavailable when their probe or output disappears from the payload — and nine tests assert the attribute the code just assigned, staying green over a mechanism that does nothing. Measured 2026-08-26 with a positive control, and filed as [#130](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/130) rather than repaired here: fixing it changes what five platforms report, which deserves its own release note and not a line in a feature PR.
+
 ### Changed
 
 - **The README explains what to do when an entity's ID does not match its name** ([#121](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/121)). Home Assistant derives an entity ID from its name once, at creation, and never revisits it — so an installation set up before v1.5.2, when two probe types were mapped to each other's names, still carries `sensor.klereo_water_temperature` on its **air** probe. The displayed name has been right since the fix; the ID is frozen wrong for good.

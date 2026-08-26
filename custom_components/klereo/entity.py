@@ -8,7 +8,13 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ACCESS_POOL_PROFESSIONAL, DOMAIN, PRO_ONLY_OUTPUTS
+from .api import HEAT_MODE_HEATING, HEAT_MODE_STOP, HEAT_MODES
+from .const import (
+    ACCESS_POOL_PROFESSIONAL,
+    DOMAIN,
+    HEATER_MODES_WITHOUT_COOLING,
+    PRO_ONLY_OUTPUTS,
+)
 from .coordinator import KlereoCoordinator
 from .models import KlereoPoolDetails
 
@@ -36,6 +42,36 @@ def is_output_offered(index: int, details: KlereoPoolDetails) -> bool:
         index, details.access, ACCESS_POOL_PROFESSIONAL,
     )
     return False
+
+
+def offered_heat_modes(details: KlereoPoolDetails) -> list[int]:
+    """Return the KlereoTherm modes this installation's heating hardware can be set to.
+
+    Upstream offers Auto and Cooling to `HeaterMode` 2 and 4 alone — the real heat pumps
+    (`klereo.class.php` l.929). An on/off heater offered "Cooling" accepts the command,
+    answers status 9, and does nothing: a write that the two-step confirmation of #115
+    cannot catch, because nothing refuses it (#124).
+
+    🔴 An unknown `HeaterMode` NEVER bars, and the gate is written as a positive list of
+    the types KNOWN to be heat-only rather than upstream's "everything that is not 2 or
+    4". Over-filtering is the dangerous direction: it would remove a control an
+    installation uses today, to fix an option that is merely inert.
+
+    Shared by the `select` and the `climate` entity on purpose. They are the same table —
+    a thermostat offering `cool` on an on/off heater would be this defect again, more
+    visible — and a second copy of it is a drift waiting to happen (#118).
+    """
+    heater_mode = details.settings.get("HeaterMode")
+    try:
+        is_heat_only = heater_mode in HEATER_MODES_WITHOUT_COOLING
+    except TypeError:
+        # An unhashable value is as unknown as a missing one, and must not bar either.
+        is_heat_only = False
+    if not is_heat_only:
+        return list(HEAT_MODES)
+
+    _LOGGER.debug("HeaterMode %s cannot cool: offering only Off and Heating", heater_mode)
+    return [HEAT_MODE_STOP, HEAT_MODE_HEATING]
 
 
 class KlereoEntity(CoordinatorEntity[KlereoCoordinator]):
