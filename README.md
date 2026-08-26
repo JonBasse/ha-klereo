@@ -135,7 +135,19 @@ The Klereo cloud API relays commands to your pool equipment. There may be a dela
 
 ### Diagnostics
 
-To download diagnostic data for bug reports, go to **Settings** > **Devices & Services** > **Klereo** > three-dot menu > **Download diagnostics**. Sensitive data (passwords, tokens) is automatically redacted.
+To download diagnostic data for bug reports, go to **Settings** > **Devices & Services** > **Klereo** > three-dot menu > **Download diagnostics**.
+
+**What is redacted**, so you can decide rather than trust a blanket promise: your password
+and session token, your **account username**, the box `pin`, Klereo's customer reference
+(`compta`) and the installation address key (`idAddress`).
+
+**What is not**, because it is what the report needs and none of it identifies you: your
+system id, your pool's nickname, the account access level, and every probe, output and
+parameter reading.
+
+Diagnostics files are safe to attach to a public issue. If you are pasting a **debug log**
+rather than a diagnostics export, note that no redaction applies there at all — the raw API
+response includes your `pin` and `compta`.
 
 ### Debug logging
 
