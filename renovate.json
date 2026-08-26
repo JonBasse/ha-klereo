@@ -2,5 +2,20 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>platform/renovate"
+  ],
+  "customManagers": [
+    {
+      "description": "gitleaks est tiré d'une URL de release dans `.forgejo/workflows/ci.yml`, pas d'un manifeste : aucun manager intégré ne lit ça, donc Renovate ne proposait aucun bump — sans erreur ni ligne de log (homelab#1349, fizbot#1995). Ce dépôt est public et distribué par HACS, donc son scan de secrets est la seule barrière avant publication : le laisser dériver n'était pas neutre. Bloc identique, champ pour champ, à celui de `JonBasse/homelab` — `fb-radar fleet` compare les copies par empreinte (tout sauf `description`), et toute divergence ici classerait homelab comme `covered-divergent`. ⚠️ Le motif ne sélectionne que `.forgejo/workflows/` : `.github/workflows/validate.yml` (jobs `hacs` + `hassfest`, cf. #89/#102) ne porte aucun pin gitleaks et reste hors de portée.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.forgejo/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "gitleaks/releases/download/v(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)/"
+      ],
+      "depNameTemplate": "gitleaks/gitleaks",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    }
   ]
 }
