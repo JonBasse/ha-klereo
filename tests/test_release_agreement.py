@@ -148,31 +148,33 @@ class TestThePublishedSide:
 
 
 class TestTheRepositoryItselfAgrees:
-    """Run the real check against the working tree — the positive control that matters.
+    """Run the check against the real working tree, on the half that needs no git.
 
-    If this ever fails, the repository is in the state #101 was filed about, and the
-    message says which of the three places disagrees.
+    ⚠️ It deliberately does NOT sweep the tags. The first version did, and it failed in
+    CI — correctly: `actions/checkout` fetches no tags by default, so `git tag` was empty
+    and the "no tags found" guard fired, exactly as designed. The lesson is about the test,
+    not the guard: a unit test must not depend on how the job that runs it checks out the
+    repository. The tag sweep is covered by fixtures here and by the
+    `Validate / release-agreement` job, whose checkout sets `fetch-depth: 0` for this
+    reason and says so.
     """
 
-    def test_the_current_checkout_is_in_agreement(self, repo_root):
-        import subprocess
+    def test_the_manifest_version_has_a_changelog_section(self, repo_root):
         version = manifest_version(repo_root / "custom_components" / "klereo" / "manifest.json")
-        changelog = (repo_root / "CHANGELOG.md").read_text()
-        tags = subprocess.run(["git", "-C", str(repo_root), "tag", "--list", "v*"],
-                              capture_output=True, text=True).stdout.split()
-        problems = check_agreement(version, changelog, tags)
-        assert problems == [], "\n".join(problems)
+        documented = changelog_versions((repo_root / "CHANGELOG.md").read_text())
+        assert version in documented, (
+            f"manifest.json is at {version} with no `## [{version}]` section in CHANGELOG.md"
+        )
 
     def test_this_control_can_actually_fail(self, repo_root):
         """🔴 The instrument check: the test above must be able to go red.
 
         A test that reads the real repository passes for as long as the repository is
-        healthy, which is indistinguishable from a test that cannot fail. Bumping the
-        version it checks is the arm that discriminates.
+        healthy, which is indistinguishable from a test that cannot fail. Asking the same
+        question about a version that does not exist is the arm that discriminates.
         """
-        changelog = (repo_root / "CHANGELOG.md").read_text()
-        tags = ["v1.8.1"]
-        assert check_agreement("99.0.0", changelog, tags) != []
+        documented = changelog_versions((repo_root / "CHANGELOG.md").read_text())
+        assert "99.0.0" not in documented
 
 
 @pytest.fixture
