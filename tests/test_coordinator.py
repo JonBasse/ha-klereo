@@ -492,3 +492,46 @@ class TestPayloadShapeLogging:
 
         assert "params" in caplog.text
         assert "access" in caplog.text
+
+    async def test_logs_the_keys_inside_each_setting_container(self, coordinator, mock_api, caplog):
+        """Should log what each container CARRIES, not only that it is present.
+
+        The top-level line above answered less than it looked like it did: its first real
+        reading (GitHub #57, 2026-08-26) showed all three containers present at once,
+        which retired the question it was built for and left the blocking one — where
+        `ConsigneEau` and the consumption counters live — untouched. An instrument one
+        level too shallow reads as an answer.
+        """
+        mock_api.get_systems.return_value = {"response": [{"idSystem": "SYS1"}]}
+        mock_api.get_pool_details.return_value = {
+            "response": [
+                {
+                    "RegulModes": {"HeaterMode": 0},
+                    "params": {"ConsigneEau": 28, "EauMin": 15},
+                    "ExtraParams": {"PHMinus_TodayTime": 42},
+                }
+            ]
+        }
+        with caplog.at_level("DEBUG", logger="custom_components.klereo.coordinator"):
+            await coordinator._async_update_data()
+
+        assert "ConsigneEau" in caplog.text
+        assert "EauMin" in caplog.text
+        assert "PHMinus_TodayTime" in caplog.text
+        assert "HeaterMode" in caplog.text
+
+    async def test_does_not_log_a_container_the_payload_omits(self, coordinator, mock_api, caplog):
+        """Negative control: an absent container must not be reported as an empty one.
+
+        "Not sent" and "sent empty" are different facts about the API, and this log line
+        exists precisely to tell them apart. Rendering both as `[]` would make the
+        instrument assert something the payload never said.
+        """
+        mock_api.get_systems.return_value = {"response": [{"idSystem": "SYS1"}]}
+        mock_api.get_pool_details.return_value = {"response": [{"params": {"EauMin": 15}}]}
+        with caplog.at_level("DEBUG", logger="custom_components.klereo.coordinator"):
+            await coordinator._async_update_data()
+
+        assert "params carries keys" in caplog.text
+        assert "ExtraParams carries keys" not in caplog.text
+        assert "RegulModes carries keys" not in caplog.text

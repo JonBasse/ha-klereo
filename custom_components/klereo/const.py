@@ -62,6 +62,14 @@ OUTPUT_NAMES = {
 # professional access (klereo.class.php:1188). See #104.
 PRO_ONLY_OUTPUTS = frozenset({2, 3, 8, 15})
 
+# The three containers a setpoint or regulation parameter can arrive in. Measured
+# 2026-08-26 (GitHub #57): an installation returns ALL THREE in the same payload, which
+# retires the "which one does this install send?" framing of #94 — the precedence there
+# arbitrates between three containers of one response, not between installations.
+# `models.KlereoPoolDetails.settings` merges them in this order, least-established first,
+# so a later entry can only add a key and never overwrite one an install already shows.
+SETTING_CONTAINERS = ("ExtraParams", "params", "RegulModes")
+
 # Sentinel setpoint values used by the Klereo API. A setpoint carrying one of these is not
 # a value: -2000 means the setpoint is disabled, -1000 that it is unknown. Upstream
 # discards both (klereo.class.php l.873-896); exposing them would pin an entity to a

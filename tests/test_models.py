@@ -5,6 +5,7 @@ comment, and the string appears nowhere in the upstream Jeedom plugin, which rea
 setpoint from `params`. These tests pin the resolution rule down so it stops being an
 assumption.
 """
+from custom_components.klereo.const import SETTING_CONTAINERS
 from custom_components.klereo.models import KlereoPoolDetails
 
 
@@ -158,3 +159,40 @@ class TestAlertParsing:
         )
 
         assert [a.code for a in details.alerts] == [14]
+class TestContainerListMatchesPrecedence:
+    """Pins `SETTING_CONTAINERS` to the merge order `settings` actually implements.
+
+    🔴 The constant DESCRIBES a precedence that `settings` hard-codes as a dict merge, in
+    another file. Nothing but this test stops the two from disagreeing — and a comment
+    asserting the opposite of the code beside it is a defect this project has already
+    shipped once, in a single edit, with no check able to see it.
+    """
+
+    def test_the_last_container_wins_as_the_constant_says(self):
+        """Should resolve a key present in all three to the LAST entry of the tuple."""
+        details = KlereoPoolDetails(
+            extra_params={"Consigne": "extra"},
+            params={"Consigne": "params"},
+            regul_modes={"Consigne": "regul"},
+        )
+        by_name = {
+            "ExtraParams": "extra",
+            "params": "params",
+            "RegulModes": "regul",
+        }
+
+        assert details.settings["Consigne"] == by_name[SETTING_CONTAINERS[-1]]
+
+    def test_every_named_container_is_actually_read(self):
+        """Absurdity control: a container named in the constant but never merged.
+
+        Naming a fourth container would make the debug log promise a key set that
+        `settings` then ignores — the instrument describing a code path that does not run.
+        """
+        for position, name in enumerate(SETTING_CONTAINERS):
+            containers = {"extra_params": {}, "params": {}, "regul_modes": {}}
+            field = {"ExtraParams": "extra_params", "params": "params", "RegulModes": "regul_modes"}
+            assert name in field, f"{name} is named but has no field on KlereoPoolDetails"
+            containers[field[name]] = {f"Key{position}": position}
+            details = KlereoPoolDetails(**containers)
+            assert details.settings == {f"Key{position}": position}

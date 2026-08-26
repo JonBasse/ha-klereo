@@ -13,6 +13,13 @@ All notable changes to this project will be documented in this file.
 - 🔴 **Why 11 passing tests proved nothing.** Every test in `TestCommandConfirmation` and `TestDocumentedListShape` builds its own fixture from the two *assumed* shapes, so all of them stayed green while the mechanism was inert. A test whose fixture is the assumption it should be controlling discriminates nothing. The 6 new tests quote the reported payload **verbatim**, and the negative control is that removing the `cmdID` guard reddens exactly the one test written for it.
 - This does **not** explain the heat pump that still fails to start on a status 9, also reported in GH #55. The verdict becomes readable; it does not become different.
 
+### Changed
+
+- **The debug line that records the payload shape now logs what each setting container CARRIES**, not only that it is present. Its first real reading (GitHub [#57](https://github.com/JonBasse/ha-klereo/issues/57), 2026-08-26) showed `RegulModes`, `params` and `ExtraParams` **all three present in the same response** — which retires the "which container does this installation return?" framing of [#94](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/94) and leaves the question that actually blocks [#54](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/54) untouched: which *keys* each of them carries.
+  - 🔴 An instrument one level too shallow reads as an answer. This line was added in 1.6.0 precisely so the next report would be a measurement rather than a guess; it cost a second round-trip to a reporter anyway, because top-level names cannot say where `ConsigneEau` or the consumption counters live.
+  - A container the payload **omits** is not logged, rather than logged as empty — "not sent" and "sent empty" are different facts about the API, and telling them apart is the whole point of the line.
+  - The three container names are now one constant, pinned by a test to the merge order `settings` implements. Nothing else stopped a comment from asserting the opposite of the code beside it, which this project has shipped once already.
+
 ### Added
 
 - **Klereo's alerts are now a sensor.** `state` is the number of active alerts, and the full list — code, label, the meaning of its parameter, `level`, timestamp — is in its attributes, so `> 0` is a trigger and the attributes say what is wrong ([#57](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/57), requested by an external reporter who also chose this shape over one entity per alert code).
@@ -21,7 +28,7 @@ All notable changes to this project will be documented in this file.
   - 🔴 **`param` means a different thing per code**, and rendering it raw would be wrong for most: a probe index for 1, 7, 8, 10 and 36; a flow id for 13 and 14; an output index for 35; an error code for 50-52, 54 and 61; a pump id for 53. Probe and output params resolve against **this installation's own** payload rather than a ported lookup table. A code with no documented `param` meaning gets no description rather than a plausible one.
   - **The entity exists even when nothing is wrong.** The `alerts` key is *absent* from a healthy payload, not present and empty, so keying the entity on it would create a sensor that appears only during a fault and takes its history away on recovery.
   - An alert code absent from the table is counted and shown by its number. The upstream table has real gaps and Klereo can add codes; dropping an unknown alert would hide a real one.
-- 6 tests for the measured object shape and 25 for the alert sensor (**187 total**, up from 156).
+- 6 tests for the measured object shape, 25 for the alert sensor and 4 for the payload instrument (**191 total**, up from 156).
 
 ## [1.7.0] — 2026-08-25
 
