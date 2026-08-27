@@ -146,9 +146,31 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `docs/plans/` is **gitignored** — internal scratch, never committed.
 - Dependencies are bumped by Renovate against the shared `local>platform/renovate` preset.
 
-**Releasing** — three places must agree, and nothing enforces it: the `version` field in
+**Releasing** — three places must agree: the `version` field in
 `custom_components/klereo/manifest.json`, a `## [X.Y.Z]` section in `CHANGELOG.md`, and a `vX.Y.Z`
 tag. HACS reads the **GitHub release**, so a tag that never reaches GitHub ships to nobody.
+
+`scripts/check_release_agreement.py` is the instrument — read it rather than this paragraph, and
+run it rather than checking by hand (#101):
+
+```bash
+.venv/bin/python scripts/check_release_agreement.py              # CI runs this on every push
+.venv/bin/python scripts/check_release_agreement.py --published 1.8.1   # AFTER the GitHub release
+```
+
+The first half runs as the `Validate / release-agreement` job. The second is **not** a job and is
+not one by measurement, not by omission: this repo has **zero Forgejo releases** — only tags — so a
+`release: [published]` trigger would never fire, and a `push: tags` one races both the mirror and
+the human who creates the GitHub release afterwards. Run it by hand as the last step of the ritual.
+
+⚠️ Convention between releases: a fix PR writes `## [Unreleased]`, and the `chore(release):` commit
+renames that heading **and** bumps `manifest.json` in the same commit. `[Unreleased]` is deliberately
+not read as a version, so a release that never stamped its number fails the check.
+
+⚠️ **v1.5.2 is tagged and published with no CHANGELOG section**, and its content is lost. It is
+allowlisted in `KNOWN_MISSING_CHANGELOG`. Do **not** invent that section — a plausible one would
+turn a visible hole into a false certainty. The allowlist is what keeps the check able to fail on a
+new hole instead of being permanently red.
 
 ---
 

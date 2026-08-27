@@ -26,6 +26,27 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
 
+  release-agreement:
+    runs-on: ubuntu-latest
+    steps:
+      # 🔴 `fetch-depth: 0` is load-bearing, not hygiene. The check reads `git tag` and
+      # fails when the list is EMPTY rather than passing: with no tags fetched there is
+      # nothing to disagree, so a shallow checkout would report success having verified
+      # nothing. The guard is tested; this line is what keeps it from firing every run.
+      - uses: https://github.com/actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: https://github.com/actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      # No network and no dependencies: this half compares `manifest.json` against
+      # `CHANGELOG.md` and against every tag. The published half — whether the tag and the
+      # release reached GitHub — is `--published X.Y.Z`, run by hand at release time. It is
+      # NOT a job here: measured 2026-08-26, this repository has zero Forgejo releases, so
+      # a `release: [published]` trigger would never fire, and a `push: tags` one races both
+      # the mirror and the human who creates the GitHub release afterwards.
+      - run: python scripts/check_release_agreement.py
+
   test:
     runs-on: ubuntu-latest
     steps:
