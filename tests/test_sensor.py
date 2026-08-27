@@ -13,6 +13,7 @@ from custom_components.klereo.models import (
 )
 from custom_components.klereo.sensor import (
     KlereoAlertSensor,
+    KlereoDerivedSensor,
     KlereoParamSensor,
     KlereoSensor,
     _extract_sensors,
@@ -31,6 +32,10 @@ def mock_coordinator():
     """Create a mock coordinator."""
     probe = _make_probe()
     coordinator = MagicMock()
+    # 🔴 Set EXPLICITLY. Left as a bare MagicMock attribute it is truthy but not `True`,
+    # so `assert entity.available is True` would pass for a reason that is not the one
+    # under test — `CoordinatorEntity.available` returns this value straight through.
+    coordinator.last_update_success = True
     coordinator.data = {
         "SYS1": KlereoSystemData(
             info=KlereoSystemInfo(id_system="SYS1", pool_nickname="My Pool"),
@@ -195,6 +200,10 @@ def _alert_coordinator(alerts=None, reported=None, probes=None) -> MagicMock:
     """Build a coordinator whose single system carries the given alerts."""
     probes = probes or []
     coordinator = MagicMock()
+    # 🔴 Set EXPLICITLY. Left as a bare MagicMock attribute it is truthy but not `True`,
+    # so `assert entity.available is True` would pass for a reason that is not the one
+    # under test — `CoordinatorEntity.available` returns this value straight through.
+    coordinator.last_update_success = True
     coordinator.data = {
         "SYS1": KlereoSystemData(
             info=KlereoSystemInfo(id_system="SYS1", pool_nickname="My Pool"),
@@ -836,3 +845,88 @@ class TestSetpointFallsBackToAReadOnlySensor:
         details = KlereoPoolDetails(regul_modes={"ConsignePH": 7.2}, access=10)
         uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
         assert uids == ["SYS1_param_ConsignePH", "SYS1_alerts"]
+
+
+class TestAvailabilityOfSensor:
+    """Three witnesses on `.available`, and NEVER on `_attr_available` (#130).
+
+    `CoordinatorEntity.available` is a property returning `coordinator.last_update_success`,
+    and a property shadows `_attr_available` completely. Every assertion in this repository
+    used to read the attribute the code had just assigned, so it stayed green over a
+    mechanism that reported nothing — the same failure as #115, a second time.
+
+    Proof that the distinction is real, and not pedantry: before the fix, the three
+    `_attr_available is False` assertions reddened while the three `is True` ones stayed
+    green — because `_attr_available` defaults to `True`. They were passing for a reason
+    that had nothing to do with the code under test.
+    """
+
+    def _entity(self, mock_coordinator, system_id="SYS1"):
+        probe = _make_probe()
+        return KlereoSensor(mock_coordinator, system_id, probe)
+
+    def test_available_while_the_payload_carries_it(self, mock_coordinator):
+        """Positive control. Without it, "goes unavailable" is compatible with
+        "always unavailable", and every other arm here would pass on a broken entity."""
+        assert self._entity(mock_coordinator).available is True
+
+    def test_unavailable_when_the_system_disappears(self, mock_coordinator):
+        """A system absent from the payload takes its entities with it."""
+        assert self._entity(mock_coordinator, "MISSING").available is False
+
+    def test_unavailable_when_the_probe_disappears(self, mock_coordinator):
+        """The narrower half: the system is still there, this probe is not.
+
+        Distinct from the arm above on purpose — the base property only checks the system,
+        so a subclass that forgot to narrow it would pass that one and fail this.
+        """
+        entity = self._entity(mock_coordinator)
+        mock_coordinator.data["SYS1"].details.probe_index.clear()
+        assert entity.available is False
+
+    def test_unavailable_when_the_refresh_fails(self, mock_coordinator):
+        """The half that already worked must survive: a failed refresh still bars."""
+        mock_coordinator.last_update_success = False
+        assert self._entity(mock_coordinator).available is False
+
+
+class TestAvailabilityOfTheOtherSensorClasses:
+    """The three sensor classes that do NOT follow a probe, and inherit the base rule.
+
+    They exist because a mutation found the hole: removing the system check from
+    `KlereoEntity.available` reddened only the `number` witness. The four probe- and
+    output-backed platforms each narrow the property themselves, and their narrowing
+    happens to catch a missing system too — so they cannot vouch for the base. These
+    three can, and one of them is the alert sensor, the entity whose whole job is to not
+    be a false green.
+    """
+
+    def _each(self, coordinator):
+        return {
+            "param": KlereoParamSensor(coordinator, "SYS1", "ConsigneEau", 28),
+            "derived": KlereoDerivedSensor(
+                coordinator, "SYS1", "PHMinus_Today",
+                {"name": "x", "source": "PHMinus_TodayTime", "rate": "PHMinus_Debit",
+                 "divisor": 36, "unit": "mL", "device_class": "volume",
+                 "state_class": "total_increasing"},
+            ),
+            "alert": KlereoAlertSensor(coordinator, "SYS1"),
+        }
+
+    def test_available_while_the_payload_carries_the_system(self, mock_coordinator):
+        """Positive control for all three at once."""
+        for label, entity in self._each(mock_coordinator).items():
+            assert entity.available is True, label
+
+    def test_unavailable_when_the_system_disappears(self, mock_coordinator):
+        """The base rule, on the classes that have nothing else to fall back on."""
+        for label, entity in self._each(mock_coordinator).items():
+            entity.system_id = "MISSING"
+            assert entity.available is False, label
+
+    def test_unavailable_when_the_refresh_fails(self, mock_coordinator):
+        """The half that already worked, still working."""
+        entities = self._each(mock_coordinator)
+        mock_coordinator.last_update_success = False
+        for label, entity in entities.items():
+            assert entity.available is False, label

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- 🔴 **Entities now actually become unavailable when their probe or output disappears** ([#130](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/130)). Five platforms set availability as an attribute — `self._attr_available = False`. `CoordinatorEntity.available` is itself a **property**, and a property shadows that attribute entirely, so the assignment changed nothing any entity ever reported. A sensor whose probe vanished from the payload kept its last reading **forever**, silently; only a failed refresh made anything unavailable, and that is global to every entity at once.
+  - Availability is now a property on `KlereoEntity`, narrowed by each platform that follows a particular probe or output. `super().available` stays in the conjunction, so a failed refresh keeps barring — that was the half that already worked.
+  - The pattern was already written and shipped in the `climate` entity ([#118](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/118)); this propagates it to the other five and moves the shared half into the base class rather than copying it eight times.
+  - ⚠️ **This is a visible behaviour change.** Dashboards and automations that read a Klereo entity may start seeing `unavailable` where they never have. That state is the truthful one — the value they were reading was stale — but it is new, and templates that assume a number may need a guard.
+  - 🔴 **The nine assertions covering this were green over a completely inert mechanism**, because they asserted the attribute the code had just written rather than what Home Assistant reads. The same failure as [#115](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/115), a second time. Every one is rewritten to assert `.available`, and the proof that the distinction is real is that before the fix the `is False` assertions reddened while the `is True` ones stayed green — `_attr_available` defaults to `True`, so they were passing for a reason unrelated to the code.
+  - 324 tests. Seven negative controls, each reddening its own witness: the base rule removed, `super().available` dropped, and the narrowing dropped in each of `sensor`, `binary_sensor`, `switch`, `select` and `climate`.
+
 ## [1.10.0] — 2026-08-27
 
 ### Added

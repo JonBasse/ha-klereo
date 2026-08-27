@@ -65,6 +65,15 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
 
         self._update_from_output(output)
 
+    @property
+    def available(self) -> bool:
+        """Return False once the payload stops carrying this output.
+
+        Narrows the base property, which only checks the system. An output that vanishes
+        used to leave the entity pinned to its last state forever (#130).
+        """
+        return super().available and self._find_my_output() is not None
+
     @callback
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
@@ -74,10 +83,7 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
         self._attr_options = self._offered_options()
         output = self._find_my_output()
         if output:
-            self._attr_available = True
             self._update_from_output(output)
-        else:
-            self._attr_available = False
         super()._handle_coordinator_update()
 
     def _offered_options(self) -> list[str]:
