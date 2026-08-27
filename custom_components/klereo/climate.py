@@ -92,9 +92,10 @@ class KlereoClimate(KlereoEntity, ClimateEntity):
         `CoordinatorEntity.available` is itself a property returning
         `coordinator.last_update_success`, so it shadows `_attr_available` entirely and
         assigning to that attribute changes nothing an entity ever reports. Measured
-        2026-08-26; the other five platforms in this integration do exactly that and
-        their entities never go unavailable — filed separately, since repairing five
-        platforms does not belong in a climate PR.
+        2026-08-26, when this was the only platform doing it correctly; the other five
+        assigned the attribute and their entities never went unavailable. Fixed for all
+        of them in #130, which also moved the shared half onto `KlereoEntity.available` —
+        so `super()` here now checks the system before this checks the output.
 
         `super().available` is kept in the conjunction: a failed refresh still makes the
         entity unavailable, which is the half that does work today.

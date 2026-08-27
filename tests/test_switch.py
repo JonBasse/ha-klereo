@@ -33,6 +33,10 @@ def mock_coordinator():
     """Create a mock coordinator."""
     output = _make_output()
     coordinator = MagicMock()
+    # 🔴 Set EXPLICITLY. Left as a bare MagicMock attribute it is truthy but not `True`,
+    # so `assert entity.available is True` would pass for a reason that is not the one
+    # under test — `CoordinatorEntity.available` returns this value straight through.
+    coordinator.last_update_success = True
     coordinator.api = AsyncMock()
     coordinator.api.set_output.return_value = {"response": "ok"}
     coordinator.async_request_refresh = AsyncMock()
@@ -251,3 +255,46 @@ class TestProOutputsAreGatedOnAccess:
         """Absurdity control: a read-only account keeps lighting, filtration and heating."""
         details = self._details(access=5, indices=(0, 1, 4, 5))
         assert self._indices(mock_coordinator, details) == [0, 1, 4, 5]
+
+
+class TestAvailabilityOfSwitch:
+    """Three witnesses on `.available`, and NEVER on `_attr_available` (#130).
+
+    `CoordinatorEntity.available` is a property returning `coordinator.last_update_success`,
+    and a property shadows `_attr_available` completely. Every assertion in this repository
+    used to read the attribute the code had just assigned, so it stayed green over a
+    mechanism that reported nothing — the same failure as #115, a second time.
+
+    Proof that the distinction is real, and not pedantry: before the fix, the three
+    `_attr_available is False` assertions reddened while the three `is True` ones stayed
+    green — because `_attr_available` defaults to `True`. They were passing for a reason
+    that had nothing to do with the code under test.
+    """
+
+    def _entity(self, mock_coordinator, system_id="SYS1"):
+        output = _make_output()
+        return KlereoSwitch(mock_coordinator, system_id, output)
+
+    def test_available_while_the_payload_carries_it(self, mock_coordinator):
+        """Positive control. Without it, "goes unavailable" is compatible with
+        "always unavailable", and every other arm here would pass on a broken entity."""
+        assert self._entity(mock_coordinator).available is True
+
+    def test_unavailable_when_the_system_disappears(self, mock_coordinator):
+        """A system absent from the payload takes its entities with it."""
+        assert self._entity(mock_coordinator, "MISSING").available is False
+
+    def test_unavailable_when_the_output_disappears(self, mock_coordinator):
+        """The narrower half: the system is still there, this output is not.
+
+        Distinct from the arm above on purpose — the base property only checks the system,
+        so a subclass that forgot to narrow it would pass that one and fail this.
+        """
+        entity = self._entity(mock_coordinator)
+        mock_coordinator.data["SYS1"].details.output_index.clear()
+        assert entity.available is False
+
+    def test_unavailable_when_the_refresh_fails(self, mock_coordinator):
+        """The half that already worked must survive: a failed refresh still bars."""
+        mock_coordinator.last_update_success = False
+        assert self._entity(mock_coordinator).available is False

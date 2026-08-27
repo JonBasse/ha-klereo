@@ -50,15 +50,21 @@ class KlereoBinarySensor(KlereoEntity, BinarySensorEntity):
 
         self._update_from_probe(probe)
 
+    @property
+    def available(self) -> bool:
+        """Return False once the payload stops carrying this probe.
+
+        Narrows the base property, which only checks the system. A probe that vanishes
+        used to leave the entity pinned to its last reading forever (#130).
+        """
+        return super().available and self._find_my_probe() is not None
+
     @callback
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
         probe = self._find_my_probe()
         if probe:
-            self._attr_available = True
             self._update_from_probe(probe)
-        else:
-            self._attr_available = False
         super()._handle_coordinator_update()
 
     def _update_from_probe(self, probe: KlereoProbe):

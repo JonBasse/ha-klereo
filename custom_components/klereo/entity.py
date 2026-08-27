@@ -140,10 +140,35 @@ class KlereoEntity(CoordinatorEntity[KlereoCoordinator]):
         super().__init__(coordinator)
         self.system_id = system_id
 
+    def _system(self):
+        """Return this entity's system, or None once the payload stops carrying it."""
+        return self.coordinator.data.get(self.system_id)
+
+    @property
+    def available(self) -> bool:
+        """Return whether the payload still carries what this entity reports on.
+
+        🔴 A PROPERTY, never `self._attr_available = ...` in an update callback.
+        `CoordinatorEntity.available` is itself a property returning
+        `coordinator.last_update_success`, and a property SHADOWS `_attr_available`
+        entirely — so assigning that attribute changes nothing an entity ever reports.
+        Five platforms did exactly that, and their entities never went unavailable no
+        matter what disappeared from the payload; the nine assertions covering it were
+        green because they asserted the attribute the code had just written, not the
+        behaviour. #130, and the same failure as #115.
+
+        `super().available` stays in the conjunction: a failed refresh must keep making
+        the entity unavailable, which is the half that already worked.
+
+        Subclasses that follow a particular probe or output narrow this further; the
+        system check here is what every Klereo entity has in common.
+        """
+        return super().available and self._system() is not None
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
-        system = self.coordinator.data.get(self.system_id)
+        system = self._system()
         name = system.info.pool_nickname if system else "Klereo Pool"
         return DeviceInfo(
             identifiers={(DOMAIN, self.system_id)},

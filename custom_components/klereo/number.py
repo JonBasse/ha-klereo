@@ -63,11 +63,9 @@ class KlereoNumber(KlereoEntity, NumberEntity):
     @callback
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
-        system = self.coordinator.data.get(self.system_id)
+        system = self._system()
         if system is None:
-            self._attr_available = False
             return super()._handle_coordinator_update()
-        self._attr_available = True
         settings = system.details.settings
         if self._key in settings:
             self._attr_native_value = settings[self._key]
