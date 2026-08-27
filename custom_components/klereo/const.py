@@ -126,8 +126,14 @@ HEATER_MODES_WITHOUT_COOLING = frozenset({0, 1, 3})
 # `entity.is_setpoint_offered`, which both platforms share. Excluding on the key alone
 # would delete a reading whenever a write guard bites: an account at access 10 would lose
 # the pH, Redox and chlorine setpoints it reads today and gain nothing writable. #128.
+#
+# 🔴 `ConsigneEau` is deliberately NOT here, and its absence is load-bearing. It has never
+# been a sensor, so the fallback must not invent one — and on both installations measured
+# so far it carries the `-2000` sentinel, which would surface as a `Water Setpoint` reading
+# -2000: precisely the pinned-nonsense control 1.9.0 refused to create. The three setpoints
+# below WERE sensors before they became writable, so keeping theirs deletes nothing, even
+# at a sentinel. The rule is "never delete", not "always fall back".
 PARAM_NAMES = {
-    "ConsigneEau": "Water Setpoint",
     "ModeFiltration": "Filtration Mode",
     "ModeRegulPH": "pH Regulation Mode",
     "ModeRegulRedox": "Redox Regulation Mode",

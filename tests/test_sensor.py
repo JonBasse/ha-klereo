@@ -100,13 +100,14 @@ class TestKlereoParamSensor:
     """Tests for KlereoParamSensor."""
 
     def test_creates_with_initial_value(self, mock_coordinator):
-        """Should set initial value from RegulModes, under its curated name.
+        """Should set initial value from RegulModes.
 
-        `ConsigneEau` joined PARAM_NAMES in #128 so that it has a name to fall back to
-        when its `number` is refused; before that it rendered as the humanized key.
+        `ConsigneEau` briefly joined PARAM_NAMES in 1.10.0 and was taken back out in
+        #135: it has never been a sensor, and giving it a fallback name was what let the
+        fallback invent one. The humanized key is what remains.
         """
         sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsigneEau", 28)
-        assert sensor._attr_name == "Water Setpoint"
+        assert sensor._attr_name == "Consigne Eau"
         assert sensor._attr_native_value == 28
         assert sensor._attr_unique_id == "SYS1_param_ConsigneEau"
 
@@ -813,27 +814,61 @@ class TestSetpointFallsBackToAReadOnlySensor:
             "SYS1_alerts",
         ]
 
-    def test_read_only_account_keeps_all_four(self, mock_coordinator):
-        """access 5: nothing is writable, so every setpoint falls back to a sensor.
+    def test_read_only_account_keeps_the_three_and_not_the_water_setpoint(self, mock_coordinator):
+        """access 5: the three fall back, ConsigneEau does NOT.
 
-        ⚠️ ConsigneEau appearing here is NEW behaviour, and an addition rather than a
-        deletion: a read-only account used to see no water setpoint at all. It is the
-        accepted cost of sharing one guard between the two platforms instead of two.
+        🔴 The asymmetry is the whole point of #135. The three were sensors before they
+        became writable, so keeping theirs deletes nothing. ConsigneEau never was one, so
+        a fallback there does not preserve an entity — it INVENTS one.
         """
         assert self._uids(mock_coordinator, access=5) == [
-            "SYS1_param_ConsigneEau",
             "SYS1_param_ConsignePH",
             "SYS1_param_ConsigneRedox",
             "SYS1_param_ConsigneChlore",
             "SYS1_alerts",
         ]
 
-    def test_heater_without_setpoint_keeps_the_water_reading(self, mock_coordinator):
-        """HeaterMode 3 at access 16: no water setpoint to write, but still one to read."""
-        assert self._uids(mock_coordinator, access=16, HeaterMode=3) == [
-            "SYS1_param_ConsigneEau",
+    def test_heater_without_setpoint_creates_nothing_for_the_water_setpoint(self, mock_coordinator):
+        """HeaterMode 3 at access 16: no water setpoint to write, and none to read either."""
+        assert self._uids(mock_coordinator, access=16, HeaterMode=3) == ["SYS1_alerts"]
+
+    def test_a_disabled_water_setpoint_creates_no_sensor(self, mock_coordinator):
+        """🔴 The witness this bug got past. MEASURED, not invented.
+
+        The Bioul installation reports `access: 10` with `ConsigneEau: -2000` — the
+        setpoint disabled at the box. 1.10.0 turned that into a `Water Setpoint` sensor
+        reading -2000: exactly the pinned-nonsense control 1.9.0 had refused to create for
+        the thermostat, reintroduced through the fallback door. The reporter of GitHub #55
+        carries the same sentinel.
+        """
+        uids = self._uids(mock_coordinator, access=10, ConsigneEau=-2000)
+        assert "SYS1_param_ConsigneEau" not in uids
+        assert uids == [
+            "SYS1_param_ConsignePH",
+            "SYS1_param_ConsigneRedox",
+            "SYS1_param_ConsigneChlore",
             "SYS1_alerts",
         ]
+
+    def test_a_disabled_ph_setpoint_KEEPS_its_sensor(self, mock_coordinator):
+        """The other half, and the reason the rule is not "sentinels never fall back".
+
+        `ConsignePH: -2000` is shown as a sensor today, on any install that has one. This
+        platform has never filtered sentinels, and starting now would DELETE an entity —
+        the exact harm #128 exists to avoid. Asymmetric with the arm above on purpose.
+        """
+        uids = self._uids(mock_coordinator, access=16, ConsignePH=-2000)
+        assert "SYS1_param_ConsignePH" in uids
+
+    def test_the_regul_modes_loop_carries_the_same_gate(self, mock_coordinator):
+        """`RegulModes` is unfiltered, so it needs the gate stated separately.
+
+        Bioul carries `ConsigneEau` in `params`, so a fix applied only to that loop would
+        look correct on the very payload that found the bug.
+        """
+        details = KlereoPoolDetails(regul_modes={"ConsigneEau": -2000}, access=10)
+        uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
+        assert uids == ["SYS1_alerts"]
 
     def test_fallback_reaches_the_regul_modes_container_too(self, mock_coordinator):
         """The fallback must not depend on which container the setpoint arrived in.
