@@ -25,7 +25,7 @@ from .const import (
     PARAM_TYPES,
     SENSOR_TYPES,
 )
-from .entity import KlereoEntity, setup_discovery
+from .entity import KlereoEntity, is_setpoint_offered, setup_discovery
 from .models import KlereoAlert, KlereoPoolDetails, KlereoProbe
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,8 +45,13 @@ def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
         uid = f"{system_id}_sensor_{probe.index}"
         items.append((uid, KlereoSensor(coordinator, system_id, probe)))
 
+    # A writable setpoint becomes a `number` instead — but ONLY when the write is actually
+    # offered. When a guard refuses it (access too low, pHMode off, HeaterMode without a
+    # setpoint), the read-only sensor stays: the account cannot write the value, and that
+    # is no reason to stop showing it. Excluding on `key in PARAM_TYPES` alone is what
+    # #128 fixes; it would have deleted three sensors from every account below access 16.
     for key, value in details.regul_modes.items():
-        if key in PARAM_TYPES:
+        if key in PARAM_TYPES and is_setpoint_offered(key, details):
             continue
         uid = f"{system_id}_param_{key}"
         items.append((uid, KlereoParamSensor(coordinator, system_id, key, value)))
@@ -59,7 +64,9 @@ def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
     seen = set(details.regul_modes)
     for container in (details.params, details.extra_params):
         for key, value in container.items():
-            if key in PARAM_TYPES or key in seen or key not in PARAM_NAMES:
+            if key in seen or key not in PARAM_NAMES:
+                continue
+            if key in PARAM_TYPES and is_setpoint_offered(key, details):
                 continue
             seen.add(key)
             uid = f"{system_id}_param_{key}"

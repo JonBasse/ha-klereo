@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **pH, Redox and chlorine setpoints are now writable** ([#128](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/128) / [GH #54](https://github.com/JonBasse/ha-klereo/issues/54)). They were already exposed as read-only sensors; they now become `number` entities on accounts allowed to write them, alongside the water setpoint that was the integration's only writable one.
+  - **Upstream writes exactly four setpoints and no others**, and this now matches them one for one. The Klereo API's `SetParam` takes an arbitrary parameter name, so it may well accept more — but every extra name would be a guess, which is the mistake [#94](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/94) exists to record.
+  - 🔴 **The "pH drift adjustment" the request asked for does not exist upstream.** It appears in no command, under no name, anywhere in the Jeedom plugin. It is absent here on purpose, not by oversight.
+  - **They need account access level 16 (advanced user), not 20 (pool professional)** — the direct answer to the question the reporter asked. Level 20 gates the *outputs* 2, 3, 8 and 15, and never a setpoint.
+  - The pH setpoint carries one extra condition upstream, `pHMode > 0`, which this integration had never read. An installation that regulates no pH is not offered a pH setpoint to write.
+  - **Bounds come from the payload** (`pHMin`/`pHMax`, `OrpMin`/`OrpMax`). Chlorine has no bounds keys at all and is fixed at 0–5 mg/L, exactly as upstream: inventing a `ChloreMin`/`ChloreMax` pair to make the table uniform would be a guessed wire name.
+
+### Changed
+
+- 🔴 **A setpoint whose write is refused now keeps its read-only sensor** instead of disappearing. Before this change the `sensor` platform dropped every key that *could* be a `number`, without asking whether the `number` had actually been created — so promoting the three setpoints above would have **deleted** them outright from every account below access 16, including the account of the reporter who asked for the feature. Both platforms now share one guard, and cannot disagree about a key.
+  - As a consequence, a read-only account (access 5) or a heat pump without a setpoint now shows a **Water Setpoint** sensor where it previously showed nothing. That is an addition, and the safe direction.
+  - ⚠️ **On an account that *can* write them, the three former sensors are replaced by `number` entities with new IDs.** The old `sensor.*_ph_setpoint`, `*_redox_setpoint` and `*_chlorine_setpoint` entities stop being provided and will show as unavailable until removed from the entity registry. Automations referencing them need updating to the `number.*` equivalents.
+
+- ⚠️ **What this could not be verified against:** no installation in the file is known to sit at access level 16, so no test proves a write actually lands. A refusal has been visible as command status 13 since [#115](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/115) — but only for someone who tries.
+
 ## [1.9.0] — 2026-08-27
 
 ### Added

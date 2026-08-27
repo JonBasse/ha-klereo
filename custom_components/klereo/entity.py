@@ -13,6 +13,9 @@ from .const import (
     ACCESS_POOL_PROFESSIONAL,
     DOMAIN,
     HEATER_MODES_WITHOUT_COOLING,
+    HEATER_MODES_WITHOUT_SETPOINT,
+    PARAM_SENTINELS,
+    PARAM_TYPES,
     PRO_ONLY_OUTPUTS,
 )
 from .coordinator import KlereoCoordinator
@@ -42,6 +45,59 @@ def is_output_offered(index: int, details: KlereoPoolDetails) -> bool:
         index, details.access, ACCESS_POOL_PROFESSIONAL,
     )
     return False
+
+
+def is_setpoint_offered(key: str, details: KlereoPoolDetails) -> bool:
+    """Return whether this installation may be offered a WRITABLE setpoint for this key.
+
+    Shared by `number` — which creates the entity when this is true — and by `sensor`,
+    which keeps its read-only entity when it is false. That sharing is the whole point:
+    the two platforms must not disagree about a key, or a refused write would delete the
+    reading as well. `sensor` used to exclude on `key in PARAM_TYPES` alone, so an account
+    below the required access lost the setpoint entirely instead of falling back (#128).
+
+    The value is read from `details.settings` rather than passed in, so both callers
+    necessarily judge the same number whichever container it arrived in.
+
+    ⚠️ An unknown answer NEVER gates. A payload carrying no `access`, no `HeaterMode` or
+    no `pHMode` must keep the entity it has today. Only a value we can read, and that says
+    "no", removes one. Same rule, and the same reason, as `is_output_offered` above.
+    """
+    param = PARAM_TYPES[key]
+    value = details.settings.get(key)
+
+    if value in PARAM_SENTINELS:
+        _LOGGER.debug("Skipping %s: sentinel value %s", key, value)
+        return False
+
+    min_access = param.get("min_access")
+    if min_access is not None and details.access is not None and details.access < min_access:
+        _LOGGER.debug(
+            "Skipping %s: account access %s is below the required %s",
+            key, details.access, min_access,
+        )
+        return False
+
+    if param.get("needs_heater"):
+        heater_mode = details.settings.get("HeaterMode")
+        if heater_mode in HEATER_MODES_WITHOUT_SETPOINT:
+            _LOGGER.debug("Skipping %s: HeaterMode %s carries no setpoint", key, heater_mode)
+            return False
+
+    # Upstream gates the pH setpoint on `pHMode > 0` and on nothing else (l.878-880). The
+    # comparison is written so that anything not readable as a number — absent, None, a
+    # string Klereo has not documented — falls through and does NOT bar.
+    if param.get("needs_ph_mode"):
+        ph_mode = details.settings.get("pHMode")
+        try:
+            regulates_ph = ph_mode > 0
+        except TypeError:
+            regulates_ph = True
+        if not regulates_ph:
+            _LOGGER.debug("Skipping %s: pHMode %s regulates no pH", key, ph_mode)
+            return False
+
+    return True
 
 
 def offered_heat_modes(details: KlereoPoolDetails) -> list[int]:
