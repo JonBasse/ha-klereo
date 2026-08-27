@@ -50,8 +50,12 @@ def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
     # setpoint), the read-only sensor stays: the account cannot write the value, and that
     # is no reason to stop showing it. Excluding on `key in PARAM_TYPES` alone is what
     # #128 fixes; it would have deleted three sensors from every account below access 16.
+    # `key not in PARAM_NAMES` is what keeps `ConsigneEau` out. This loop is otherwise
+    # unfiltered, so without it a refused water setpoint would fall back here even though
+    # it has never been a sensor — and on a sentinel payload that means a brand-new entity
+    # reading -2000. The `params` loop below already carries the same condition.
     for key, value in details.regul_modes.items():
-        if key in PARAM_TYPES and is_setpoint_offered(key, details):
+        if key in PARAM_TYPES and (is_setpoint_offered(key, details) or key not in PARAM_NAMES):
             continue
         uid = f"{system_id}_param_{key}"
         items.append((uid, KlereoParamSensor(coordinator, system_id, key, value)))
