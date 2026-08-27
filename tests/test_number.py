@@ -10,6 +10,8 @@ from custom_components.klereo.models import (
 )
 from custom_components.klereo.number import KlereoNumber, _extract_numbers
 
+_ABSENT = object()
+
 
 @pytest.fixture
 def mock_coordinator():
@@ -85,10 +87,11 @@ class TestKlereoNumber:
 class TestExtractNumbers:
     """Tests for which payloads do and do not produce a Water Setpoint entity.
 
-    The point of #94 is that this entity is the integration's only `number`, so if the
-    wrong container is read it exists for nobody — silently. A test that only proves the
-    entity *appears* is not enough: the negative controls below are what prove the right
-    container is read rather than a neighbouring one.
+    The point of #94 is that a setpoint read from the wrong container exists for nobody —
+    silently. A test that only proves the entity *appears* is not enough: the negative
+    controls below are what prove the right container is read rather than a neighbouring
+    one. (ConsigneEau was the integration's ONLY `number` until #128 added three more;
+    those live in `TestAdvancedSetpoints`, with the sensor half in `test_sensor.py`.)
     """
 
     def _details(self, **kwargs):
@@ -179,3 +182,134 @@ class TestExtractNumbers:
         mock_coordinator.data["SYS1"].details.params["ConsigneEau"] = 31
         number._handle_coordinator_update()
         assert number._attr_native_value == 31
+
+
+# A payload carrying all four writable setpoints and every key their guards read. Written
+# as one dict the tests mutate a copy of, so that each negative control differs from the
+# positive case by EXACTLY the field it is about — a fixture rebuilt per test drifts, and
+# then a control that reddens proves nothing in particular.
+FULL_SETPOINTS = {
+    "ConsigneEau": 28, "EauMin": 15, "EauMax": 32, "HeaterMode": 1,
+    "ConsignePH": 7.2, "pHMin": 6.8, "pHMax": 7.6, "pHMode": 1,
+    "ConsigneRedox": 650, "OrpMin": 400, "OrpMax": 850,
+    "ConsigneChlore": 1.2,
+}
+
+ALL_FOUR = [
+    "SYS1_number_ConsigneEau",
+    "SYS1_number_ConsignePH",
+    "SYS1_number_ConsigneRedox",
+    "SYS1_number_ConsigneChlore",
+]
+
+
+class TestAdvancedSetpoints:
+    """Tests for the pH, Redox and chlorine setpoints promoted to writable in #128.
+
+    Upstream gates all three on `access >= 16` and the pH one additionally on `pHMode > 0`
+    (`klereo.class.php` l.877-880). Each control below moves ONE field and names which
+    entity it must remove; a guard that removed more than its own would pass a test that
+    only counted.
+
+    ⚠️ What this bench CANNOT do is confirm a write succeeds. No installation in the file
+    is known to sit at access 16, so every arm here measures which entity is OFFERED, and
+    none measures what the API answers. A refusal would surface as status 13 since #115 —
+    but only for someone who tries.
+    """
+
+    def _keys(self, coordinator, **overrides):
+        settings = dict(FULL_SETPOINTS)
+        for key, value in overrides.items():
+            if value is _ABSENT:
+                settings.pop(key, None)
+            else:
+                settings[key] = value
+        access = settings.pop("_access", None)
+        details = KlereoPoolDetails(params=settings, access=access)
+        return [uid for uid, _ in _extract_numbers(coordinator, "SYS1", details)]
+
+    def test_all_four_offered_at_advanced_access(self, mock_coordinator):
+        """Positive case: access 16 offers every setpoint upstream can write."""
+        assert self._keys(mock_coordinator, _access=16) == ALL_FOUR
+
+    def test_bounds_come_from_the_payload(self, mock_coordinator):
+        """Should read pHMin/pHMax and OrpMin/OrpMax, never the permissive fallbacks.
+
+        The fallbacks are 0-14 and 0-1000; asserting the payload's narrower pair is what
+        proves the right key names were used rather than a plausible neighbour.
+        """
+        details = KlereoPoolDetails(params=dict(FULL_SETPOINTS), access=16)
+        bounds = {
+            key.rsplit("_", 1)[-1]: (e._attr_native_min_value, e._attr_native_max_value)
+            for key, e in _extract_numbers(mock_coordinator, "SYS1", details)
+        }
+        assert bounds["ConsignePH"] == (6.8, 7.6)
+        assert bounds["ConsigneRedox"] == (400, 850)
+        # Chlorine is hard-coded 0-5 upstream and carries NO bounds keys at all.
+        assert bounds["ConsigneChlore"] == (0, 5)
+
+    def test_bounds_fall_back_when_the_payload_carries_none(self, mock_coordinator):
+        """Should fall back to the PERMISSIVE range, never to a plausible pool window.
+
+        Reachable only on a payload with no pHMin/pHMax or OrpMin/OrpMax — which upstream
+        does not handle at all. 0-14 is the total pH scale and 0-1000 the ORP convention:
+        both are wide on purpose, because a narrow default silently clamps a real setpoint
+        into a value the box never asked for, and the entity still looks healthy.
+
+        This witness exists because a mutation narrowing pH to 6.8-7.8 reddened NOTHING.
+        """
+        settings = {k: v for k, v in FULL_SETPOINTS.items()
+                    if k not in ("pHMin", "pHMax", "OrpMin", "OrpMax")}
+        details = KlereoPoolDetails(params=settings, access=16)
+        bounds = {
+            key.rsplit("_", 1)[-1]: (e._attr_native_min_value, e._attr_native_max_value)
+            for key, e in _extract_numbers(mock_coordinator, "SYS1", details)
+        }
+        assert bounds["ConsignePH"] == (0, 14)
+        assert bounds["ConsigneRedox"] == (0, 1000)
+
+    def test_end_customer_access_keeps_only_the_water_setpoint(self, mock_coordinator):
+        """Negative control 1 — access 10 removes the three, and ConsigneEau REMAINS.
+
+        The second half is the one that matters: a `min_access` guard written against the
+        wrong constant would take the water setpoint down with them, and a test that only
+        asserted the three had gone would stay green through it.
+        """
+        assert self._keys(mock_coordinator, _access=10) == ["SYS1_number_ConsigneEau"]
+
+    def test_ph_mode_off_removes_the_ph_setpoint_alone(self, mock_coordinator):
+        """Negative control 2 — pHMode 0 takes ConsignePH and nothing else."""
+        assert self._keys(mock_coordinator, _access=16, pHMode=0) == [
+            "SYS1_number_ConsigneEau",
+            "SYS1_number_ConsigneRedox",
+            "SYS1_number_ConsigneChlore",
+        ]
+
+    def test_absent_access_and_ph_mode_offer_everything(self, mock_coordinator):
+        """Negative control 3 — unknown never bars, in both directions at once.
+
+        This is the arm that decides the whole design: an installation whose payload
+        carries neither field must keep every entity, because "we cannot read it" is not
+        "the answer is no".
+        """
+        keys = self._keys(mock_coordinator, _access=_ABSENT, pHMode=_ABSENT)
+        assert keys == ALL_FOUR
+
+    def test_unreadable_ph_mode_does_not_bar(self, mock_coordinator):
+        """A pHMode that is not a number is as unknown as a missing one."""
+        for ph_mode in (None, "auto"):
+            keys = self._keys(mock_coordinator, _access=16, pHMode=ph_mode)
+            assert "SYS1_number_ConsignePH" in keys, f"pHMode={ph_mode!r}"
+
+    def test_sentinel_removes_its_own_setpoint_only(self, mock_coordinator):
+        """A disabled setpoint takes itself down and leaves its neighbours standing.
+
+        Bioul carries `ConsigneEau: -2000` — a real payload, and the reason GitHub #55
+        reported a missing entity that was never a defect.
+        """
+        keys = self._keys(mock_coordinator, _access=16, ConsigneRedox=-2000)
+        assert keys == [
+            "SYS1_number_ConsigneEau",
+            "SYS1_number_ConsignePH",
+            "SYS1_number_ConsigneChlore",
+        ]

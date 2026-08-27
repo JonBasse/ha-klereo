@@ -6,45 +6,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import (
-    HEATER_MODES_WITHOUT_SETPOINT,
-    PARAM_SENTINELS,
-    PARAM_TYPES,
-)
-from .entity import KlereoEntity, setup_discovery
+from .const import PARAM_TYPES
+from .entity import KlereoEntity, is_setpoint_offered, setup_discovery
 from .models import KlereoPoolDetails
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _is_offered(key: str, value, details: KlereoPoolDetails) -> bool:
-    """Return whether this installation actually has this setpoint.
-
-    An unknown answer never gates: a payload carrying neither `access` nor `HeaterMode`
-    must keep the entity it has today. Only a value we can read, and that says "no",
-    removes one.
-    """
-    param = PARAM_TYPES[key]
-
-    if value in PARAM_SENTINELS:
-        _LOGGER.debug("Skipping %s: sentinel value %s", key, value)
-        return False
-
-    min_access = param.get("min_access")
-    if min_access is not None and details.access is not None and details.access < min_access:
-        _LOGGER.debug(
-            "Skipping %s: account access %s is below the required %s",
-            key, details.access, min_access,
-        )
-        return False
-
-    if param.get("needs_heater"):
-        heater_mode = details.settings.get("HeaterMode")
-        if heater_mode in HEATER_MODES_WITHOUT_SETPOINT:
-            _LOGGER.debug("Skipping %s: HeaterMode %s carries no setpoint", key, heater_mode)
-            return False
-
-    return True
 
 
 def _extract_numbers(coordinator, system_id, details: KlereoPoolDetails):
@@ -54,7 +20,9 @@ def _extract_numbers(coordinator, system_id, details: KlereoPoolDetails):
     for key, value in settings.items():
         if key not in PARAM_TYPES:
             continue
-        if not _is_offered(key, value, details):
+        # The guard lives in `entity` because `sensor` needs the SAME answer: whatever it
+        # refuses here keeps its read-only sensor there, instead of vanishing (#128).
+        if not is_setpoint_offered(key, details):
             continue
         uid = f"{system_id}_number_{key}"
         items.append((uid, KlereoNumber(coordinator, system_id, key, value, settings)))

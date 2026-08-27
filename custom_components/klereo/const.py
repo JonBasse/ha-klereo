@@ -121,8 +121,13 @@ HEATER_MODES_WITHOUT_SETPOINT = frozenset({0, 3})
 HEATER_MODES_WITHOUT_COOLING = frozenset({0, 1, 3})
 
 # Friendly names for setpoint / regulation keys exposed as read-only param sensors.
-# Keys in PARAM_TYPES are excluded (they become number entities instead).
+#
+# A key in PARAM_TYPES is excluded here only when its `number` is ACTUALLY offered — see
+# `entity.is_setpoint_offered`, which both platforms share. Excluding on the key alone
+# would delete a reading whenever a write guard bites: an account at access 10 would lose
+# the pH, Redox and chlorine setpoints it reads today and gain nothing writable. #128.
 PARAM_NAMES = {
+    "ConsigneEau": "Water Setpoint",
     "ModeFiltration": "Filtration Mode",
     "ModeRegulPH": "pH Regulation Mode",
     "ModeRegulRedox": "Redox Regulation Mode",
@@ -220,11 +225,42 @@ DERIVED_COUNTER_TYPES = {
 #   min_key/max_key — the API keys carrying the real bounds, preferred over min/max
 #   min_access      — the account access level below which the API refuses the write
 #   needs_heater    — skip when HeaterMode says the installation has no water setpoint
+#   needs_ph_mode   — skip when pHMode says this installation regulates no pH
+#
+# 🔴 Upstream writes EXACTLY these four and no others (`klereo.class.php` l.869-897, the
+# only four `createCmdAction` calls that carry a setpoint). `setParam()` (l.1237) takes an
+# arbitrary `$_param`, so the API may well accept more — but every extra name would be a
+# guess, which is the fault #94 exists to record. The "pH drift adjustment" asked for in
+# GitHub #54 appears NOWHERE upstream; it is absent on purpose, not by oversight. #128.
 PARAM_TYPES = {
     "ConsigneEau": {
         "name": "Water Setpoint", "unit": "°C", "min": 10, "max": 40, "step": 0.5,
         "min_key": "EauMin", "max_key": "EauMax",
         "min_access": ACCESS_END_CUSTOMER, "needs_heater": True,
+    },
+    # No unit: the pH probe carries none either (SENSOR_TYPES[3]), and pH is a bare number.
+    # The 0-14 fallback is the total physical range rather than a plausible pool window —
+    # it is only ever used by a payload carrying no pHMin/pHMax, and a narrow guess there
+    # would clamp a real setpoint. Upstream has no fallback at all: it reads the two keys
+    # unconditionally and lets PHP yield null when they are absent.
+    "ConsignePH": {
+        "name": "pH Setpoint", "unit": None, "min": 0, "max": 14, "step": 0.1,
+        "min_key": "pHMin", "max_key": "pHMax",
+        "min_access": ACCESS_ADVANCED_USER, "needs_ph_mode": True,
+    },
+    # ⚠️ The 0-1000 mV fallback is a CONVENTION for ORP probes, not a measurement and not
+    # an upstream value. Same role as pH's: permissive, and only reachable without bounds.
+    "ConsigneRedox": {
+        "name": "Redox Setpoint", "unit": "mV", "min": 0, "max": 1000, "step": 1,
+        "min_key": "OrpMin", "max_key": "OrpMax",
+        "min_access": ACCESS_ADVANCED_USER,
+    },
+    # 🔴 No min_key/max_key ON PURPOSE. Upstream hard-codes 0-5 mg/L here (l.894-896) and
+    # reads no bounds keys for chlorine — unlike the other three. Inventing a
+    # `ChloreMin`/`ChloreMax` pair to make the table uniform would be a guessed wire name.
+    "ConsigneChlore": {
+        "name": "Chlorine Setpoint", "unit": "mg/L", "min": 0, "max": 5, "step": 0.1,
+        "min_access": ACCESS_ADVANCED_USER,
     },
 }
 

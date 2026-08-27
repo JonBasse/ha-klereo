@@ -95,11 +95,21 @@ class TestKlereoParamSensor:
     """Tests for KlereoParamSensor."""
 
     def test_creates_with_initial_value(self, mock_coordinator):
-        """Should set initial value from RegulModes."""
+        """Should set initial value from RegulModes, under its curated name.
+
+        `ConsigneEau` joined PARAM_NAMES in #128 so that it has a name to fall back to
+        when its `number` is refused; before that it rendered as the humanized key.
+        """
         sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsigneEau", 28)
-        assert sensor._attr_name == "Consigne Eau"
+        assert sensor._attr_name == "Water Setpoint"
         assert sensor._attr_native_value == 28
         assert sensor._attr_unique_id == "SYS1_param_ConsigneEau"
+
+    def test_uncurated_key_falls_back_to_the_humanized_name(self, mock_coordinator):
+        """Should split a camelCase key nobody has named. Every curated key now has a
+        friendly name, so this path needs a key that is deliberately not one."""
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "SomethingNew", 3)
+        assert sensor._attr_name == "Something New"
 
     def test_device_info(self, mock_coordinator):
         """Should return device info from coordinator data."""
@@ -123,10 +133,15 @@ class TestParamSensorDiscovery:
     """
 
     def test_creates_sensor_for_curated_params_key(self, mock_coordinator):
-        """Should expose a `params` key that has a friendly name."""
-        details = KlereoPoolDetails(params={"ConsignePH": 7.2})
+        """Should expose a `params` key that has a friendly name.
+
+        The stand-in is `ModeRegulPH` rather than a `Consigne*`: since #128 every setpoint
+        in PARAM_TYPES leaves this platform as soon as its write is offered, so one of
+        them would test the setpoint fallback instead of the curated-name gate.
+        """
+        details = KlereoPoolDetails(params={"ModeRegulPH": 1})
         uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
-        assert uids == ["SYS1_param_ConsignePH", "SYS1_alerts"]
+        assert uids == ["SYS1_param_ModeRegulPH", "SYS1_alerts"]
 
     def test_ignores_uncurated_params_key(self, mock_coordinator):
         """Should NOT expose an unknown `params` key.
@@ -147,10 +162,10 @@ class TestParamSensorDiscovery:
     def test_does_not_duplicate_a_key_present_in_both(self, mock_coordinator):
         """Should create one sensor when both containers carry the same key."""
         details = KlereoPoolDetails(
-            regul_modes={"ConsignePH": 7.2}, params={"ConsignePH": 7.4}
+            regul_modes={"ModeRegulPH": 1}, params={"ModeRegulPH": 2}
         )
         uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
-        assert uids == ["SYS1_param_ConsignePH", "SYS1_alerts"]
+        assert uids == ["SYS1_param_ModeRegulPH", "SYS1_alerts"]
 
     def test_param_sensor_refreshes_from_params_container(self, mock_coordinator):
         """Should refresh a params-sourced sensor, not pin it to its first reading."""
@@ -730,3 +745,94 @@ class TestProbeTypeNamesAreNotInverted:
     def test_type_1_is_air_and_type_5_is_water(self):
         assert SENSOR_TYPES[1]["name"] == "Air Temperature"
         assert SENSOR_TYPES[5]["name"] == "Water Temperature"
+
+
+# Same four setpoints as `tests/test_number.py::FULL_SETPOINTS`, and deliberately the same
+# shape: these tests are the OTHER half of each control there. Every arm below asserts
+# that what `number` refused, `sensor` kept.
+SETPOINT_PAYLOAD = {
+    "ConsigneEau": 28, "EauMin": 15, "EauMax": 32, "HeaterMode": 1,
+    "ConsignePH": 7.2, "pHMin": 6.8, "pHMax": 7.6, "pHMode": 1,
+    "ConsigneRedox": 650, "OrpMin": 400, "OrpMax": 850,
+    "ConsigneChlore": 1.2,
+}
+
+
+class TestSetpointFallsBackToAReadOnlySensor:
+    """Tests that a REFUSED write leaves the reading in place (#128).
+
+    Before #128 this platform excluded a key on `key in PARAM_TYPES` alone, without asking
+    whether the `number` had actually been created. Promoting the three advanced setpoints
+    would then have DELETED them from every account below access 16 — including the
+    account of the reporter who asked for the feature, who says he has a standard one.
+
+    The uid lists are exact on purpose, and `SYS1_alerts` is spelled out rather than
+    filtered: an entity nobody asked for has to show up as a failure here.
+    """
+
+    def _uids(self, coordinator, access, **overrides):
+        settings = dict(SETPOINT_PAYLOAD)
+        settings.update(overrides)
+        details = KlereoPoolDetails(params=settings, access=access)
+        return [uid for uid, _ in _extract_sensors(coordinator, "SYS1", details)]
+
+    def test_advanced_access_leaves_no_setpoint_sensor(self, mock_coordinator):
+        """Positive control: at access 16 all four are writable, so none is a sensor.
+
+        Without this arm the three tests below are compatible with a fallback that never
+        yields — a sensor kept for everyone would pass them all.
+        """
+        assert self._uids(mock_coordinator, access=16) == ["SYS1_alerts"]
+
+    def test_end_customer_access_keeps_the_three_as_sensors(self, mock_coordinator):
+        """access 10: the three refused writes stay readable; ConsigneEau does not.
+
+        ConsigneEau's absence is the discriminator. It is writable at 10, so it leaves
+        this platform — a fallback keyed on the wrong thing would keep it here too.
+        """
+        assert self._uids(mock_coordinator, access=10) == [
+            "SYS1_param_ConsignePH",
+            "SYS1_param_ConsigneRedox",
+            "SYS1_param_ConsigneChlore",
+            "SYS1_alerts",
+        ]
+
+    def test_ph_mode_off_keeps_the_ph_setpoint_as_a_sensor(self, mock_coordinator):
+        """pHMode 0 at access 16: the pH reading survives, alone."""
+        assert self._uids(mock_coordinator, access=16, pHMode=0) == [
+            "SYS1_param_ConsignePH",
+            "SYS1_alerts",
+        ]
+
+    def test_read_only_account_keeps_all_four(self, mock_coordinator):
+        """access 5: nothing is writable, so every setpoint falls back to a sensor.
+
+        ⚠️ ConsigneEau appearing here is NEW behaviour, and an addition rather than a
+        deletion: a read-only account used to see no water setpoint at all. It is the
+        accepted cost of sharing one guard between the two platforms instead of two.
+        """
+        assert self._uids(mock_coordinator, access=5) == [
+            "SYS1_param_ConsigneEau",
+            "SYS1_param_ConsignePH",
+            "SYS1_param_ConsigneRedox",
+            "SYS1_param_ConsigneChlore",
+            "SYS1_alerts",
+        ]
+
+    def test_heater_without_setpoint_keeps_the_water_reading(self, mock_coordinator):
+        """HeaterMode 3 at access 16: no water setpoint to write, but still one to read."""
+        assert self._uids(mock_coordinator, access=16, HeaterMode=3) == [
+            "SYS1_param_ConsigneEau",
+            "SYS1_alerts",
+        ]
+
+    def test_fallback_reaches_the_regul_modes_container_too(self, mock_coordinator):
+        """The fallback must not depend on which container the setpoint arrived in.
+
+        `RegulModes` is read by a different loop, and that loop carries no PARAM_NAMES
+        gate — so a fix applied to one loop only would look correct on every payload that
+        happens to put its setpoints in `params`, which is all three measured so far.
+        """
+        details = KlereoPoolDetails(regul_modes={"ConsignePH": 7.2}, access=10)
+        uids = [uid for uid, _ in _extract_sensors(mock_coordinator, "SYS1", details)]
+        assert uids == ["SYS1_param_ConsignePH", "SYS1_alerts"]
