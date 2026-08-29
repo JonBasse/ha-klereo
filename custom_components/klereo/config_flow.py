@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KlereoApi, KlereoApiError
-from .const import DOMAIN, SCAN_INTERVAL_MINUTES, hash_password
+from .const import DOMAIN, SCAN_INTERVAL_MIN_MINUTES, SCAN_INTERVAL_MINUTES, hash_password
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -126,6 +126,17 @@ class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
 
 
+def options_schema(current: int) -> vol.Schema:
+    """Build the options form schema, pre-filled with `current`."""
+    return vol.Schema(
+        {
+            vol.Optional("scan_interval", default=current): vol.All(
+                int, vol.Range(min=SCAN_INTERVAL_MIN_MINUTES, max=60)
+            ),
+        }
+    )
+
+
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle Klereo options."""
 
@@ -136,14 +147,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        "scan_interval",
-                        default=self.config_entry.options.get(
-                            "scan_interval", SCAN_INTERVAL_MINUTES
-                        ),
-                    ): vol.All(int, vol.Range(min=1, max=60)),
-                }
+            data_schema=options_schema(
+                current=self.config_entry.options.get("scan_interval", SCAN_INTERVAL_MINUTES)
             ),
         )

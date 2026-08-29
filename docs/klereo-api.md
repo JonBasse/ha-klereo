@@ -22,13 +22,38 @@
    cible divergent (texte `GetJWT.php` → cible `GetToken.php`, texte `SetOut.php` → cible
    `GetInfos.php`, …). **Le texte est l'URL réelle** ; les cibles sont un artefact du collage et
    ont été écartées. Les URL ci-dessous sont donc les textes.
-3. **Le document est partiel.** @nopbop citait par ailleurs une phrase sur le rafraîchissement des
-   serveurs Klereo toutes les 10 minutes, avec une mise en garde contre un sondage plus fréquent :
-   **elle ne figure pas dans ce qui a été collé.** Notre `SCAN_INTERVAL_MINUTES` est à 5
-   (`const.py:12`) ; ce point reste **non vérifié**.
+3. **Le document est partiel** — mais la lacune que cette réserve signalait est **comblée**.
+   La phrase sur le rafraîchissement toutes les 10 minutes ne figurait pas dans le collage
+   d'origine ; @nopbop l'a fournie mot pour mot le **2026-08-28**, et elle a sa section
+   ci-dessous. Elle a fait passer `SCAN_INTERVAL_MINUTES` de 5 à 10 (#139).
 
 Une divergence entre ce document et l'API vivante reste possible et ordinaire. Une affirmation
 tirée d'ici est mieux sourcée qu'une supposition — elle n'est pas une mesure.
+
+---
+
+## 🔴 Cadence de sondage — Klereo menace de bannir
+
+Fourni verbatim par **@nopbop** le **2026-08-28** dans
+[GitHub #58](https://github.com/JonBasse/ha-klereo/issues/58) ; absent du collage du 2026-08-24.
+
+> *« Les données ne sont mises à jour que toutes les 10mn sur nos serveurs, il est donc inutile de
+> faire un polling plus fréquent, vous risqueriez de vous faire bannir du serveur ! »*
+
+Deux conséquences, et la seconde est celle qu'on oublie :
+
+* **Sonder plus vite n'achète rien.** Au-dessus d'un appel par 10 minutes, le serveur rend la même
+  charge utile. Il n'y a pas d'arbitrage fraîcheur / risque à faire ici.
+* **Le bannissement tomberait sur le compte Klereo de l'UTILISATEUR**, lui coûtant l'intégration
+  *et* son accès normal au service, pour une intégration qu'il a seulement installée.
+
+D'où `SCAN_INTERVAL_MINUTES = SCAN_INTERVAL_MIN_MINUTES = 10`, le plancher étant appliqué à la
+**lecture** dans `coordinator.py` et pas seulement dans le formulaire d'options — `scan_interval`
+est une option *persistée*. Voir #139.
+
+⚠️ **Ce que la source ne dit pas** : ni le seuil, ni la fenêtre, ni si quelqu'un a été banni. Ce
+qui est établi, c'est que sonder plus vite est **inutile** et que Klereo **prévient**. C'est assez
+pour corriger le défaut, et insuffisant pour affirmer que 5 minutes bannissait.
 
 ---
 
@@ -263,6 +288,5 @@ C'est #106, et c'est la conséquence la plus lourde de ce document.
 - **La présence et la forme des alertes** (#57) — `alerts` n'apparaît pas dans les listes élidées.
   L'amont lit bien `$pool['alerts']` avec `code` et `param` (`klereo.class.php:509-517, 570-590`),
   ce qui reste notre meilleure source sur ce point.
-- **La cadence de rafraîchissement côté serveur** — voir la réserve 3 en tête de fichier.
 - **Ce que `newMode` vaut sur les sorties 2, 3, 8 et 15** — la doc dit que la valeur diffère, jamais
   ce qu'elle vaut.

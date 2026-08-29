@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- 🔴 **The default polling interval is now 10 minutes, and 10 is also the minimum** ([#139](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/139)). Klereo's own API documentation says the server refreshes every 10 minutes and warns that polling faster risks a ban — verbatim, relayed by the reporter of [GitHub #58](https://github.com/JonBasse/ha-klereo/issues/58) on 2026-08-28 and now committed to `docs/klereo-api.md`. The integration was defaulting to 5 and allowing 1.
+  - **This is not a freshness trade-off.** Above one call per 10 minutes the server returns the same payload, so the faster interval bought no information at all — it only spent risk.
+  - **And the risk was not ours.** A ban lands on the *user's* Klereo account, costing them this integration *and* their normal access to the service, for something they never asked for.
+  - 🔴 **The floor binds on read, not only on the options form.** `scan_interval` is a persisted option and `__init__.py` serves whatever is stored, so bounding the form alone would have left every install configured before this release polling at its old rate, silently — the form is only re-validated if the user happens to open it. `KlereoCoordinator` therefore clamps what it is given.
+  - ⚠️ If you had deliberately set a *slower* interval, it is untouched: the bound is from below only, and a negative control covers that so "clamped to 10" can never quietly become "forced to 10".
+  - ⚠️ **What the source does not say**, and what this release does not claim: neither the ban threshold nor its window, nor whether anyone was ever banned. What is established is that faster polling is *useless* and that Klereo *warns*. That is enough to change the default and not enough to alarm.
+  - The options form now carries a description explaining the floor — a bound with no stated reason is a bound someone removes.
+  - 337 tests. Four negative controls, each reddening its own witness and nothing else: the clamp removed, the form floor lowered, the default lowered, and the README reverted to its old wording.
+
+### Fixed
+
+- **`docs/klereo-api.md` no longer records the polling cadence as unverified.** Its reserve 3 named this exact missing sentence when the document was committed on 2026-08-24; @nopbop supplied it on 2026-08-28, and it now has its own section.
+
 ## [1.11.0] — 2026-08-27
 
 ### Fixed

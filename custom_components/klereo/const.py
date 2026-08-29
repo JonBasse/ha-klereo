@@ -8,8 +8,25 @@ def hash_password(plaintext: str) -> str:
     """Hash a plaintext password with SHA-1 for the Klereo API."""
     return hashlib.sha1(plaintext.encode("utf-8")).hexdigest()
 
-# Default update interval
-SCAN_INTERVAL_MINUTES = 5
+# Update interval, in minutes.
+#
+# 🔴 Klereo refreshes server-side every 10 minutes and threatens to ban faster pollers —
+# their own API documentation, relayed by the reporter of GitHub #58 (2026-08-28). The
+# verbatim quote is in `docs/klereo-api.md`.
+#
+# Two things follow, and the second is the one that gets forgotten:
+#
+#   * polling faster buys NOTHING — above one call per 10 minutes the server returns the
+#     same payload, so there is no freshness/risk trade-off to arbitrate here;
+#   * the ban would land on the USER's Klereo account, costing them the integration AND
+#     their normal access to the service, for something they never asked for.
+#
+# The floor therefore binds on READ (`coordinator.py`), not only on the options form:
+# `scan_interval` is a persisted option and `__init__.py` serves whatever is stored, so an
+# install configured before this existed would keep hammering the API with no signal.
+# Forgejo #139.
+SCAN_INTERVAL_MINUTES = 10
+SCAN_INTERVAL_MIN_MINUTES = 10
 
 # Probe types that return binary 0/1 values and should be BinarySensorEntity
 BINARY_SENSOR_TYPES = {

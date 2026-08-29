@@ -15,7 +15,7 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 - **Adjustable setpoints** — Water temperature setpoint exposed as a number entity you can adjust directly from the UI.
 - **Regulation parameters** — View regulation modes and setpoints as read-only sensors.
 - **Automatic discovery** — All pool systems, probes, and outputs are discovered automatically from your Klereo account. New entities are added dynamically without requiring a restart.
-- **Cloud polling** — Data refreshed from the Klereo Connect cloud API at a configurable interval (1–60 minutes, default 5).
+- **Cloud polling** — Data refreshed from the Klereo Connect cloud API at a configurable interval (10–60 minutes, default 10).
 - **Diagnostics** — Built-in diagnostics support for troubleshooting, with automatic redaction of sensitive data.
 - **Re-authentication** — If your credentials expire, the integration prompts you to re-enter them instead of requiring a full removal and re-setup.
 
@@ -54,7 +54,7 @@ Your pool systems, sensors, switches, and number entities will be created automa
 
 After setup, you can configure the integration by clicking **Configure** on the integration card:
 
-- **Update interval** — How often to poll the Klereo API (1–60 minutes, default 5).
+- **Update interval** — How often to poll the Klereo API (10–60 minutes, default 10).
 
 ## Entities
 
