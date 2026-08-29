@@ -180,8 +180,20 @@ Les quatre champs `*Capteur` ne sont pas lus par l'intégration — suivi en #10
 C'est la confirmation officielle du défaut corrigé par #95 : un HTTP 200 sur `SetOut` signifie
 « acceptée pour exécution », jamais « exécutée ».
 
-⚠️ `WaitCommand` **bloque** et `CommandStatus` **rend la main tout de suite** — l'intégration
-appelle aujourd'hui `WaitCommand` sous un délai client de 10 s (#106).
+⚠️ `WaitCommand` **bloque** et `CommandStatus` **rend la main tout de suite**. L'intégration
+appelait `WaitCommand` sous un délai client de 10 s ; elle utilise **`CommandStatus` et sonde**
+depuis #140, @nopbop ayant mesuré la latence réelle à **1 à 2 secondes** de `SetOut` à
+`status: 9`, systématiquement (GitHub #58, 2026-08-28).
+
+🔴 **Les deux moitiés sont inséparables.** Passer à `CommandStatus` sans boucler ferait tomber
+presque chaque appel sur un statut *en vol* : toutes les écritures deviendraient « non
+confirmées », en silence, et en ressemblant à un succès. Un rejet, lui, est un **verdict** et
+quitte la boucle immédiatement — sans quoi une commande refusée serait dégradée en plafond épuisé,
+soit exactement la panne que #95 existe pour empêcher.
+
+⚠️ Et l'ordre compte à la lecture : @nopbop confirme que **les commandes les plus récentes
+viennent en PREMIER** dans `response[]`. Lire `response[0]` rendrait le verdict d'une **autre**
+commande — avec la bonne forme, le bon type et aucune erreur. L'appariement se fait sur `cmdID`.
 
 ### Changer le mode de fonctionnement et l'état d'une sortie
 

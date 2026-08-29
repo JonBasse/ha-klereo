@@ -10,6 +10,8 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
+    CMD_POLL_ATTEMPTS,
+    CMD_POLL_INTERVAL_SECONDS,
     CMD_STATUS_IN_FLIGHT,
     CMD_STATUS_LABELS,
     CMD_STATUS_OK,
@@ -215,6 +217,12 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
         "accepted for execution", never "executed" — a refused command is otherwise
         indistinguishable from a successful one. Upstream calls `waitCommand($cmdID)`
         after every write and refreshes only on status 9 (`klereo.class.php` l.1661-1687).
+
+        We read the verdict from the NON-blocking `CommandStatus` route and poll it, which
+        is why the loop below exists: a single non-blocking call lands on an in-flight
+        status almost every time. Exhausting the ceiling means UNCONFIRMED, never success —
+        and a rejection is a verdict, so it leaves the loop at once rather than being
+        polled into an exhaustion. See #140.
         """
         cmd_id = self._command_id(result)
         if cmd_id is None:
@@ -224,25 +232,42 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             )
             return False
 
-        try:
-            status_result = await self.api.command_status(cmd_id)
-        except Exception as err:
-            _LOGGER.warning("%s: could not read command status: %s", description, err)
-            return False
+        for attempt in range(CMD_POLL_ATTEMPTS):
+            if attempt:
+                await asyncio.sleep(CMD_POLL_INTERVAL_SECONDS)
 
-        status, klereo_detail = self._command_status(status_result, cmd_id)
-        if not isinstance(status, int):
+            try:
+                status_result = await self.api.command_status(cmd_id)
+            except Exception as err:
+                _LOGGER.warning("%s: could not read command status: %s", description, err)
+                return False
+
+            status, klereo_detail = self._command_status(status_result, cmd_id)
+            if not isinstance(status, int):
+                _LOGGER.warning(
+                    "%s: unreadable command status. Response: %s", description, status_result,
+                )
+                return False
+
+            if status == CMD_STATUS_OK:
+                _LOGGER.debug("%s: confirmed by Klereo (cmdID %s)", description, cmd_id)
+                return True
+
+            if status in CMD_STATUS_IN_FLIGHT:
+                _LOGGER.debug(
+                    "%s: still %s (cmdID %s)",
+                    description, CMD_STATUS_LABELS.get(status, status), cmd_id,
+                )
+                continue
+
+            break
+        else:
+            # The ceiling is not a verdict. Klereo answers in 1-2 s in practice, so a
+            # command still in flight here is an anomaly worth seeing without debug on.
             _LOGGER.warning(
-                "%s: unreadable command status. Response: %s", description, status_result,
-            )
-            return False
-
-        if status == CMD_STATUS_OK:
-            return True
-
-        if status in CMD_STATUS_IN_FLIGHT:
-            _LOGGER.debug(
-                "%s: still %s", description, CMD_STATUS_LABELS.get(status, status),
+                "%s: still not confirmed after %s checks (cmdID %s). It may yet run; "
+                "Home Assistant will not report on it.",
+                description, CMD_POLL_ATTEMPTS, cmd_id,
             )
             return False
 
@@ -259,6 +284,7 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     ) -> Any:
         """Send a set-output command, check it ran, and request a data refresh."""
         description = f"Setting output {out_index}"
+        _LOGGER.debug("%s: sending mode=%s state=%s to system %s", description, mode, state, system_id)
         try:
             result = await self.api.set_output(system_id, out_index, mode, state)
         except Exception as err:
@@ -272,6 +298,7 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     async def async_set_param(self, system_id: str, param_id: str, value: Any) -> Any:
         """Send a set-parameter command, check it ran, and request a data refresh."""
         description = f"Setting parameter {param_id}"
+        _LOGGER.debug("%s: sending value=%s to system %s", description, value, system_id)
         try:
             result = await self.api.set_param(system_id, param_id, value)
         except Exception as err:

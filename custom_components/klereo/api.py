@@ -15,14 +15,29 @@ API_URL_GET_INDEX = f"{API_URL_BASE}/GetIndex.php"
 API_URL_GET_POOL_DETAILS = f"{API_URL_BASE}/GetPoolDetails.php"
 API_URL_SET_OUT = f"{API_URL_BASE}/SetOut.php"
 API_URL_SET_PARAM = f"{API_URL_BASE}/SetParam.php"
-API_URL_COMMAND_STATUS = f"{API_URL_BASE}/WaitCommand.php"
+API_URL_COMMAND_STATUS = f"{API_URL_BASE}/CommandStatus.php"
 
 API_VERSION = "393-J"
 API_COM_MODE = 1
 
 # Klereo writes are a TWO-step protocol, not one: `SetOut` / `SetParam` only *queue* the
-# command and return a cmdID immediately; `WaitCommand` reports what actually happened.
+# command and return a cmdID immediately; a second call reports what actually happened.
 # An HTTP 200 on the first step therefore says nothing about execution.
+#
+# Klereo documents TWO routes for that second call (`docs/klereo-api.md`):
+#
+#   * `WaitCommand.php`   — waits for the end of execution (BLOCKING)
+#   * `CommandStatus.php` — returns immediately (what we use)
+#
+# We use the non-blocking one and poll. The reporter of GitHub #58 measured the real
+# latency at 1 to 2 seconds from `SetOut` to `status: 9`, consistently, which leaves the
+# blocking route nothing to buy — it only held a user-facing service call open for the
+# whole client timeout.
+#
+# 🔴 The two halves are inseparable. `CommandStatus` returning immediately means a SINGLE
+# call lands on `CMD_STATUS_IN_FLIGHT` almost every time; switching the route without the
+# poll in `KlereoCoordinator._async_confirm_command` would report every write as
+# unconfirmed, silently, and it would look like a success. See #140.
 # Codes from Klereo's own API documentation, relayed by the reporter of GitHub #58.
 CMD_STATUS_PENDING = 0
 CMD_STATUS_RUNNING = 1
@@ -45,6 +60,9 @@ CMD_STATUS_LABELS = {
     18: "service unavailable",
     19: "box firmware too old",
 }
+
+CMD_POLL_ATTEMPTS = 10
+CMD_POLL_INTERVAL_SECONDS = 0.5
 
 TIMEOUT = 10
 USER_AGENT = "Jeedom plugin"
