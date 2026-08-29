@@ -34,6 +34,9 @@
                 "title": "Klereo Options",
                 "data": {
                     "scan_interval": "Update interval (minutes)"
+                },
+                "data_description": {
+                    "scan_interval": "How often to poll the Klereo cloud. Klereo refreshes its servers every 10 minutes and asks that clients do not poll faster, so 10 is both the default and the minimum: a shorter interval returns the same data and risks your account being banned."
                 }
             }
         }

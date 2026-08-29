@@ -16,7 +16,7 @@ from .api import (
     KlereoApi,
     KlereoApiError,
 )
-from .const import SCAN_INTERVAL_MINUTES, SETTING_CONTAINERS
+from .const import SCAN_INTERVAL_MIN_MINUTES, SCAN_INTERVAL_MINUTES, SETTING_CONTAINERS
 from .models import KlereoPoolDetails, KlereoSystemData, KlereoSystemInfo
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,12 +28,18 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     api: KlereoApi
 
     def __init__(self, hass: HomeAssistant, api: KlereoApi, scan_interval: int = SCAN_INTERVAL_MINUTES) -> None:
-        """Initialize the coordinator."""
+        """Initialize the coordinator.
+
+        `scan_interval` is clamped to `SCAN_INTERVAL_MIN_MINUTES` because it arrives from a
+        PERSISTED option: an entry configured before the floor existed still carries its old
+        value, and bounding only the options form would leave those installs polling faster
+        than Klereo allows, silently. See #139.
+        """
         super().__init__(
             hass,
             _LOGGER,
             name="klereo",
-            update_interval=timedelta(minutes=scan_interval),
+            update_interval=timedelta(minutes=max(scan_interval, SCAN_INTERVAL_MIN_MINUTES)),
         )
         self.api = api
 
