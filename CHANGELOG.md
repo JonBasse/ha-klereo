@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Command confirmation no longer blocks, and a write is now legible in the log** ([#140](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/140)). Klereo documents two routes for reading back a queued command: `WaitCommand`, which waits for the end of execution, and `CommandStatus`, which returns immediately. The integration used the blocking one under a 10-second client timeout. The reporter of [GitHub #58](https://github.com/JonBasse/ha-klereo/issues/58) measured the real latency at **1 to 2 seconds**, consistently, which left the blocking route nothing to buy — it only held a user-facing service call open.
+  - 🔴 **The route and the poll are one change, not two.** `CommandStatus` returning immediately means a single call lands on an in-flight status almost every time; switching the route alone would have reported **every** write as unconfirmed — silently, at debug level, and looking exactly like a success. A negative control covers it.
+  - **A rejection stays a verdict.** Status 13 and friends leave the loop at once instead of being polled into an exhausted ceiling, which would have downgraded a refusal to "unconfirmed" — the failure [#95](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/95) exists to prevent. Also covered by its own negative control.
+  - **An exhausted ceiling is a warning, not a debug line.** Giving up on a command is not routine and should not require debug logging to notice.
+
 - 🔴 **The default polling interval is now 10 minutes, and 10 is also the minimum** ([#139](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/139)). Klereo's own API documentation says the server refreshes every 10 minutes and warns that polling faster risks a ban — verbatim, relayed by the reporter of [GitHub #58](https://github.com/JonBasse/ha-klereo/issues/58) on 2026-08-28 and now committed to `docs/klereo-api.md`. The integration was defaulting to 5 and allowing 1.
   - **This is not a freshness trade-off.** Above one call per 10 minutes the server returns the same payload, so the faster interval bought no information at all — it only spent risk.
   - **And the risk was not ours.** A ban lands on the *user's* Klereo account, costing them this integration *and* their normal access to the service, for something they never asked for.
@@ -16,6 +21,10 @@ All notable changes to this project will be documented in this file.
   - 337 tests. Four negative controls, each reddening its own witness and nothing else: the clamp removed, the form floor lowered, the default lowered, and the README reverted to its old wording.
 
 ### Fixed
+
+- **A successful write used to log nothing at all** ([#140](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/140)). Confirmation only spoke on degraded paths — no command id, an unreadable status, a rejection, a command still in flight. On `status: 9` it was silent.
+  - 🔴 So the silence meant two opposite things: *"Home Assistant never sent anything"* and *"sent, accepted, and confirmed by Klereo"* produced **the same trace — none**. The reporter of [GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55) hit exactly that while testing his heat pump and asked where to look; there was nowhere.
+  - Every write now logs its emission before the answer is known, and its verdict with the `cmdID`, both at debug level. A reporter can tell those two cases apart without us, and correlate the id with a direct REST call.
 
 - **`docs/klereo-api.md` no longer records the polling cadence as unverified.** Its reserve 3 named this exact missing sentence when the document was committed on 2026-08-24; @nopbop supplied it on 2026-08-28, and it now has its own section.
 

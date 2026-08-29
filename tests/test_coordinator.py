@@ -26,8 +26,14 @@ def mock_api():
 
 
 @pytest.fixture
-def coordinator(mock_hass, mock_api):
-    """Create a coordinator with mock dependencies."""
+def coordinator(mock_hass, mock_api, monkeypatch):
+    """Create a coordinator with mock dependencies.
+
+    The command-confirmation poll (#140) sleeps between attempts; a no-op here keeps the
+    in-flight tests from spending real wall-clock without changing what they assert.
+    """
+    monkeypatch.setattr("custom_components.klereo.coordinator.asyncio.sleep", AsyncMock())
+
     coord = KlereoCoordinator.__new__(KlereoCoordinator)
     coord.api = mock_api
     coord.hass = mock_hass
