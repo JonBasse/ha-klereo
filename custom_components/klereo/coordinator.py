@@ -80,6 +80,11 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             for sys_id, result in zip(system_map, details_results):
                 system = system_map[sys_id]
                 details_raw = system.copy()
+                # The `GetPoolDetails` element, kept apart from the merged view because
+                # the diagnostics export publishes it verbatim (#145). `info.raw` already
+                # carries the `GetIndex` half; keeping the merged dict here would publish
+                # that half twice in every export.
+                pool_payload: dict[str, Any] = {}
 
                 if isinstance(result, Exception):
                     _LOGGER.warning(
@@ -89,7 +94,8 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
                 elif isinstance(result, dict):
                     response_data = result.get("response")
                     if isinstance(response_data, list) and response_data:
-                        details_raw.update(response_data[0])
+                        pool_payload = response_data[0]
+                        details_raw.update(pool_payload)
 
                 # Which containers the API actually sends is the open question behind
                 # #94: `RegulModes` was guessed from one user's log, while the upstream
@@ -118,7 +124,7 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
 
                 data[sys_id] = KlereoSystemData(
                     info=KlereoSystemInfo.from_dict(system),
-                    details=KlereoPoolDetails.from_dict(details_raw),
+                    details=KlereoPoolDetails.from_dict(details_raw, raw=pool_payload),
                 )
 
             return data

@@ -111,6 +111,16 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
   > #95.
 - **`entity.py`** — `KlereoEntity` base (DeviceInfo) + `setup_discovery()`, the shared helper for
   dynamic entity creation. Entities appear without a restart.
+- **`diagnostics.py`** — the **only remote instrument this project has**, and reporters are asked
+  to paste it into **public** issues. It exports the typed models *and* the raw `GetPoolDetails`
+  payload (`details.raw`, #145), because an export limited to the models is blind to every field
+  the parser drops — seven of the eleven on each `outs[]` element, `realStatus` among them.
+
+  > 🔴 `TO_REDACT` is a **security claim**, not a convenience, and the raw payload publishes an
+  > object whose key list comes from the server. **A key nobody has judged is not a safe key** —
+  > that was the fault of #122. Every key of that payload carries a written verdict in the file;
+  > `register` and `podinfo` are redacted to their **key names only**, never blanked, so the next
+  > export anyone pastes can still settle what they contain without the owner's credentials.
 
 Six platforms: `sensor` (probes + regulation params) · `binary_sensor` · `switch` (always forces
 Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diagnostics` (redacted).

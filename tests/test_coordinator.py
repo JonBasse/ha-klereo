@@ -541,3 +541,61 @@ class TestPayloadShapeLogging:
         assert "params carries keys" in caplog.text
         assert "ExtraParams carries keys" not in caplog.text
         assert "RegulModes carries keys" not in caplog.text
+
+
+class TestRawPoolPayloadIsCarried:
+    """🔴 #145 — the coordinator keeps the `GetPoolDetails` element for the export.
+
+    The diagnostics export is the only remote instrument this project has, and it showed
+    nothing but the typed model — so every field the parser drops (seven out of the eleven
+    on each `outs[]` element, `realStatus` among them) was invisible to it. Answering #141
+    took a direct API call with the owner's credentials, which no reporter can make.
+    """
+
+    async def test_the_pool_details_element_is_kept_verbatim(self, coordinator, mock_api):
+        """The unparsed fields survive as far as the model, untouched."""
+        mock_api.get_systems.return_value = {
+            "response": [{"idSystem": "SYS1", "poolNickname": "Pool"}]
+        }
+        mock_api.get_pool_details.return_value = {
+            "response": [
+                {"outs": [{"index": 0, "status": 1, "realStatus": 1, "offDelay": 30}]}
+            ]
+        }
+
+        result = await coordinator._async_update_data()
+
+        assert result["SYS1"].details.raw["outs"][0]["realStatus"] == 1
+        assert result["SYS1"].details.raw["outs"][0]["offDelay"] == 30
+
+    async def test_it_is_the_pool_payload_and_not_the_merged_view(self, coordinator, mock_api):
+        """🔴 Negative control: the two halves of the wire stay disjoint.
+
+        `KlereoSystemInfo.raw` already carries the `GetIndex` entry. Storing the merged
+        dict here would publish that half a second time in every export — the size of an
+        export is a criterion, since one nobody can paste is one nobody pastes.
+        """
+        mock_api.get_systems.return_value = {
+            "response": [{"idSystem": "SYS1", "poolNickname": "Pool", "onlyInGetIndex": 1}]
+        }
+        mock_api.get_pool_details.return_value = {"response": [{"outs": [], "pin": "X"}]}
+
+        result = await coordinator._async_update_data()
+
+        assert "onlyInGetIndex" not in result["SYS1"].details.raw
+        assert result["SYS1"].info.raw["onlyInGetIndex"] == 1
+        assert result["SYS1"].details.raw["pin"] == "X"
+
+    async def test_a_failed_details_call_leaves_the_raw_payload_empty(self, coordinator, mock_api):
+        """An empty `raw` beside a populated `info.raw` says GetPoolDetails failed.
+
+        Without this the two are indistinguishable, and "the payload is there" would be
+        compatible with "an empty payload is there" — the very confusion criterion 1 of
+        #145 guards against.
+        """
+        mock_api.get_systems.return_value = {"response": [{"idSystem": "SYS1"}]}
+        mock_api.get_pool_details.side_effect = RuntimeError("boom")
+
+        result = await coordinator._async_update_data()
+
+        assert result["SYS1"].details.raw == {}

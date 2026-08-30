@@ -275,17 +275,29 @@ The Klereo cloud API relays commands to your pool equipment. There may be a dela
 
 To download diagnostic data for bug reports, go to **Settings** > **Devices & Services** > **Klereo** > three-dot menu > **Download diagnostics**.
 
+The export contains the integration's parsed view of your pool **and the raw API response
+it was parsed from**, so that a field the integration does not read yet is still visible in
+a bug report. That raw copy goes through exactly the same redaction.
+
 **What is redacted**, so you can decide rather than trust a blanket promise: your password
-and session token, your **account username**, the box `pin`, Klereo's customer reference
-(`compta`) and the installation address key (`idAddress`).
+and session token, your **account username**, the box `pin` and serial (`podSerial`),
+Klereo's customer reference (`compta`), your installation address (`Address`) and its key
+(`idAddress`), and the notification e-mail address (`emailNotify`).
 
-**What is not**, because it is what the report needs and none of it identifies you: your
-system id, your pool's nickname, the account access level, and every probe, output and
-parameter reading.
+**Two more are blanked for a different reason**: `register` and `podinfo`. Nobody has ever
+measured what Klereo puts in them, and a field nobody has looked at is not a field anyone
+can call safe. Their **key names** are kept and their values removed, so a report can still
+tell us what is in there without publishing it.
 
-Diagnostics files are safe to attach to a public issue. If you are pasting a **debug log**
-rather than a diagnostics export, note that no redaction applies there at all — the raw API
-response includes your `pin` and `compta`.
+**What is not redacted**, because it is what the report needs and none of it identifies you:
+your system id, your pool's nickname, the account access level, the pool's index in the box,
+your equipment schedules, and every probe, output and parameter reading.
+
+Diagnostics files are safe to attach to a public issue. ⚠️ **Attach the file rather than
+pasting its contents** if your account has several pools — one pool is around 20 KB and three
+approach GitHub's per-comment limit. If you are pasting a **debug log** rather than a
+diagnostics export, note that no redaction applies there at all — the raw API response
+includes your `pin` and `compta`.
 
 ### Debug logging
 
