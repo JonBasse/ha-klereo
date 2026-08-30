@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- 🔴 **A disabled setpoint no longer renders as `-2000`** ([#137](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/137)). `-2000` is Klereo's marker for *setpoint disabled* and `-1000` for *unknown*. `number` already refused both through `is_setpoint_offered`, and `climate` refused them too — `sensor` was the one path that never did. So an entity named **pH Setpoint** could hold `-2000` and feed Home Assistant's statistics, graphs and averages a plausible, wrong number as though the pool were regulating to minus two thousand.
+  - 🔴 **The value is mapped, never the existence.** Not creating the entity would satisfy "no `-2000` on the dashboard" and be a regression: it deletes a sensor installs already have and breaks any automation referencing it — the harm [#128](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/128) and [#135](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/135) exist to prevent, the second of them four days old. `None` renders as `unknown`, which is precisely what the sentinel says.
+  - **Both assignment sites, not one.** `KlereoParamSensor` sets `_attr_native_value` in `__init__` *and* in `_handle_coordinator_update`. Treating either alone gives an entity that is right at startup and wrong afterwards — or the reverse, depending on which payload arrives first. Each site has its own witness, and the two directions of a refresh are asserted separately so a fix that latched on the first sentinel cannot pin the entity to `unknown` forever.
+  - ⚠️ **This is a latent path, not a user report.** All three measured installations carry real values for `ConsignePH`, `ConsigneRedox` and `ConsigneChlore`. Only `ConsigneEau` is sentinel in the wild, and it stopped being a sensor in #135. Said plainly rather than left to imply someone is looking at a broken dashboard.
+  - ⚠️ **A guard against a regression this fix could have introduced.** `regul_modes` is read **unfiltered** on purpose ([#94](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/94) — narrowing it would delete entities), so a value there is whatever Klereo sent, and a bare `value in PARAM_SENTINELS` raises `TypeError` on anything unhashable. That would have turned "one setpoint reads `-2000`" into "the sensor platform does not set up at all". The measured payloads carry only scalars there, so this is a guard, not a sighting.
+
+### Verified
+
+- **397 tests** (up from 387). **Six negative controls**, each reddening its own witness and nothing else: the construction site left unmapped; the refresh site left unmapped; the `isinstance` guard removed; the mask written `if not value` (which swallows every zeroed counter — `PARAM_COUNTER_TYPES` is full of them); `-1` added to the sentinel set, which `const.py` calls "a false friend that happens to work" since `NO_REFERENCE_PROBE` uses it for *no reference probe*; and the entity suppressed instead of its value masked.
+- **`0` and `-1` are asserted to survive**, one parametrised case each. Without them, "the sentinel is masked" would be compatible with "any small negative number is masked", which is the over-correction the issue names.
+
 ## [1.13.0] — 2026-08-30
 
 ### Added
