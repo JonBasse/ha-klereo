@@ -26,6 +26,11 @@ All notable changes to this project will be documented in this file.
   - 🔴 So the silence meant two opposite things: *"Home Assistant never sent anything"* and *"sent, accepted, and confirmed by Klereo"* produced **the same trace — none**. The reporter of [GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55) hit exactly that while testing his heat pump and asked where to look; there was nowhere.
   - Every write now logs its emission before the answer is known, and its verdict with the `cmdID`, both at debug level. A reporter can tell those two cases apart without us, and correlate the id with a direct REST call.
 
+- **`SETTING_CONTAINERS` no longer states a rule one payload cannot support** ([#138](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/138)). Its comment said an installation returns *all three* containers, and used that to retire the "which one does this install send?" framing of [#94](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/94). One installation does; Bioul returns `ExtraParams` **empty**. The sentence was true of the payload it came from and false as a generalisation — and it was as a generalisation that it retired something.
+  - No behaviour was ever wrong: an empty container adds no key and overwrites none, which is exactly what the merge order guarantees. The **precedence** half of #94 stays retired.
+  - The **coverage** half does not. Any key upstream reads only from `ExtraParams` — the hybrid chlorine counter `HybChl_*` is one — cannot exist on an installation that returns it empty, and nothing here distinguishes "no hybrid pump" from "container not sent". The comment now says so.
+  - ⚠️ Deliberately left alone: `models.py` cannot tell an **absent** `ExtraParams` from a **present-but-empty** one, so we do not know which Bioul returns. Recording the difference would add a field nobody reads, for a question nothing is currently waiting on.
+
 - **`docs/klereo-api.md` no longer records the polling cadence as unverified.** Its reserve 3 named this exact missing sentence when the document was committed on 2026-08-24; @nopbop supplied it on 2026-08-28, and it now has its own section.
 
 ## [1.11.0] — 2026-08-27

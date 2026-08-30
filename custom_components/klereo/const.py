@@ -79,12 +79,32 @@ OUTPUT_NAMES = {
 # professional access (klereo.class.php:1188). See #104.
 PRO_ONLY_OUTPUTS = frozenset({2, 3, 8, 15})
 
-# The three containers a setpoint or regulation parameter can arrive in. Measured
-# 2026-08-26 (GitHub #57): an installation returns ALL THREE in the same payload, which
-# retires the "which one does this install send?" framing of #94 — the precedence there
-# arbitrates between three containers of one response, not between installations.
-# `models.KlereoPoolDetails.settings` merges them in this order, least-established first,
-# so a later entry can only add a key and never overwrite one an install already shows.
+# The three containers a setpoint or regulation parameter can arrive in.
+#
+# Two installations are measured, and they DISAGREE — which is the fact this comment
+# exists to carry, because an earlier version of it stated a rule that only one of them
+# supports (#138):
+#
+#   * GitHub #57, @sbdomo, 2026-08-26 — all three present in the same payload.
+#   * Bioul, 2026-08-27, diagnostics export of 1.9.0 — `RegulModes` 4 keys, `params` 116,
+#     `ExtraParams` **0**.
+#
+# What that settles, and what it does NOT:
+#
+#   * The PRECEDENCE question of #94 is retired: within one response the three are merged
+#     below, least-established first, so a later entry can only ADD a key and never
+#     overwrite one an install already shows. An empty container adds nothing and breaks
+#     nothing, so no behaviour is wrong on either installation.
+#   * The COVERAGE question of #94 is NOT retired. For any key upstream reads only from
+#     `ExtraParams` — the hybrid chlorine counter `HybChl_*` (`klereo.class.php` l.356) is
+#     one — an installation with an empty `ExtraParams` cannot produce it, and nothing in
+#     this repository distinguishes "no hybrid pump" from "container not sent". Those keys
+#     remain untested on every installation we can reach.
+#
+# ⚠️ And we cannot tell WHICH of the two Bioul returns: `models.py` does
+# `dict(data.get("ExtraParams", {}))`, so an absent key and a present-but-empty one are
+# indistinguishable after parsing. Left that way deliberately — a field nobody reads is
+# noise, and the question is not currently blocking anything.
 SETTING_CONTAINERS = ("ExtraParams", "params", "RegulModes")
 
 # Which probe drives each regulation loop. Klereo documents these four top-level fields in
