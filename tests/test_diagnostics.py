@@ -158,3 +158,263 @@ class TestRedactionCoversWhatWePromise:
 
         assert probes[0]["filtered_value"] == 28.25
         assert probes[0]["type"] == 5
+
+
+# ---------------------------------------------------------------------------
+# #145 — the raw `GetPoolDetails` payload
+# ---------------------------------------------------------------------------
+
+# One `outs[]` element, measured 2026-08-30 on the Bioul installation with the OWNER's
+# own credentials — the direct API call #145 exists to make unnecessary. Eleven keys, of
+# which `KlereoOutput` parses four; `realStatus` is the one that blocks #141.
+MEASURED_OUT = {
+    "cloneSrc": -1,
+    "flags": 0,
+    "index": 0,
+    "map": 1,
+    "mode": 0,
+    "offDelay": 0,
+    "realStatus": 1,
+    "status": 1,
+    "totalTime": 1234567,
+    "type": 0,
+    "updateTime": 74,
+}
+
+# The seven fields the parser drops on the floor. Listed here rather than derived from
+# `MEASURED_OUT` so that a field silently disappearing from the fixture cannot make the
+# test that watches for them pass by watching nothing.
+UNPARSED_OUT_FIELDS = (
+    "cloneSrc", "flags", "map", "offDelay", "realStatus", "totalTime", "updateTime",
+)
+
+# One `GetPoolDetails` element, shaped after the 70 top-level keys @sbdomo pasted in
+# GitHub #57 (2026-08-26). The KEY NAMES are measured; the values are shapes, not
+# originals.
+#
+# ⚠️ The contents of `podinfo` and `register` are INVENTED — nobody has ever measured
+# them, which is precisely why they are treated as unjudged below. Nothing here asserts
+# what they contain; the tests assert only that no value of theirs reaches the export,
+# which holds whatever they turn out to carry.
+MEASURED_POOL_PAYLOAD = {
+    "idSystem": 121170,
+    "poolNickname": "Bioul",
+    "access": 10,
+    "pin": "0301-2982521-1260",
+    "compta": "AR15217",
+    "idAddress": 39377,
+    "podSerial": "POD00012345",
+    "Address": "1 rue de la Piscine, Bioul",
+    "emailNotify": "owner@example.invalid",
+    "device": 0,
+    "idLinked": None,
+    "plans": [{"index": 0, "plan64": "AAAAAAAAAAAAAAAA"}],
+    "podinfo": {"serialNumber": "POD00012345", "owner": "A Name"},
+    "register": {"customerEmail": "owner@example.invalid", "orderRef": "CMD-9912"},
+    "PumpType": 7,
+    "probes": [{"index": 16, "type": 5, "filteredValue": 28.25, "seuilMin": 10}],
+    "outs": [MEASURED_OUT],
+    "params": {"ConsigneEau": 28},
+}
+
+
+async def _export_payload(payload=None, entry_data=None):
+    """Run the real diagnostics function over a whole `GetPoolDetails` element."""
+    from custom_components.klereo.models import KlereoPoolDetails
+
+    payload = dict(MEASURED_POOL_PAYLOAD if payload is None else payload)
+    hass = MagicMock()
+    entry = MagicMock()
+    entry.as_dict.return_value = {
+        "data": entry_data or {"username": "jonbasse", "password": "secret"},
+        "options": {},
+    }
+    coordinator = MagicMock()
+    coordinator.data = {
+        "121170": KlereoSystemData(
+            info=KlereoSystemInfo.from_dict({"idSystem": 121170, "poolNickname": "Bioul"}),
+            details=KlereoPoolDetails.from_dict(payload, raw=payload),
+        )
+    }
+    hass.data = {"klereo": {entry.entry_id: coordinator}}
+    result = await async_get_config_entry_diagnostics(hass, entry)
+    return result
+
+
+def _raw(result):
+    """Return the raw pool payload out of an export."""
+    return result["coordinator_data"]["121170"]["details"]["raw"]
+
+
+class TestTheRawPayloadReachesTheExport:
+    """🔴 Criterion 1 — the export must carry what the parser drops.
+
+    The export is the only remote instrument this project has, and it was structurally
+    blind to every field the integration does not already parse — that is, to exactly the
+    fields the NEXT question will be about. #141 could not be answered from an export and
+    needed a direct API call with the owner's credentials, which no reporter can make for
+    us.
+    """
+
+    async def test_realstatus_reaches_the_export_for_every_output(self):
+        """🔴 THE test of this issue: the field that blocks #141 is in the export."""
+        result = await _export_payload()
+
+        outs = _raw(result)["outs"]
+        assert [o["realStatus"] for o in outs] == [1]
+
+    @pytest.mark.parametrize("field", UNPARSED_OUT_FIELDS)
+    async def test_each_field_the_parser_drops_reaches_the_export(self, field):
+        """Positive control, one per field: "the payload is there" must not be
+        satisfiable by an EMPTY payload being there.
+
+        Parametrised rather than batched: a batch that loses a field to a typo still
+        passes on the others, which is how an instrument comes to measure less than its
+        name claims.
+        """
+        result = await _export_payload()
+
+        assert _raw(result)["outs"][0][field] == MEASURED_OUT[field]
+
+    async def test_the_typed_output_model_did_not_grow(self):
+        """🔴 Negative control on the SCOPE: the raw payload answers the question
+        *instead of* widening the model, not as well as.
+
+        A field nothing reads is noise — #138 refused exactly that. If `KlereoOutput`
+        ever grows a `realStatus`, this test says so.
+        """
+        result = await _export_payload()
+
+        parsed = result["coordinator_data"]["121170"]["details"]["outs"][0]
+        assert set(parsed) == {"index", "status", "mode", "type"}
+
+
+class TestRedactionReachesTheRawPayload:
+    """🔴 Criteria 2 and 3 — the SECURITY claim, checked where the new data actually is.
+
+    `TO_REDACT` is a security claim: the repository asks reporters to paste this export
+    into PUBLIC issues on the strength of "credentials are redacted automatically". Adding
+    a raw payload publishes an object whose key list comes from the server and can change
+    without notice, so "it is redacted" has to be shown FROM THE RAW PAYLOAD and not only
+    from the typed object we were already looking at.
+    """
+
+    async def test_the_box_pin_is_redacted_in_the_raw_payload(self):
+        """🔴 Criterion 2. The weapon that tells "redacted" from "redacted in the one
+        place we already had our eyes on"."""
+        result = await _export_payload()
+
+        assert _raw(result)["pin"] == "**REDACTED**"
+
+    @pytest.mark.parametrize(
+        "key", ["pin", "compta", "idAddress", "podSerial", "Address", "emailNotify"]
+    )
+    async def test_each_sensitive_key_of_the_raw_payload_is_redacted(self, key):
+        """Every key GitHub #57 showed to be sensitive, checked one at a time."""
+        result = await _export_payload()
+
+        assert _raw(result)[key] == "**REDACTED**"
+
+    async def test_a_sensitive_key_nested_two_levels_deep_is_redacted(self):
+        """🔴 Criterion 3, absurdity control: depth must not be a way out.
+
+        `async_redact_data` recurses through mappings AND lists, so this should hold at
+        any depth. Asserting it rather than assuming it is the half that makes the
+        security claim true or false.
+        """
+        payload = dict(MEASURED_POOL_PAYLOAD)
+        payload["nested"] = {"level1": {"level2": {"pin": "0301-2982521-1260"}}}
+
+        result = await _export_payload(payload)
+
+        assert _raw(result)["nested"]["level1"]["level2"]["pin"] == "**REDACTED**"
+
+    async def test_a_sensitive_key_inside_a_list_of_dicts_is_redacted(self):
+        """Same control through a LIST — `outs`, `probes` and `plans` are all lists."""
+        payload = dict(MEASURED_POOL_PAYLOAD)
+        payload["linked"] = [{"pin": "0301-2982521-1260"}, {"compta": "AR15217"}]
+
+        result = await _export_payload(payload)
+
+        assert _raw(result)["linked"][0]["pin"] == "**REDACTED**"
+        assert _raw(result)["linked"][1]["compta"] == "**REDACTED**"
+
+    async def test_the_measurements_survive_redaction(self):
+        """Negative control: an export redacted into uselessness is one nobody pastes."""
+        raw = _raw(await _export_payload())
+
+        assert raw["idSystem"] == 121170
+        assert raw["poolNickname"] == "Bioul"
+        assert raw["access"] == 10
+        assert raw["probes"][0]["filteredValue"] == 28.25
+
+
+class TestTheFiveNeverJudgedKeys:
+    """🔴 Criterion 4 — `register`, `plans`, `podinfo`, `idLinked`, `device`.
+
+    Each of the five carries a written verdict in `diagnostics.py`. A key nobody has
+    judged is not a safe key: that is the fault of #122, where `username` walked past the
+    filter because nobody had enumerated what the object actually contained.
+    """
+
+    @pytest.mark.parametrize("key", ["register", "podinfo"])
+    async def test_an_unjudged_container_publishes_no_value(self, key):
+        """🔴 Contents never measured, in no source, and named after things that would
+        hold a serial or a customer record. They do not go out in clear."""
+        result = await _export_payload()
+
+        published = repr(_raw(result)[key])
+        for value in MEASURED_POOL_PAYLOAD[key].values():
+            assert str(value) not in published
+
+    @pytest.mark.parametrize("key", ["register", "podinfo"])
+    async def test_an_unjudged_container_still_names_its_keys(self, key):
+        """The exit from the redaction: a summary that names the keys without publishing
+        their values is what lets the NEXT export judge them.
+
+        Without this, redacting the two containers would just move the blind spot #145 is
+        about, with no way out that does not need the owner's credentials again.
+        """
+        result = await _export_payload()
+
+        published = _raw(result)[key]
+        assert "**REDACTED**" in published
+        for name in MEASURED_POOL_PAYLOAD[key]:
+            assert name in published
+
+    async def test_an_unjudged_container_is_summarised_wherever_it_appears(self):
+        """Uniformity: the pass runs over the WHOLE export, not over the raw payload only.
+
+        A rule applied at one address is a rule that misses the next address — the exact
+        shape of the defect this issue is about.
+        """
+        result = await _export_payload()
+        info_raw = result["coordinator_data"]["121170"]["info"]["raw"]
+
+        assert "REDACTED" in str(result["coordinator_data"])
+        assert "podinfo" not in info_raw or "**REDACTED**" in info_raw["podinfo"]
+
+    async def test_plans_stays_in_clear(self):
+        """Verdict: NOT redacted. Upstream reads it (`klereo.class.php:1095`) as a list of
+        `{index, plan64}` — the base64 time-slot programme of each output. It describes
+        when equipment runs, not who owns it, and it is what a time-slot feature reads."""
+        result = await _export_payload()
+
+        assert _raw(result)["plans"] == [{"index": 0, "plan64": "AAAAAAAAAAAAAAAA"}]
+
+    async def test_device_stays_in_clear(self):
+        """Verdict: NOT redacted. Documented as "index du bassin dans le POD"
+        (`docs/klereo-api.md`), measured `0` in GitHub #57 — an ordinal that says nothing
+        without `podSerial`, which is redacted."""
+        result = await _export_payload()
+
+        assert _raw(result)["device"] == 0
+
+    async def test_id_linked_stays_in_clear(self):
+        """Verdict: NOT redacted, on the same ground as `idSystem` — an internal Klereo
+        key naming another system, tied to no person. Measured `None` in GitHub #57.
+
+        ⚠️ It is NOT `idAddress`, the key of the postal address, which IS redacted."""
+        result = await _export_payload()
+
+        assert _raw(result)["idLinked"] is None

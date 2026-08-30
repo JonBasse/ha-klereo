@@ -152,6 +152,7 @@ class KlereoPoolDetails:
     probe_index: dict[int, KlereoProbe] = field(default_factory=dict)
     output_index: dict[int, KlereoOutput] = field(default_factory=dict)
     regulation_probes: dict[str, int] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @property
     def settings(self) -> dict[str, Any]:
@@ -172,8 +173,30 @@ class KlereoPoolDetails:
         return {**self.extra_params, **self.params, **self.regul_modes}
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> KlereoPoolDetails:
-        """Parse pool details from the API."""
+    def from_dict(
+        cls, data: dict[str, Any], raw: dict[str, Any] | None = None
+    ) -> KlereoPoolDetails:
+        """Parse pool details from the API.
+
+        `data` is the merged view the parser reads — the `GetIndex` entry for this pool
+        with the `GetPoolDetails` element laid over it. `raw` is that `GetPoolDetails`
+        element VERBATIM, kept for the diagnostics export and read by nothing else.
+
+        🔴 It is kept because the export is the only remote instrument this project has,
+        and it was structurally blind to every field this class does not name: `outs[]`
+        carries eleven keys and `KlereoOutput` parses four, so `realStatus` — the field
+        that blocks #141 — could only be seen by calling the API with the owner's own
+        credentials. No reporter can do that for us. See #145.
+
+        ⚠️ Carrying it here is NOT a licence to widen `KlereoOutput`. A field nothing
+        reads is noise; #138 refused exactly that. The raw payload answers the question
+        *instead of* growing the model, which is the whole point of doing it in the
+        export.
+
+        The two halves of the wire are disjoint and both exported: `KlereoSystemInfo.raw`
+        holds the `GetIndex` entry, this holds the `GetPoolDetails` element. Storing the
+        merged view here would publish the `GetIndex` half twice.
+        """
         probes = [
             KlereoProbe.from_dict(p)
             for p in data.get("probes", [])
@@ -208,6 +231,7 @@ class KlereoPoolDetails:
             probe_index={p.index: p for p in probes},
             output_index={o.index: o for o in outs},
             regulation_probes=_parse_regulation_probes(data),
+            raw=dict(raw) if isinstance(raw, dict) else {},
         )
 
 

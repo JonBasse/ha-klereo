@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- 🔴 **The diagnostics export now carries the raw `GetPoolDetails` payload** ([#145](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/145)). It exported `asdict()` of the typed models and nothing else, so it was **structurally blind to every field the integration does not already parse** — that is, to exactly the fields the next question is about. `outs[]` carries eleven keys and `KlereoOutput` parses four; the seven it drops (`cloneSrc`, `flags`, `map`, `offDelay`, `realStatus`, `totalTime`, `updateTime`) were invisible.
+  - This is not a comfort gap. The export is the **only remote instrument this project has** — it unblocked [#54](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/54), refuted [#117](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/117) and produced [#122](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/122). Answering [#141](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/141) needed `realStatus`, which meant a direct API call with the **owner's own credentials**. No reporter can do that for us, and we cannot ask them to.
+  - ⚠️ `KlereoSystemInfo.raw` did not cover this: it holds the **`GetIndex`** response, which carries no `outs`. The two halves stay disjoint — `info.raw` is the `GetIndex` entry, `details.raw` the `GetPoolDetails` element — so nothing is published twice.
+  - ⚠️ **`KlereoOutput` was deliberately NOT widened.** A field nothing reads is noise, and [#138](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/138) refused exactly that a week ago. The raw payload answers the question *instead of* growing the model; a negative control asserts the typed output still has four fields, so a later "while we're here" cannot pass unnoticed.
+
+### Changed
+
+- 🔴 **Five keys of that payload that nobody had ever ruled on now carry a written verdict** ([#145](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/145)). `TO_REDACT` is a **security claim**, not a convenience: reporters are asked to paste this export into **public** issues on the strength of "credentials are redacted automatically". Publishing a raw payload means publishing an object whose key list comes from the server and can change without notice — and **a key nobody has judged is not a safe key**. That was the fault of #122, one layer shallower: `username` walked past the filter because nobody had enumerated what the object actually held.
+  - **`plans` — in clear.** The only one of the five whose contents are *measured*: upstream reads it as a list of `{index, plan64}`, the base64 time-slot programme of an output (`klereo.class.php:1095`). It says when equipment runs, not who owns it, and the same schedule is already visible through the `select` entities.
+  - **`device` — in clear.** `docs/klereo-api.md` documents it as "index du bassin dans le POD", measured `0` in [GitHub #57](https://github.com/JonBasse/ha-klereo/issues/57). An ordinal that says nothing without `podSerial`, which is redacted.
+  - **`idLinked` — in clear**, on exactly the ground `idSystem` is: an internal Klereo key naming another system, tied to no person. Measured `None` in GitHub #57. ⚠️ It is **not** `idAddress`, the key of the postal address, which *is* redacted — the names are close and the verdicts are opposite.
+  - **`register` — redacted.** Contents never measured and named in **no** source: not upstream, not `docs/klereo-api.md`, not any issue. The name reads two ways and only one is safe — a hardware register dump like the `tabHW`/`tabSW` beside it, or a *registration* record, which is where a name, an e-mail or an order reference would live.
+  - **`podinfo` — redacted.** Same absence of evidence with a stronger prior: it is by name the information block of the POD, the box whose two identifiers are *both* already redacted (`podSerial`, `pin`). Redaction matches on key **names**, so the same serial repeated in there under any other spelling — `serial`, `sn`, `mac` — would have gone out in clear.
+  - 🔴 **Those two are redacted to their SHAPE, not to a blank.** Blanking them would be safe and would recreate, one level down, the very blind spot this issue is about: nobody could ever judge them from an export, and the only way out would be another direct API call with the owner's credentials. The export now names their keys without publishing a single value, so the **next** export anyone pastes settles the question. A negative control feeds the summariser a container full of values and fails if any of them reaches the output.
+  - The summary pass runs over the **whole** export, not over the raw payload alone. A rule applied at one address is a rule that misses the next address.
+
+### Verified
+
+- **The redaction reaches the raw payload, and it reaches depth.** `pin` coming back `**REDACTED**` *from the raw payload* is what distinguishes "redacted" from "redacted at the one address we already had our eyes on" — the export's own blind spot, restated. A sensitive key nested **two levels deep**, and one inside a **list of dicts**, are both asserted rather than assumed: `async_redact_data` recurses through mappings and lists, and that recursion is the half that makes the security claim true or false.
+- **Size, measured rather than discovered at a reporter's.** On a payload built from the 70 top-level keys of GitHub #57 with the measured probe and output shapes, one pool's export goes from **9.5 KiB to 22.2 KiB** — ×2.34. Comfortably pasteable for one pool; ⚠️ a **three-pool account lands near 64 KiB**, which is GitHub's per-comment limit, so multi-pool reporters should attach the file rather than paste it.
+- **374 tests** (up from 344). **Eight negative controls**, each reddening its own witness and nothing else: the coordinator not passing the payload; the coordinator passing the *merged* view instead; the model dropping it; the summary pass removed; `podinfo` dropped from the unjudged set; `coordinator_data` left unredacted; the summariser leaking values instead of key names; and the three cleared keys redacted anyway.
+
 ## [1.12.0] — 2026-08-30
 
 ### Changed

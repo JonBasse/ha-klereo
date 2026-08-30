@@ -1,7 +1,10 @@
 """Diagnostics support for Klereo."""
+from collections.abc import Mapping
 from dataclasses import asdict
+from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.components.diagnostics.const import REDACTED
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -38,6 +41,78 @@ TO_REDACT = {
 #   * `poolNickname` — user-chosen, and already visible in every entity name they paste
 #                      elsewhere, so hiding it here would be false reassurance;
 #   * probes, outs, `params`, `RegulModes` — precisely what we ask to see.
+#
+# The verdicts below are the same judgement extended to the five keys of the raw
+# `GetPoolDetails` payload that #145 added to the export and that nobody had ever ruled
+# on. A key nobody has judged is not a safe key — that is the fault of #122, where
+# `username` walked past the filter because nobody had enumerated what the object
+# actually held.
+#
+#   * `device`   — NOT redacted. `docs/klereo-api.md` documents it as "index du bassin
+#                  dans le POD (num)" and GitHub #57 measured it at `0`. An ordinal that
+#                  says nothing without `podSerial`, which is redacted; hiding it would
+#                  hide which pool of a multi-pool POD an export describes.
+#   * `idLinked` — NOT redacted, on exactly the ground `idSystem` is not: an internal
+#                  Klereo key naming another system, tied to no person. Measured `None`
+#                  in GitHub #57. ⚠️ It is NOT `idAddress`, the key of the postal
+#                  address, which IS redacted — the names are close and the verdicts are
+#                  opposite.
+#   * `plans`    — NOT redacted. The one of the five whose contents are MEASURED: upstream
+#                  reads it as a list of `{index, plan64}`, the base64 time-slot programme
+#                  of an output (`klereo.class.php:1095`). It says when equipment runs,
+#                  not who owns it, and the same schedule is already visible through the
+#                  `select` entities. It is also what a time-slot feature would read.
+#   * `register` — SUMMARISED, see below. Contents never measured, and named in no source
+#                  — not upstream, not `docs/klereo-api.md`, not any issue. The name reads
+#                  two ways and only one of them is safe: a hardware register dump, like
+#                  the harmless `tabHW`/`tabSW` beside it, or a *registration* record,
+#                  which is where a name, an e-mail or an order reference would live.
+#   * `podinfo`  — SUMMARISED, see below. Same absence of evidence, with a stronger prior:
+#                  it is by name the information block of the POD, the box whose two
+#                  identifiers are already both redacted (`podSerial`, `pin`). Redaction
+#                  recurses on key NAMES, so the same serial repeated in there under any
+#                  other spelling — `serial`, `sn`, `mac` — would go out in clear.
+UNJUDGED_CONTAINERS = {"register", "podinfo"}
+
+
+def _shape_of(value: Any) -> str:
+    """Describe a value by its KEYS and size, never by its contents."""
+    if isinstance(value, Mapping):
+        return f"dict, keys: [{', '.join(sorted(str(key) for key in value))}]"
+    if isinstance(value, list):
+        keys = sorted({str(k) for item in value if isinstance(item, Mapping) for k in item})
+        shape = f"list of {len(value)} items"
+        return f"{shape}, keys: [{', '.join(keys)}]" if keys else shape
+    return type(value).__name__
+
+
+def _summarise_unjudged(data: Any) -> Any:
+    """Replace every unjudged container with its shape, at any depth.
+
+    🔴 Why a shape and not a plain `**REDACTED**`. Blanking the two containers outright
+    would be safe and would also recreate, one level down, the exact blind spot #145 is
+    about: nobody could ever judge them from an export, so the only way out would be
+    another direct API call with the owner's credentials — the thing this issue exists to
+    make unnecessary. Naming the keys without publishing a single value costs nothing and
+    lets the NEXT export anyone pastes settle the question.
+
+    This runs over the WHOLE export rather than over the raw payload alone. A rule applied
+    at one address is a rule that misses the next address, which is the shape of the
+    defect being fixed here.
+    """
+    if isinstance(data, list):
+        return [_summarise_unjudged(item) for item in data]
+    if not isinstance(data, Mapping):
+        return data
+    summarised = {}
+    for key, value in data.items():
+        if key in UNJUDGED_CONTAINERS:
+            summarised[key] = f"{REDACTED} — never judged; {_shape_of(value)}"
+        elif isinstance(value, Mapping | list):
+            summarised[key] = _summarise_unjudged(value)
+        else:
+            summarised[key] = value
+    return summarised
 
 
 async def async_get_config_entry_diagnostics(
@@ -49,7 +124,14 @@ async def async_get_config_entry_diagnostics(
         sys_id: asdict(system_data)
         for sys_id, system_data in coordinator.data.items()
     }
+    # `async_redact_data` runs FIRST and unconditionally, so the security claim never
+    # depends on the pass below: key names are what both walks match on, and summarising
+    # a value cannot change the name above it.
     return {
-        "config_entry": async_redact_data(entry.as_dict(), TO_REDACT),
-        "coordinator_data": async_redact_data(coordinator_data, TO_REDACT),
+        "config_entry": _summarise_unjudged(
+            async_redact_data(entry.as_dict(), TO_REDACT)
+        ),
+        "coordinator_data": _summarise_unjudged(
+            async_redact_data(coordinator_data, TO_REDACT)
+        ),
     }
