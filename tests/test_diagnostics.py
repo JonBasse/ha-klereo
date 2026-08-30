@@ -5,6 +5,7 @@ import pytest
 
 from custom_components.klereo.diagnostics import (
     TO_REDACT,
+    UNJUDGED_CONTAINERS,
     async_get_config_entry_diagnostics,
 )
 from custom_components.klereo.models import (
@@ -418,3 +419,50 @@ class TestTheFiveNeverJudgedKeys:
         result = await _export_payload()
 
         assert _raw(result)["idLinked"] is None
+
+
+class TestTheReadmeStillDescribesWhatIsRedacted:
+    """🔴 The user-facing half of the same security claim.
+
+    `README.md` tells users, key by key, what the export hides — deliberately, "so you can
+    decide rather than trust a blanket promise". A list that drifts behind `TO_REDACT` is
+    worse than no list: it reads as an enumeration and is a sample.
+
+    It HAD drifted. `podSerial`, `Address` and `emailNotify` were in the set and named
+    nowhere, and #145 is what made that matter: those three ride on the `GetPoolDetails`
+    payload, which nothing exported before.
+    """
+
+    # Four fields are described in prose rather than by their wire name, because that is
+    # what the reader actually sees in Home Assistant. Anything NOT in this map has to
+    # appear verbatim — so a key added to `TO_REDACT` and to nothing else fails here.
+    README_ALIASES = {
+        "password": "password",
+        "jwt": "session token",
+        "token": "session token",
+        "login": "account username",
+        "username": "account username",
+    }
+
+    @staticmethod
+    def _readme():
+        from pathlib import Path
+
+        return (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("key", sorted(TO_REDACT))
+    def test_the_readme_names_every_redacted_key(self, key):
+        """One assertion per key: a batch that loses one still passes on the others.
+
+        A wire name is matched INSIDE ITS BACKTICKS, the way the README writes it. A bare
+        substring would let `Address` be satisfied by the `idAddress` two words away —
+        a green witness over a key named nowhere, which is the failure being guarded.
+        """
+        readme = self._readme()
+
+        assert (self.README_ALIASES.get(key) or f"`{key}`") in readme
+
+    @pytest.mark.parametrize("key", sorted(UNJUDGED_CONTAINERS))
+    def test_the_readme_names_every_summarised_container(self, key):
+        """The two blanked for a different reason are explained, not silently missing."""
+        assert f"`{key}`" in self._readme()
