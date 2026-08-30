@@ -965,3 +965,128 @@ class TestAvailabilityOfTheOtherSensorClasses:
         mock_coordinator.last_update_success = False
         for label, entity in entities.items():
             assert entity.available is False, label
+
+
+class TestSentinelSetpointsAreNotRenderedAsMeasurements:
+    """🔴 #137 — `-2000` is a flag, and the sensor was showing it as a number.
+
+    `PARAM_SENTINELS` marks a setpoint Klereo says is DISABLED (`-2000`) or UNKNOWN
+    (`-1000`). Upstream discards both (`klereo.class.php` l.873-896); `number` already
+    refuses them through `is_setpoint_offered`, and `climate` refuses them too. The
+    `sensor` path never did — so a `ConsignePH: -2000` reached a entity named *pH
+    Setpoint* and fed Home Assistant's statistics, graphs and averages as if the pool
+    were regulating to minus two thousand.
+
+    🔴 The obvious fix is the wrong one. NOT creating the entity would delete a sensor
+    people already have and break automations that reference it — the exact harm #128 and
+    #135 exist to prevent. The value is mapped, never the existence: `None` renders as
+    `unknown`, which is precisely what the sentinel says.
+
+    ⚠️ This is a latent path, not a user report. All three measured installations carry
+    real values for `ConsignePH`, `ConsigneRedox` and `ConsigneChlore`. Only `ConsigneEau`
+    is sentinel in the wild, and it stopped being a sensor in #135. Say so rather than let
+    a reader infer someone is looking at a broken dashboard.
+    """
+
+    @pytest.mark.parametrize("sentinel", [-2000, -1000])
+    def test_a_sentinel_reads_as_unknown_at_construction(self, mock_coordinator, sentinel):
+        """🔴 THE test. Both sentinels, one assertion each: -1000 ("unknown") is as wrong
+        to render as -2000 ("disabled"), and a fix that only knew about one would pass a
+        batch that mentioned both."""
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsignePH", sentinel)
+
+        assert sensor._attr_native_value is None
+
+    def test_the_entity_still_exists_on_a_sentinel_payload(self, mock_coordinator):
+        """🔴 Negative control on the CURE, not the disease.
+
+        Suppressing the entity would satisfy "no -2000 on the dashboard" and be a
+        regression: it deletes a sensor installs already have. #135 is that mistake,
+        four days old.
+        """
+        details = mock_coordinator.data["SYS1"].details
+        details.regul_modes = {"ConsignePH": -2000}
+
+        items = _extract_sensors(mock_coordinator, "SYS1", details)
+
+        assert "SYS1_param_ConsignePH" in [uid for uid, _ in items]
+
+    def test_a_real_setpoint_is_untouched(self, mock_coordinator):
+        """Positive control: without it, "masked" is compatible with "always masked"."""
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsignePH", 7.2)
+
+        assert sensor._attr_native_value == 7.2
+
+    def test_a_refresh_onto_a_sentinel_is_masked_too(self, mock_coordinator):
+        """🔴 The second assignment site. `_attr_native_value` is set in `__init__` AND in
+        `_handle_coordinator_update`; treating only one gives an entity that is right at
+        startup and wrong afterwards — or the reverse, depending on which payload arrives
+        first."""
+        mock_coordinator.data["SYS1"].details.regul_modes = {"ConsignePH": 7.2}
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsignePH", 7.2)
+        sensor.async_write_ha_state = MagicMock()
+
+        mock_coordinator.data["SYS1"].details.regul_modes["ConsignePH"] = -2000
+        sensor._handle_coordinator_update()
+
+        assert sensor._attr_native_value is None
+
+    def test_a_refresh_off_a_sentinel_restores_the_value(self, mock_coordinator):
+        """The other direction: a setpoint re-enabled must come back, not stay `unknown`.
+
+        Without this, a fix that latched on the first sentinel would pass every test
+        above and pin the entity to `unknown` forever.
+        """
+        mock_coordinator.data["SYS1"].details.regul_modes = {"ConsignePH": -2000}
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsignePH", -2000)
+        sensor.async_write_ha_state = MagicMock()
+        assert sensor._attr_native_value is None
+
+        mock_coordinator.data["SYS1"].details.regul_modes["ConsignePH"] = 7.2
+        sensor._handle_coordinator_update()
+
+        assert sensor._attr_native_value == 7.2
+
+    @pytest.mark.parametrize("value", [-1, 0])
+    def test_over_correction_control(self, mock_coordinator, value):
+        """🔴 Negative control on OVER-correction — the half that keeps the fix honest.
+
+        `-1` is not a sentinel: `NO_REFERENCE_PROBE` uses it for "this regulation has no
+        reference probe", and a setpoint of -1 is a real number. `const.py` says so in as
+        many words, calling the reuse "a false friend that happens to work".
+
+        `0` guards the other slip: a fix written `if not value` rather than
+        `if value in PARAM_SENTINELS` masks every zeroed counter in the payload, and
+        `PARAM_COUNTER_TYPES` is full of them.
+        """
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsignePH", value)
+
+        assert sensor._attr_native_value == value
+
+    def test_a_missing_key_does_not_resurrect_a_stale_reading(self, mock_coordinator):
+        """A key that vanishes from the payload keeps its last value — unchanged behaviour,
+        asserted so that the sentinel mapping cannot quietly alter it."""
+        mock_coordinator.data["SYS1"].details.regul_modes = {"ConsignePH": 7.2}
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "ConsignePH", 7.2)
+        sensor.async_write_ha_state = MagicMock()
+
+        mock_coordinator.data["SYS1"].details.regul_modes = {}
+        sensor._handle_coordinator_update()
+
+        assert sensor._attr_native_value == 7.2
+
+    def test_an_unhashable_value_does_not_crash_the_masking(self, mock_coordinator):
+        """🔴 The regression this fix could introduce, guarded before it exists.
+
+        `regul_modes` is read UNFILTERED on purpose — narrowing it would delete entities
+        installs already have (#94). So a value here is whatever Klereo sent, and
+        `value in PARAM_SENTINELS` raises `TypeError` on anything unhashable. A dict
+        arriving under some future key would then stop the whole platform from setting up,
+        turning "a setpoint reads -2000" into "no sensors at all".
+
+        The measured payloads carry only scalars there, so this is a guard, not a
+        sighting.
+        """
+        sensor = KlereoParamSensor(mock_coordinator, "SYS1", "SomeNested", {"a": 1})
+
+        assert sensor._attr_native_value == {"a": 1}
