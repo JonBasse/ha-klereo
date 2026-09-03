@@ -73,9 +73,9 @@ class TestDiagnostics:
 MEASURED_RAW = {
     "idSystem": 121170,
     "poolNickname": "Bioul",
-    "pin": "0301-2982521-1260",
-    "compta": "AR15217",
-    "idAddress": 39377,
+    "pin": "0000-0000000-0000",
+    "compta": "XX00000",
+    "idAddress": 99999999,
     "access": 10,
     "PumpType": 7,
 }
@@ -100,7 +100,7 @@ class TestRedactionCoversWhatWePromise:
         hass = MagicMock()
         entry = MagicMock()
         entry.as_dict.return_value = {
-            "data": entry_data or {"username": "jonbasse", "password": "secret"},
+            "data": entry_data or {"username": "ExampleUser", "password": "secret"},
             "options": {},
         }
         coordinator = MagicMock()
@@ -203,11 +203,11 @@ MEASURED_POOL_PAYLOAD = {
     "idSystem": 121170,
     "poolNickname": "Bioul",
     "access": 10,
-    "pin": "0301-2982521-1260",
-    "compta": "AR15217",
-    "idAddress": 39377,
+    "pin": "0000-0000000-0000",
+    "compta": "XX00000",
+    "idAddress": 99999999,
     "podSerial": "POD00012345",
-    "Address": "1 rue de la Piscine, Bioul",
+    "Address": "1 Example Street, Anytown",
     "emailNotify": "owner@example.invalid",
     "device": 0,
     "idLinked": None,
@@ -229,7 +229,7 @@ async def _export_payload(payload=None, entry_data=None):
     hass = MagicMock()
     entry = MagicMock()
     entry.as_dict.return_value = {
-        "data": entry_data or {"username": "jonbasse", "password": "secret"},
+        "data": entry_data or {"username": "ExampleUser", "password": "secret"},
         "options": {},
     }
     coordinator = MagicMock()
@@ -326,7 +326,7 @@ class TestRedactionReachesTheRawPayload:
         security claim true or false.
         """
         payload = dict(MEASURED_POOL_PAYLOAD)
-        payload["nested"] = {"level1": {"level2": {"pin": "0301-2982521-1260"}}}
+        payload["nested"] = {"level1": {"level2": {"pin": "0000-0000000-0000"}}}
 
         result = await _export_payload(payload)
 
@@ -335,7 +335,7 @@ class TestRedactionReachesTheRawPayload:
     async def test_a_sensitive_key_inside_a_list_of_dicts_is_redacted(self):
         """Same control through a LIST — `outs`, `probes` and `plans` are all lists."""
         payload = dict(MEASURED_POOL_PAYLOAD)
-        payload["linked"] = [{"pin": "0301-2982521-1260"}, {"compta": "AR15217"}]
+        payload["linked"] = [{"pin": "0000-0000000-0000"}, {"compta": "XX00000"}]
 
         result = await _export_payload(payload)
 
