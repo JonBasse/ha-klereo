@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+
+- 🔴 **Real installation identifiers were committed in the test fixtures, and are removed** ([#147](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/147)). `tests/test_diagnostics.py` carried a real box `pin`, a real `compta` customer reference and a real account `username` in clear — including inside the fixture of the class that asserts the username *is* redacted. They were introduced on 2026-08-26 by the commit that fixed [#122](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/122), stood for eight days, and were served publicly by `raw.githubusercontent.com` for that whole time. Every one is replaced with a structurally identical synthetic value.
+  - ⚠️ **This removes them from the working tree, not from the git history.** Two commits still contain them, and rewriting a public repository's history is a separate decision with its own costs. Treat these values as disclosed.
+  - 🔴 **`gitleaks` runs over the full history in CI and stayed green the entire time — correctly.** A Klereo pin and a short alphanumeric customer reference have no distinctive shape, so a scanner that searches by the *form* of a secret returns a false negative for every credential whose form is unremarkable. This is not a gitleaks misconfiguration and tuning it would not have helped.
+  - The new `tests/test_fixture_secrets.py` searches by **position** instead: it walks the AST of every file in `tests/` and requires that any literal sitting under a key in `TO_REDACT` appear on an explicit list of synthetic values. Position is a property the payload cannot hide, and the check is inverted on purpose — pasting a real payload into a fixture fails until somebody lists that value by hand, which is deliberate rather than accidental.
+
+### Changed
+
+- **The diagnostics export now publishes `podinfo`, and still summarises `register`** ([#147](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/147)). The two containers were blanked together for one shared reason — nobody had measured them — and the measurement **split them**. Measured on two installations: Bioul on 2026-09-03, and @nopbop's export of 2026-09-02.
+  - **`podinfo` is four integers**: an application number and three ping counters. The doubt was entirely about `app`, whose name — unlike the ping counters — does not imply its type; a string there could have held a build id, a serial or a MAC. It is an int in the low hundreds, and the reasoning that keeps `device` in clear applies unchanged: an ordinal says nothing without `podSerial`, which is redacted.
+  - 🔴 **`register` stays summarised for a reason that is arithmetic, not caution.** It holds the customer reference and the box pin — both already redacted by name — plus the installer id `proID`, which is **the last dash-delimited field of that pin**. Dropping the container on the reasonable-looking ground that its sensitive keys are individually covered would publish a fragment of the value just blanked.
+  - This is the defect of [#154](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/154) in a **third shape**. There, a value escaped under a different *name* (`title`, `unique_id`). Here it escapes as a *substring* — which a filter matching on key names is structurally unable to see, however complete its list of names becomes. Per-key redaction is the treatment that looks more rigorous and is the one that leaks.
+
+### Verified
+
+- **463 tests** (up from 426), thirty-seven of them new — one case per literal, so a batch that loses one still passes on the others.
+- **Guard proved discriminant**: restoring the real pin reddens exactly four cases, each naming its own file and line. It then caught a fixture value added later in this same release — its first real occasion, and it worked.
+- **Both directions of the `podinfo`/`register` split are discriminant**: putting `podinfo` back into the unjudged set reddens two tests, and taking `register` out reddens three, including the one asserting no fragment of the pin is published. That last one carries a negative control running the by-name filter over `register` alone, which shows the installer id walking out in clear beside the redacted pin — so the leak is demonstrated, not hypothesised.
+- 🔴 **Positive control on the scan itself**, carrying the whole file: a renamed key or a walk that matched nothing would make every other assertion pass vacuously, since "nothing found" and "nothing wrong" are otherwise the same green. It asserts the scan finds at least twenty values and that `pin`, `compta`, `username` and `password` are among the keys seen.
+- **Negative control**: the two real values are asserted *absent* from the synthetic list, so a list that grew to cover everything cannot masquerade as a working guard.
+
 ## [1.14.0] — 2026-09-03
 
 ### Security
