@@ -284,6 +284,12 @@ and session token, your **account username**, the box `pin` and serial (`podSeri
 Klereo's customer reference (`compta`), your installation address (`Address`) and its key
 (`idAddress`), and the notification e-mail address (`emailNotify`).
 
+Your account username is stored in **three** places, and all three are redacted: the
+credential itself, the name Home Assistant gives the integration entry (`title`), and the
+key it uses to recognise the account (`unique_id`). ⚠️ **Versions 1.13.0 and 1.13.1
+published the last two in clear** — if you attached an export from either, it contains your
+Klereo username. Upgrade before sending another, and consider the older one as carrying it.
+
 **Two more are blanked for a different reason**: `register` and `podinfo`. Nobody has ever
 measured what Klereo puts in them, and a field nobody has looked at is not a field anyone
 can call safe. Their **key names** are kept and their values removed, so a report can still

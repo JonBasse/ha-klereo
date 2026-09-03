@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from custom_components.klereo.diagnostics import (
+    ENVELOPE_IDENTITY,
+    ENVELOPE_JUDGED_SAFE,
     TO_REDACT,
     UNJUDGED_CONTAINERS,
     async_get_config_entry_diagnostics,
@@ -466,3 +468,129 @@ class TestTheReadmeStillDescribesWhatIsRedacted:
     def test_the_readme_names_every_summarised_container(self, key):
         """The two blanked for a different reason are explained, not silently missing."""
         assert f"`{key}`" in self._readme()
+
+
+class TestTheEnvelopeAroundTheCredential:
+    """🔴 The leak of GitHub #58, and the reason four green fixtures never saw it.
+
+    Every `entry.as_dict.return_value` in this file used to carry exactly two keys —
+    `data` and `options`. The object Home Assistant actually produces carries sixteen, and
+    **two of them are the account identifier under another name**: `title` is
+    `data[CONF_USERNAME]` verbatim (`config_flow.py:42`) and `unique_id` is the same string
+    lowercased (`config_flow.py:63`). `async_redact_data` matches on key names, so
+    `CONF_USERNAME` in `TO_REDACT` blanked one copy and published two.
+
+    The defect was never in the redaction logic. It was in the fixture: a fixture smaller
+    than the object cannot fail on the part it omits, and it decides what the suite is
+    able to refute. So these tests build a **real `MockConfigEntry`** rather than a dict —
+    the envelope can never silently shrink again, and a Home Assistant release that adds a
+    key adds it here too.
+    """
+
+    SENTINEL = "sentinel-klereo-account-name"
+
+    @classmethod
+    async def _export(cls, **entry_kwargs):
+        """Export a REAL config entry, not a hand-written stand-in of one."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(
+            domain="klereo",
+            version=2,  # ConfigFlow.VERSION — the fixture tracks the real flow
+            title=cls.SENTINEL,
+            unique_id=cls.SENTINEL,
+            data={"username": cls.SENTINEL, "password": "hash", "password_hashed": True},
+            **entry_kwargs,
+        )
+        hass = MagicMock()
+        coordinator = MagicMock()
+        coordinator.data = {}
+        hass.data = {"klereo": {entry.entry_id: coordinator}}
+        return await async_get_config_entry_diagnostics(hass, entry)
+
+    async def test_the_identifier_appears_nowhere_in_the_whole_export(self):
+        """🔴 THE test of this issue, and the only arm that could have caught it.
+
+        It asserts over the SERIALISED export rather than over the two keys now known to
+        be guilty. Checking `title` and `unique_id` by name would pass on exactly the
+        blindness being fixed: the previous set was complete against every key anyone had
+        thought of, and the leak was in the key nobody had.
+        """
+        import json
+
+        result = await self._export()
+
+        assert self.SENTINEL not in json.dumps(result)
+
+    @pytest.mark.parametrize("key", ["title", "unique_id"])
+    async def test_each_envelope_copy_of_the_identifier_is_redacted(self, key):
+        """One assertion per key: a batch that loses one still passes on the other."""
+        result = await self._export()
+
+        assert result["config_entry"][key] == "**REDACTED**"
+
+    async def test_the_credential_inside_data_is_still_redacted(self):
+        """Regression guard for #122: fixing the envelope must not unfix the payload."""
+        result = await self._export()
+
+        assert result["config_entry"]["data"]["username"] == "**REDACTED**"
+        assert result["config_entry"]["data"]["password"] == "**REDACTED**"
+
+    async def test_the_useful_envelope_keys_survive(self):
+        """🔴 Negative control: an export redacted into uselessness is one nobody pastes.
+
+        Without this arm, blanking the whole envelope would pass the test above — and the
+        diagnostics would stop naming which integration, which version and which flow the
+        entry came from, which is what makes a report actionable.
+        """
+        result = await self._export()
+        envelope = result["config_entry"]
+
+        assert envelope["domain"] == "klereo"
+        assert envelope["source"] == "user"
+        assert envelope["version"] == 2
+        assert envelope["disabled_by"] is None
+
+    async def test_the_judged_sets_cover_the_real_envelope_exactly(self):
+        """🔴 The arm that fails when Home Assistant ADDS a key.
+
+        `ENVELOPE_JUDGED_SAFE` plus `ENVELOPE_IDENTITY` plus the two deliberately
+        summarised containers must account for every key of the real object. When a future
+        release adds one, this fails and someone has to rule on it — instead of the key
+        riding out in clear because nobody knew it existed. That is the failure this whole
+        class exists to make impossible a third time.
+        """
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        real = set(MockConfigEntry(domain="klereo").as_dict())
+        summarised = {"discovery_keys", "subentries"}
+
+        assert real == ENVELOPE_JUDGED_SAFE | ENVELOPE_IDENTITY | summarised
+
+    async def test_an_unjudged_envelope_key_is_summarised_not_published(self):
+        """A key in neither set publishes its SHAPE, never its value — fail closed.
+
+        Positive control for the branch that will run the day the assertion above starts
+        failing: whatever that key holds, it does not reach the export.
+        """
+        from custom_components.klereo.diagnostics import _redact_envelope
+
+        result = _redact_envelope({"a_key_from_a_future_release": {"secret": "value"}})
+
+        assert "value" not in str(result)
+        assert result["a_key_from_a_future_release"] == (
+            "**REDACTED** — never judged; dict, keys: [secret]"
+        )
+
+    @pytest.mark.parametrize("key", sorted(["title", "unique_id"]))
+    def test_the_readme_names_every_redacted_envelope_key(self, key):
+        """The README enumerates what the export hides; these two belong in that list.
+
+        Same reasoning as the `TO_REDACT` version above — worse here, because `README.md`
+        promised the "account username" was hidden while the envelope published it twice.
+        """
+        from pathlib import Path
+
+        readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+
+        assert f"`{key}`" in readme
