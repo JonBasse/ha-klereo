@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+
+- 🔴 **The diagnostics export no longer publishes your Klereo username** ([#154](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/154)). `data.username` was redacted; `title` and `unique_id` — which carry the **same string** under different names — were not. `async_redact_data` matches on key *names*, and `config_flow.py` assigns the account name to both (`title = data[CONF_USERNAME]` verbatim at l.42, lowercased into `unique_id` at l.63), so the filter blanked one copy and published two. Reported by [@nopbop](https://github.com/JonBasse/ha-klereo/issues/58) in the first export sent after 1.13.0 invited reporters to attach one.
+  - ⚠️ **1.13.0 and 1.13.1 are affected.** An export produced by either contains your Klereo username in clear. The README now says so where it previously promised the opposite.
+  - 🔴 **The envelope is judged as a population, not patched by two names.** Adding `title` and `unique_id` to `TO_REDACT` would fix this leak and leave the next one armed — it is the third time in this file that a value has walked past the filter under a name nobody had enumerated (#122, #147, this). Every one of the sixteen keys of `ConfigEntry.as_dict()` now carries a verdict, and a key in **neither** set is summarised to its shape instead of published: when a Home Assistant release adds a field, it fails closed and a test demands somebody rule on it.
+  - ⚠️ **They are deliberately NOT in `TO_REDACT`.** That set recurses at every depth, and `title` is a word Klereo could plausibly use inside a payload we want to read — blanking it everywhere would trade this leak for a blind spot. The remedy is applied to the envelope and nowhere else.
+
+### Verified
+
+- **406 tests** (up from 397), ten of them new. The defect was never in the redaction logic — it was in the **fixture**: all four `entry.as_dict.return_value` stubs carried exactly `data` and `options`, so the twelve envelope keys the real object also carries could not be asserted on, and the suite was green over a leak it was structurally unable to see. The new tests build a real `MockConfigEntry`, so the fixture can never again be smaller than the object it stands for.
+- **The witness is discriminant, proved by running it against the unfixed code**: neutralising the envelope pass reddens exactly three tests and nothing else.
+- **The strongest arm asserts over the serialised export**, not over the two keys now known to be guilty — checking `title` and `unique_id` by name would pass on precisely the blindness being fixed, since the previous set was already complete against every key anyone had thought of.
+- **Two negative controls**: the useful envelope keys (`domain`, `source`, `version`, `disabled_by`) are asserted to survive, because an export redacted into uselessness is one nobody pastes; and the credential inside `data` is re-asserted, so fixing the envelope cannot unfix #122.
+
 ## [1.13.1] — 2026-08-30
 
 ### Fixed
