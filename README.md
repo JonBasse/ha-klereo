@@ -295,10 +295,16 @@ key it uses to recognise the account (`unique_id`). ⚠️ **Versions 1.13.0 and
 published the last two in clear** — if you attached an export from either, it contains your
 Klereo username. Upgrade before sending another, and consider the older one as carrying it.
 
-**Two more are blanked for a different reason**: `register` and `podinfo`. Nobody has ever
-measured what Klereo puts in them, and a field nobody has looked at is not a field anyone
-can call safe. Their **key names** are kept and their values removed, so a report can still
-tell us what is in there without publishing it.
+**One more is blanked for a different reason**: `register`. Its **key names** are kept and
+its values removed, so a report can still tell us what is in there without publishing it.
+It holds your Klereo customer reference and the box `pin` — both redacted by name anyway —
+but also the installer id, which is **the final segment of that same pin**. Blanking the
+pin while publishing the installer id would hand out a piece of the value just hidden, so
+the whole container stays summarised.
+
+`podinfo` used to be blanked for the same "nobody has measured it" reason, and since 1.15.0
+it is **not**: measured on two installations it holds four integers — an application number
+and three ping counters — none of which identifies a person or a box.
 
 **What is not redacted**, because it is what the report needs and none of it identifies you:
 your system id, your pool's nickname, the account access level, the pool's index in the box,
