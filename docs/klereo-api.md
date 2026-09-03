@@ -9,6 +9,11 @@
 >
 > Il est committé ici parce qu'un commentaire de tracker n'est pas un support durable, et qu'aucune
 > autre copie n'existe.
+>
+> **⚠️ Ce fichier n'a plus une seule provenance.** Depuis le relevé du **2026-09-03** (#147) il
+> porte aussi ce que le **plugin Jeedom amont** et **notre propre `api.py`** savent de l'API, dans
+> les sections marquées. Chaque affirmation nomme sa source, parce qu'elles n'ont pas le même
+> poids : voir § *Surface complète*.
 
 ## Comment lire ce fichier — trois réserves qui portent
 
@@ -54,6 +59,38 @@ est une option *persistée*. Voir #139.
 ⚠️ **Ce que la source ne dit pas** : ni le seuil, ni la fenêtre, ni si quelqu'un a été banni. Ce
 qui est établi, c'est que sonder plus vite est **inutile** et que Klereo **prévient**. C'est assez
 pour corriger le défaut, et insuffisant pour affirmer que 5 minutes bannissait.
+
+---
+
+## Surface complète — les trois sources croisées
+
+Relevé le **2026-09-03** (#147). Jusque-là ce fichier décrivait **une** source ; personne n'avait
+croisé les trois, et le croisement change la carte : **chaque source ignore au moins un endpoint
+que les deux autres connaissent.**
+
+| Endpoint | Charge utile | Doc off. | Amont Jeedom | `api.py` |
+|---|---|:--:|:--:|:--:|
+| `GetJWT.php` | `login`, `password` (SHA-1) | ✅ | ✅ | ✅ |
+| `GetIndex.php` | — (GET, bearer) | ✅ | ✅ | ✅ |
+| `GetPoolDetails.php` | `poolID` | ✅ | ✅ | ✅ |
+| `SetOut.php` | `poolID`, `outIdx`, `newMode`, `newState`, `comMode` | ✅ | ✅ | ✅ |
+| `SetParam.php` | `poolID`, `paramID`, `newValue`, `comMode` | 🔴 **absent** | ✅ | ✅ |
+| `SetAutoOff.php` | `poolID`, `outIdx`, `offDelay`, `comMode` | 🔴 **absent** | ✅ | 🔴 **absent** |
+| `CommandStatus.php` | `cmdID` | ✅ | ❌ | ✅ |
+| `WaitCommand.php` | `cmdID` | ✅ | ✅ | ❌ écarté (#140) |
+
+**Les trois sources et ce que chacune vaut.** La doc officielle est la seule *officielle*, et elle
+est **élidée** — une absence n'y prouve rien (réserve 1). L'amont est une **réimplémentation**,
+donc un témoignage sur l'API et pas l'API — mais c'est du code qui tourne chez des utilisateurs,
+donc ce qu'il appelle **existe**. `api.py` est ce qu'on expédie.
+
+⚠️ **Deux endpoints fantômes.** `GetToken.php` et `GetInfos.php` apparaissent dans la source
+officielle et **n'existent pas** : ce sont des cibles de liens Markdown abîmées par le collage,
+déjà écartées par la réserve 2. Les compter ferait une surface de dix endpoints au lieu de huit.
+
+🔴 **`SetParam.php` est absent de la doc officielle et on l'expédie depuis #128.** Il n'est donc
+adossé qu'à l'amont. Ce n'est pas une raison de le retirer — il fonctionne chez de vrais
+utilisateurs — mais toute affirmation sur sa forme repose sur une seule source.
 
 ---
 
@@ -147,7 +184,7 @@ Chaque élément de `response[]` :
 | `access` | droit d'accès **spécifique à ce bassin** |
 | `podSerial` | numéro d'identification unique du POD de connexion (str) |
 | `device` | index du bassin dans le POD (num) |
-| `pin` | numéro PIN du boîtier de connexion (str) |
+| `pin` | numéro PIN du boîtier de connexion (str) — **sortie seulement**, voir § *Le PIN du boîtier* |
 | `probes[]` | array des capteurs du bassin |
 | `EauCapteur` | `index` dans `probes[]` du capteur principal régulant la **température eau** |
 | `pHCapteur` | idem pour le capteur principal régulant le **pH** |
@@ -293,6 +330,105 @@ C'est #106, et c'est la conséquence la plus lourde de ce document.
 
 ---
 
+### Écrire un paramètre de régulation — `SetParam.php`
+
+**Source : amont uniquement** (`klereo.class.php`, `function setParam`). Absent de la
+documentation Klereo.
+
+**URL :** `https://connect.klereo.fr/php/SetParam.php` · **POST**, `Authorization: Bearer <jwt>`
+
+```
+poolID    = int
+paramID   = str      ← le nom du paramètre, p. ex. ConsigneEau
+newValue  = <valeur>
+comMode   = 1
+```
+
+Même protocole en deux étapes que `SetOut` : le retour porte un `cmdID` à confirmer.
+
+✅ **Vérifié le 2026-09-03 : notre `api.py:302-319` envoie les quatre champs sous les mêmes noms
+que l'amont**, `newValue` compris. Les deux implémentations s'accordent à l'octet près — ce qui
+ne rend pas la forme *officielle*, mais retire l'hypothèse d'une divergence silencieuse entre la
+seule source et le seul consommateur.
+
+---
+
+### Poser un délai d'extinction automatique — `SetAutoOff.php`
+
+🔴 **Capacité non exposée par l'intégration.** C'est le seul point de la matrice où l'amont est
+**seul** à savoir quelque chose d'actionnable.
+
+**Source : amont uniquement** (`klereo.class.php:1280-1299`, `function setAutoOff`).
+
+**URL :** `https://connect.klereo.fr/php/SetAutoOff.php` · **POST**, `Authorization: Bearer <jwt>`
+
+```
+poolID    = int
+outIdx    = int
+offDelay  = int
+comMode   = 1
+```
+
+**On LIT déjà `offDelay`** — il est arrivé dans l'export brut avec #145, et @nopbop a relevé
+`offDelay: 5` sur sa sortie 1 (GitHub #58, 2026-09-02). Le champ est donc réel et renseigné en
+production ; il n'a simplement jamais eu de chemin d'écriture ici.
+
+⚠️ **Non mesuré : l'unité et la borne.** `5` est compatible avec des minutes comme avec des heures,
+et aucune des deux sources ne le dit. ⚠️ **Non mesuré : l'existence côté serveur.** Elle est
+attestée par du code amont qui tourne, pas par une réponse. C'est un endpoint d'**écriture** :
+le sonder à l'aveugle change la configuration d'un vrai bassin.
+
+---
+
+## La programmation horaire — `plans` / `plan64`
+
+Chaque sortie porte un `plan64` : la programmation horaire de l'équipement, en base64. L'amont
+sait la décoder (`klereo.class.php`, `static function plan2arr`), et c'est ce que le commentaire de
+`diagnostics.py` annonçait comme « ce qu'une fonctionnalité de créneaux lirait ».
+
+**Le décodage, et ses DEUX inversions** — se tromper sur l'une des deux rend un planning
+plausible et faux :
+
+1. `unpack('h*')` en PHP rend le **quartet de poids faible de chaque octet en premier** ;
+2. la boucle interne lit les bits de l'indice 3 vers 0, donc **bit de poids faible d'abord** dans
+   chaque quartet.
+
+Un bit = un créneau, dans l'ordre chronologique de la journée.
+
+🔴 **La granularité n'est pas mesurée.** Un `plan64` de 12 octets donnerait 96 bits, soit un
+créneau de 15 minutes sur 24 h — mais cette longueur vient d'une **fixture inventée**, pas d'une
+charge utile réelle. Un seul relevé la confirme ou la casse, et tant qu'il n'a pas eu lieu, ce
+paragraphe est une déduction et non un fait.
+
+✅ **Aucun endpoint d'écriture de programmation n'existe dans les trois sources.** Une
+fonctionnalité de créneaux serait donc **en lecture seule** — la moitié qui ne peut casser
+l'installation de personne.
+
+---
+
+## Le PIN du boîtier — une SORTIE, jamais une entrée
+
+Question posée pour une raison de sécurité (#147) : *que permet la possession du seul PIN ?*
+
+**Dans toute la surface connue : rien.** Deux sources indépendantes concordent, et l'une le fait
+par une absence particulièrement nette :
+
+- **Doc officielle** — `pin` apparaît **une seule fois**, comme champ *rendu* par
+  `GetPoolDetails` (« numéro PIN du boîtier de connexion »). Aucun endpoint ne le prend en
+  paramètre.
+- **Amont Jeedom** — `grep -c pin` sur les 1 716 lignes de `klereo.class.php` rend **0**. La
+  réimplémentation la plus complète qui existe ne le lit ni ne l'envoie jamais.
+
+Et il n'est obtenable qu'**après** authentification JWT : le posséder ne raccourcit aucun chemin,
+puisqu'il faut déjà le compte pour l'avoir.
+
+⚠️ **Portée du verdict.** Il porte sur la surface **connue**. Il ne dit pas qu'aucun endpoint non
+documenté n'accepte un PIN — et la question n'a délibérément **pas** été sondée : deviner des noms
+d'endpoints chez un tiers qui menace de bannir ferait porter le risque sur le compte de
+l'utilisateur.
+
+---
+
 ## Ce que ce document NE règle PAS
 
 - **Le conteneur des consignes** (#94) — `params` vs `RegulModes` vs `ExtraParams`. Les listes de
@@ -302,3 +438,12 @@ C'est #106, et c'est la conséquence la plus lourde de ce document.
   ce qui reste notre meilleure source sur ce point.
 - **Ce que `newMode` vaut sur les sorties 2, 3, 8 et 15** — la doc dit que la valeur diffère, jamais
   ce qu'elle vaut.
+- **L'unité et la borne d'`offDelay`** (§ *`SetAutoOff.php`*) — `5` est compatible avec des minutes
+  comme avec des heures. Aucune des trois sources ne tranche.
+- **La longueur réelle de `plan64`** (§ *La programmation horaire*) — elle décide de la granularité
+  des créneaux, et la valeur dont on dispose vient d'une fixture **inventée**.
+- **L'existence côté serveur de `SetAutoOff.php`** — attestée par du code amont qui tourne, jamais
+  par une réponse. C'est un endpoint d'écriture ; le sonder n'est pas gratuit.
+- **Ce qu'un endpoint NON documenté accepterait** — hors périmètre par décision, pas par oubli :
+  deviner des noms chez un tiers qui menace de bannir ferait porter le risque sur le compte de
+  l'utilisateur.

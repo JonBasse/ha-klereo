@@ -95,6 +95,16 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
 > has. Read it before inferring anything about the wire from the Jeedom plugin. ⚠️ Its field lists
 > for `GetIndex` / `GetPoolsDetails` are **elided in the source**, so it does **not** settle the
 > setpoint-container question below — that file's header names what it leaves open.
+>
+> 🔴 **It is no longer a single-source file.** Since the 2026-09-03 survey (#147) it also carries
+> what the **upstream Jeedom plugin** and **our own `api.py`** know, cross-tabulated in its
+> § *Surface complète* — and the crossing matters, because **each of the three sources misses at
+> least one endpoint the other two have**. Two consequences you will otherwise get wrong:
+> `SetParam.php`, which we have shipped since #128, is **absent from Klereo's own documentation**;
+> and `SetAutoOff.php` — which writes the `offDelay` we already read — exists upstream and **is
+> not implemented here**. ⚠️ `GetToken.php` and `GetInfos.php` appear in the official source and
+> **do not exist**: they are broken Markdown link targets, and counting them yields ten endpoints
+> where there are eight.
 
 - **`models.py`** — typed dataclasses (`KlereoProbe`, `KlereoOutput`, `KlereoSystemData`, …).
   The coordinator returns `dict[str, KlereoSystemData]`, **never raw API dicts** — keep it that way.
