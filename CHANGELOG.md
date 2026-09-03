@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- 🔴 **Credentials that log in but match no pool are now refused at setup, with a message that names the cause** ([#155](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/155)). The configuration field was labelled **Email**; this API matches only the Klereo **username**. An e-mail address authenticates *successfully* and then returns no pool, so `validate_input` — which only ever called `login()` — declared success, the entry was created, and the user was left with an integration carrying zero entities and no error anywhere. Reported by [@bernardPetit](https://github.com/JonBasse/ha-klereo/issues/56) on 2026-06-08, who diagnosed it himself and waited 87 days.
+  - **Authentication was never the question being asked.** The flow now reads the pool listing too and raises `NoPoolsFound`, which is deliberately **not** a subclass of `InvalidAuth`: collapsing them would tell the reporter his password was wrong, when it is the only part of his input that was right.
+  - **The label is fixed in all four places** it lived — `strings.json` and `translations/en.json`, `user` and `reauth_confirm` — plus a `data_description` that says in words that this is *not* the e-mail address. Renaming alone would not have been enough: Klereo's own app accepts the e-mail at sign-in, so the habit has to be contradicted, not just unlabelled.
+  - **A listing failure stays `cannot_connect`.** An unreachable API and an empty pool list are different facts, and only the second is about the username — reporting the first as `no_pools` would send someone whose network is down hunting for their Klereo username.
+  - The shape-juggling that reads the pool list is now `api.extract_system_list`, shared with the coordinator rather than copied, so the two cannot come to disagree about what "no pools" means.
+
+### Verified
+
+- **417 tests** (up from 397), twenty of them new. **Witness proved discriminant**: removing the guard reddens exactly seven tests and nothing else.
+- **Six shapes of "no pool"** are refused, one parametrised case each rather than one batch — `{"response": []}`, `{"list_systems": []}`, `[]`, `{}`, `None` and a non-container.
+- 🔴 **Negative control**: a real pool still validates. Without it, `raise NoPoolsFound` unconditionally would pass every other arm — a guard that rejects everyone is indistinguishable from one that works.
+- ⚠️ **The fixture encoded the bug.** `USER_INPUT` used `test@example.com` as the username and asserted it back as the entry title, so the suite was green over precisely the input being reported as broken. It is now a username, and the two tests that stubbed only `login()` — the same omission the flow itself had — stub the listing too.
+
 ## [1.13.1] — 2026-08-30
 
 ### Fixed

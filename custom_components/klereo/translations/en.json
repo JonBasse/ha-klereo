@@ -5,23 +5,30 @@
                 "title": "Klereo Connect",
                 "description": "Enter your Klereo Connect credentials.",
                 "data": {
-                    "username": "Email",
+                    "username": "Klereo username",
                     "password": "Password"
+                },
+                "data_description": {
+                    "username": "Your Klereo Connect **username** — not your e-mail address. The Klereo app accepts either at sign-in, but this API only matches the username, and an e-mail address authenticates successfully and then returns no pools at all."
                 }
             },
             "reauth_confirm": {
                 "title": "Re-authenticate Klereo",
                 "description": "Your Klereo credentials have expired. Please re-enter them.",
                 "data": {
-                    "username": "Email",
+                    "username": "Klereo username",
                     "password": "Password"
+                },
+                "data_description": {
+                    "username": "Your Klereo Connect **username** — not your e-mail address. The Klereo app accepts either at sign-in, but this API only matches the username, and an e-mail address authenticates successfully and then returns no pools at all."
                 }
             }
         },
         "error": {
             "cannot_connect": "Unable to connect to the Klereo API. Check your network connection.",
-            "invalid_auth": "Invalid username or password.",
-            "unknown": "An unexpected error occurred."
+            "invalid_auth": "Invalid username or password. If you entered your e-mail address, try your Klereo username instead.",
+            "unknown": "An unexpected error occurred.",
+            "no_pools": "Your credentials were accepted, but no pool is attached to that account. This almost always means an e-mail address was entered where the Klereo **username** is required — the login succeeds either way, but only the username matches a pool."
         },
         "abort": {
             "already_configured": "This account is already configured.",
