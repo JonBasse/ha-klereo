@@ -17,6 +17,7 @@ from .api import (
     CMD_STATUS_OK,
     KlereoApi,
     KlereoApiError,
+    extract_system_list,
 )
 from .const import SCAN_INTERVAL_MIN_MINUTES, SCAN_INTERVAL_MINUTES, SETTING_CONTAINERS
 from .models import KlereoPoolDetails, KlereoSystemData, KlereoSystemInfo
@@ -51,17 +52,7 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             systems_response = await self.api.get_systems()
             _LOGGER.debug("Systems response: %s", systems_response)
 
-            if isinstance(systems_response, dict):
-                system_list = systems_response.get(
-                    "response", systems_response.get("list_systems", [])
-                )
-            elif isinstance(systems_response, list):
-                system_list = systems_response
-            else:
-                system_list = []
-
-            if not isinstance(system_list, list):
-                system_list = []
+            system_list = extract_system_list(systems_response)
 
             # Build system map
             data: dict[str, KlereoSystemData] = {}

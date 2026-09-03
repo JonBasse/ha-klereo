@@ -45,7 +45,12 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 
 1. Go to **Settings** > **Devices & Services**.
 2. Click **Add Integration** and search for **Klereo**.
-3. Enter your Klereo Connect credentials (the same email and password you use on [connect.klereo.fr](https://connect.klereo.fr)).
+3. Enter your Klereo Connect **username** and password — the same ones you use on [connect.klereo.fr](https://connect.klereo.fr).
+
+   ⚠️ **This is the username, not your e-mail address.** Klereo's own app accepts either at
+   sign-in, but this API only matches the username: an e-mail address logs in successfully and
+   then returns **no pools at all**. If setup reports that no pool is attached to your account,
+   this is why.
 4. Click **Submit**.
 
 Your pool systems, sensors, switches, and number entities will be created automatically.

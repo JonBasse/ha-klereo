@@ -121,6 +121,35 @@ OUTPUT_MODES = {
 }
 
 
+def extract_system_list(systems_response: Any) -> list:
+    """Pull the list of pool systems out of whatever shape `GetIndex` answered with.
+
+    🔴 Shared by the coordinator and the config flow ON PURPOSE. GitHub #56 is a login
+    that SUCCEEDS and returns zero pools — the flow declared success, the coordinator
+    later found nothing, and the user got a working integration with no entities and no
+    error anywhere. Catching that at setup means the flow has to read the same list the
+    coordinator will, and a second hand-rolled copy of this shape-juggling is how the two
+    would come to disagree about what "no pools" means.
+
+    Returns `[]` for every shape that is not a list of systems — the caller decides
+    whether empty is an error. Here it is never an exception, because on the coordinator's
+    side an empty refresh is a transient the retry loop handles.
+    """
+    if isinstance(systems_response, dict):
+        system_list = systems_response.get(
+            "response", systems_response.get("list_systems", [])
+        )
+    elif isinstance(systems_response, list):
+        system_list = systems_response
+    else:
+        system_list = []
+
+    if not isinstance(system_list, list):
+        system_list = []
+
+    return system_list
+
+
 class KlereoApiError(Exception):
     """Error from the Klereo API."""
 

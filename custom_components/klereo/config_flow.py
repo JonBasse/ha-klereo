@@ -9,7 +9,7 @@ from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import KlereoApi, KlereoApiError
+from .api import KlereoApi, KlereoApiError, extract_system_list
 from .const import DOMAIN, SCAN_INTERVAL_MIN_MINUTES, SCAN_INTERVAL_MINUTES, hash_password
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +38,24 @@ async def validate_input(hass: core.HomeAssistant, data: dict) -> dict:
         raise CannotConnect from err
     except (aiohttp.ClientError, TimeoutError) as err:
         raise CannotConnect from err
+
+    # 🔴 Authentication is not the question the user is asking. GitHub #56: an e-mail
+    # address LOGS IN and then matches no pool, so the flow declared success, created the
+    # entry, and left the reporter with an integration carrying zero entities and no error
+    # anywhere to explain it. He diagnosed it himself and told us the cause; nobody had
+    # given the flow an arm that could have said it.
+    #
+    # ⚠️ This is deliberately checked HERE and not left to the coordinator. By the time
+    # the first refresh runs, the entry exists and the flow has already reported success —
+    # an empty refresh there is a transient, and treating it as fatal would tear down
+    # working installations whenever Klereo answers slowly.
+    try:
+        systems = extract_system_list(await api.get_systems())
+    except (KlereoApiError, aiohttp.ClientError, TimeoutError) as err:
+        raise CannotConnect from err
+
+    if not systems:
+        raise NoPoolsFound
 
     return {"title": data[CONF_USERNAME]}
 
@@ -73,6 +91,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
+            except NoPoolsFound:
+                errors["base"] = "no_pools"
             except Exception:
                 _LOGGER.exception("Unexpected exception during Klereo setup")
                 errors["base"] = "unknown"
@@ -109,6 +129,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
+            except NoPoolsFound:
+                errors["base"] = "no_pools"
             except Exception:
                 _LOGGER.exception("Unexpected exception during Klereo reauth")
                 errors["base"] = "unknown"
@@ -124,6 +146,14 @@ class CannotConnect(HomeAssistantError):
 
 class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
+
+class NoPoolsFound(HomeAssistantError):
+    """Credentials were accepted and matched no pool.
+
+    Distinct from `InvalidAuth` on purpose: the password was right. Collapsing the two
+    would send the reporter of GitHub #56 back to check a password that was never wrong.
+    """
 
 
 def options_schema(current: int) -> vol.Schema:
