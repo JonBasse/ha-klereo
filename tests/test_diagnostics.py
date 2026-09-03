@@ -195,10 +195,14 @@ UNPARSED_OUT_FIELDS = (
 # GitHub #57 (2026-08-26). The KEY NAMES are measured; the values are shapes, not
 # originals.
 #
-# ⚠️ The contents of `podinfo` and `register` are INVENTED — nobody has ever measured
-# them, which is precisely why they are treated as unjudged below. Nothing here asserts
-# what they contain; the tests assert only that no value of theirs reaches the export,
-# which holds whatever they turn out to carry.
+# ⚠️ `register`'s contents are INVENTED, which is precisely why it stays unjudged below.
+# Nothing here asserts what it contains; the tests assert only that no value of its
+# reaches the export, which holds whatever it turns out to carry.
+#
+# 🔴 `podinfo` is the exception, and its SHAPE is measured: four integers, seen on Bioul
+# and on @nopbop's export (#147). The values below are synthetic, the shape is not — and
+# `register`'s `proID` is deliberately written as the last dash-delimited field of `pin`,
+# because that relation is measured and is the whole reason `register` stays summarised.
 MEASURED_POOL_PAYLOAD = {
     "idSystem": 121170,
     "poolNickname": "Bioul",
@@ -212,8 +216,8 @@ MEASURED_POOL_PAYLOAD = {
     "device": 0,
     "idLinked": None,
     "plans": [{"index": 0, "plan64": "AAAAAAAAAAAAAAAA"}],
-    "podinfo": {"serialNumber": "POD00012345", "owner": "A Name"},
-    "register": {"customerEmail": "owner@example.invalid", "orderRef": "CMD-9912"},
+    "podinfo": {"app": 297, "pingFail": 90, "pingSent": 11766, "pongRx": 11522},
+    "register": {"compta": "XX00000", "lastUpdate": 1713518203, "pin": "1111-2222222-3333", "proID": 3333},
     "PumpType": 7,
     "probes": [{"index": 16, "type": 5, "filteredValue": 28.25, "seuilMin": 10}],
     "outs": [MEASURED_OUT],
@@ -355,12 +359,15 @@ class TestRedactionReachesTheRawPayload:
 class TestTheFiveNeverJudgedKeys:
     """🔴 Criterion 4 — `register`, `plans`, `podinfo`, `idLinked`, `device`.
 
+    ⚠️ `podinfo` LEFT this set in #147: two installations measured it as four integers.
+    Its tests are in `TestPodinfoIsJudgedAndRegisterIsNot` below.
+
     Each of the five carries a written verdict in `diagnostics.py`. A key nobody has
     judged is not a safe key: that is the fault of #122, where `username` walked past the
     filter because nobody had enumerated what the object actually contained.
     """
 
-    @pytest.mark.parametrize("key", ["register", "podinfo"])
+    @pytest.mark.parametrize("key", ["register"])
     async def test_an_unjudged_container_publishes_no_value(self, key):
         """🔴 Contents never measured, in no source, and named after things that would
         hold a serial or a customer record. They do not go out in clear."""
@@ -370,7 +377,7 @@ class TestTheFiveNeverJudgedKeys:
         for value in MEASURED_POOL_PAYLOAD[key].values():
             assert str(value) not in published
 
-    @pytest.mark.parametrize("key", ["register", "podinfo"])
+    @pytest.mark.parametrize("key", ["register"])
     async def test_an_unjudged_container_still_names_its_keys(self, key):
         """The exit from the redaction: a summary that names the keys without publishing
         their values is what lets the NEXT export judge them.
@@ -395,7 +402,7 @@ class TestTheFiveNeverJudgedKeys:
         info_raw = result["coordinator_data"]["121170"]["info"]["raw"]
 
         assert "REDACTED" in str(result["coordinator_data"])
-        assert "podinfo" not in info_raw or "**REDACTED**" in info_raw["podinfo"]
+        assert "register" not in info_raw or "**REDACTED**" in info_raw["register"]
 
     async def test_plans_stays_in_clear(self):
         """Verdict: NOT redacted. Upstream reads it (`klereo.class.php:1095`) as a list of
@@ -594,3 +601,68 @@ class TestTheEnvelopeAroundTheCredential:
         readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
 
         assert f"`{key}`" in readme
+
+
+class TestPodinfoIsJudgedAndRegisterIsNot:
+    """🔴 #147 — the two containers were blanked together for one shared reason, "nobody
+    has measured them", and the measurement SPLIT them.
+
+    Measured on Bioul 2026-09-03, second installation from @nopbop's export 2026-09-02.
+    """
+
+    async def test_every_podinfo_counter_reaches_the_export(self):
+        """`podinfo` holds four integers and none of them identifies anyone.
+
+        The doubt was entirely about `app`, whose name — unlike the three ping counters —
+        does not imply its type. A string there could have held a build id, a serial or a
+        MAC; it is an int in the low hundreds. The same reasoning that keeps `device` in
+        clear applies: an ordinal says nothing without `podSerial`, which is redacted.
+        """
+        result = await _export_payload()
+
+        podinfo = _raw(result)["podinfo"]
+        assert podinfo == {"app": 297, "pingFail": 90, "pingSent": 11766, "pongRx": 11522}
+
+    async def test_podinfo_is_no_longer_summarised_anywhere(self):
+        """The container is gone from the unjudged set, not merely absent from one path."""
+        from custom_components.klereo.diagnostics import UNJUDGED_CONTAINERS
+
+        assert "podinfo" not in UNJUDGED_CONTAINERS
+        assert "REDACTED" not in str(_raw(await _export_payload())["podinfo"])
+
+    async def test_register_publishes_no_fragment_of_the_redacted_pin(self):
+        """🔴 THE reason `register` stays summarised, and it is arithmetic, not policy.
+
+        `proID` is the LAST DASH-DELIMITED FIELD OF `pin`. `pin` is redacted by name and
+        `proID` is not, so dropping `register` from the unjudged set — on the perfectly
+        reasonable ground that its two sensitive keys are individually covered — would
+        publish a fragment of the value just blanked.
+
+        This is the defect of #154 in a third shape. There a value escaped under a
+        different NAME; here it escapes as a SUBSTRING, which a filter matching on key
+        names is structurally unable to see however complete its list of names becomes.
+        """
+        payload = dict(MEASURED_POOL_PAYLOAD)
+        pin_tail = payload["register"]["pin"].rsplit("-", 1)[1]
+        assert str(payload["register"]["proID"]) == pin_tail, "fixture lost the relation"
+
+        published = str(_raw(await _export_payload(payload))["register"])
+
+        assert pin_tail not in published
+
+    async def test_per_key_redaction_alone_would_leak_that_fragment(self):
+        """🔴 The negative control, and without it the test above proves nothing.
+
+        It shows the leak is real rather than hypothetical: run the *by-name* filter over
+        `register` on its own — the treatment that looks sufficient — and the pin's last
+        field comes out in clear beside the redacted pin.
+        """
+        from homeassistant.components.diagnostics import async_redact_data
+
+        register = dict(MEASURED_POOL_PAYLOAD["register"])
+        pin_tail = register["pin"].rsplit("-", 1)[1]
+
+        by_name_only = async_redact_data(register, TO_REDACT)
+
+        assert by_name_only["pin"] == "**REDACTED**"      # the filter did its job …
+        assert str(by_name_only["proID"]) == pin_tail      # … and the tail walked out

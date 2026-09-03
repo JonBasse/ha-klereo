@@ -62,17 +62,45 @@ TO_REDACT = {
 #                  of an output (`klereo.class.php:1095`). It says when equipment runs,
 #                  not who owns it, and the same schedule is already visible through the
 #                  `select` entities. It is also what a time-slot feature would read.
-#   * `register` — SUMMARISED, see below. Contents never measured, and named in no source
-#                  — not upstream, not `docs/klereo-api.md`, not any issue. The name reads
-#                  two ways and only one of them is safe: a hardware register dump, like
-#                  the harmless `tabHW`/`tabSW` beside it, or a *registration* record,
-#                  which is where a name, an e-mail or an order reference would live.
-#   * `podinfo`  — SUMMARISED, see below. Same absence of evidence, with a stronger prior:
-#                  it is by name the information block of the POD, the box whose two
-#                  identifiers are already both redacted (`podSerial`, `pin`). Redaction
-#                  recurses on key NAMES, so the same serial repeated in there under any
-#                  other spelling — `serial`, `sn`, `mac` — would go out in clear.
-UNJUDGED_CONTAINERS = {"register", "podinfo"}
+#   * `register` — SUMMARISED, and now for a MEASURED reason. See the block below: the
+#                  guess ("a registration record, which is where an order reference would
+#                  live") was right, and the measurement found something worse than the
+#                  guess.
+#   * `podinfo`  — NOT redacted since #147. Measured on two installations; the verdict and
+#                  the arithmetic that settles it are in the block below.
+#
+# 🔴 The two containers were summarised together for one shared reason — "nobody has
+# measured them" — and the measurement SPLIT them. Bioul, 2026-09-03, both containers read
+# straight off `GetPoolDetails`; @nopbop's export of 2026-09-02 is the second installation
+# and carries the same four `podinfo` keys.
+#
+#   `podinfo` — four keys, and all four are INTEGERS: `app`, `pingFail`, `pingSent`,
+#               `pongRx`. The doubt was entirely about `app`, whose name — unlike the three
+#               ping counters — does not imply its type; a string there could have held a
+#               build id, a serial or a MAC. It is an int in the low hundreds, sitting
+#               beside two ping counters in the ten thousands. No integer of that shape
+#               identifies a person or a box, and the same reasoning that keeps `device` in
+#               clear applies: an ordinal is useless without `podSerial`, which is redacted.
+#
+#   `register` — four keys, two of them already in TO_REDACT (`compta`, `pin`) and two not
+#               (`lastUpdate`, a registration epoch; `proID`, the installer's id).
+#
+#               🔴 AND THIS IS WHY IT STAYS SUMMARISED. `proID` is the LAST SEGMENT OF
+#               `pin`. The box pin is dash-delimited and its final field is the proID
+#               verbatim, so redacting `pin` by name while publishing `proID` beside it
+#               hands out a fragment of the value just blanked.
+#
+#               That is the defect of #154 in a third shape. There, a value escaped under
+#               a different NAME (`title`, `unique_id`). Here it escapes as a SUBSTRING —
+#               and a filter that matches on key names is structurally unable to see it,
+#               however complete its list of names becomes. Per-key redaction looks like
+#               the more rigorous treatment and is the one that leaks; the container-level
+#               summary is what actually holds.
+#
+#               ⚠️ So do not "improve" this by dropping `register` from the set on the
+#               grounds that `compta` and `pin` are individually covered. They are. That
+#               is not sufficient, and the reason is arithmetic, not policy.
+UNJUDGED_CONTAINERS = {"register"}
 
 # 🔴 The ENVELOPE, one level ABOVE everything judged so far. #122 and #147 both asked
 # "what is inside `data`?"; nobody had asked the same question of the object that WRAPS

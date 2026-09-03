@@ -34,6 +34,7 @@ from custom_components.klereo.diagnostics import TO_REDACT
 SYNTHETIC = {
     # payload identifiers
     "0000-0000000-0000",          # pin — same dash structure as a real one
+    "1111-2222222-3333",          # pin whose last field IS `proID`, for the #147 substring test
     "XX00000",                    # compta — same 2-letter + 5-digit shape
     "POD00012345",                # podSerial
     99999999,                     # idAddress
