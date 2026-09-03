@@ -74,6 +74,77 @@ TO_REDACT = {
 #                  other spelling — `serial`, `sn`, `mac` — would go out in clear.
 UNJUDGED_CONTAINERS = {"register", "podinfo"}
 
+# 🔴 The ENVELOPE, one level ABOVE everything judged so far. #122 and #147 both asked
+# "what is inside `data`?"; nobody had asked the same question of the object that WRAPS
+# it, and `entry.as_dict()` puts fifteen siblings beside `data` — two of which carry the
+# account identifier under a different NAME, which is all `async_redact_data` matches on:
+#
+#     config_flow.py:42   title      = data[CONF_USERNAME]                   verbatim
+#     config_flow.py:63   unique_id  = data[CONF_USERNAME].strip().lower()
+#
+# So `CONF_USERNAME` in TO_REDACT blanks `data.username` and publishes the same string
+# twice over. That is what shipped in 1.13.0 — the release that invited every reporter to
+# attach an export — and an external reporter found it in the first one he sent
+# (GitHub #58, 2026-09-02). Third time in this file that a value walked past the filter
+# under a name nobody had enumerated.
+#
+# ⚠️ These two are NOT added to TO_REDACT. That set recurses on key names at every depth,
+# and `title` is a word Klereo could plausibly use inside a payload we DO want to read;
+# blanking it everywhere would trade this leak for a blind spot. The defect is in the
+# envelope, so the remedy is applied to the envelope and nowhere else.
+ENVELOPE_IDENTITY = {"title", "unique_id"}
+
+# The other fourteen keys, judged one by one against `ConfigEntry.as_dict()` as measured on
+# homeassistant 2026.7.3. A key absent from BOTH sets is summarised to its shape rather
+# than published — because the lesson of #122, #147 and #58 is that the next leak arrives
+# as a field nobody has ruled on, and a Home Assistant release can add one without us
+# noticing. Silence must fail closed.
+#
+#   * `entry_id`, `domain`, `version`, `minor_version`, `source`, `disabled_by`,
+#     `created_at`, `modified_at`, `pref_disable_new_entities`, `pref_disable_polling`
+#              — NOT redacted. Integration-level facts and a random UUID, tied to no
+#                person. Same ground as `idSystem` above.
+#   * `data`, `options`
+#              — NOT redacted HERE. They are what TO_REDACT and UNJUDGED_CONTAINERS
+#                already walk, and that walk still runs over them unchanged.
+#   * `discovery_keys`, `subentries`
+#              — SUMMARISED. Both are empty on every Klereo entry (the integration is
+#                `config_flow`-only, declares no discovery in `manifest.json`, and creates
+#                no subentry), so nobody has ever seen one carry anything. Unmeasured is
+#                unjudged: they get shapes, not values, exactly like `register`.
+ENVELOPE_JUDGED_SAFE = {
+    "created_at",
+    "data",
+    "disabled_by",
+    "domain",
+    "entry_id",
+    "minor_version",
+    "modified_at",
+    "options",
+    "pref_disable_new_entities",
+    "pref_disable_polling",
+    "source",
+    "version",
+}
+
+
+def _redact_envelope(entry_dict: Mapping[str, Any]) -> dict:
+    """Blank the identifier-bearing envelope keys, summarise every unjudged one.
+
+    Applied at the TOP LEVEL ONLY, and before anything else touches the object: the
+    security claim must not depend on a later pass, for the same reason the comment in
+    `async_get_config_entry_diagnostics` gives.
+    """
+    redacted = {}
+    for key, value in entry_dict.items():
+        if key in ENVELOPE_IDENTITY:
+            redacted[key] = REDACTED
+        elif key in ENVELOPE_JUDGED_SAFE:
+            redacted[key] = value
+        else:
+            redacted[key] = f"{REDACTED} — never judged; {_shape_of(value)}"
+    return redacted
+
 
 def _shape_of(value: Any) -> str:
     """Describe a value by its KEYS and size, never by its contents."""
@@ -124,12 +195,12 @@ async def async_get_config_entry_diagnostics(
         sys_id: asdict(system_data)
         for sys_id, system_data in coordinator.data.items()
     }
-    # `async_redact_data` runs FIRST and unconditionally, so the security claim never
-    # depends on the pass below: key names are what both walks match on, and summarising
-    # a value cannot change the name above it.
+    # `_redact_envelope` and `async_redact_data` both run FIRST and unconditionally, so
+    # the security claim never depends on the pass below: key names are what all three
+    # walks match on, and summarising a value cannot change the name above it.
     return {
         "config_entry": _summarise_unjudged(
-            async_redact_data(entry.as_dict(), TO_REDACT)
+            async_redact_data(_redact_envelope(entry.as_dict()), TO_REDACT)
         ),
         "coordinator_data": _summarise_unjudged(
             async_redact_data(coordinator_data, TO_REDACT)
