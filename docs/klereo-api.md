@@ -373,8 +373,21 @@ comMode   = 1
 `offDelay: 5` sur sa sortie 1 (GitHub #58, 2026-09-02). Le champ est donc réel et renseigné en
 production ; il n'a simplement jamais eu de chemin d'écriture ici.
 
-⚠️ **Non mesuré : l'unité et la borne.** `5` est compatible avec des minutes comme avec des heures,
-et aucune des deux sources ne le dit. ⚠️ **Non mesuré : l'existence côté serveur.** Elle est
+✅ **Unité et bornes — tranchées le 2026-09-03.** L'amont déclare la commande Jeedom avec sa borne
+et son unité (`klereo.class.php:938-939`) :
+
+```php
+createCmdInfo('offDelay_'.$outN, '… Temps minuterie', 'numeric', $order, 1, 600, 'min');
+createCmdAction('offDelay_'.$outN, '… Consigne temps minuterie', 'slider', $order, 1, 600, 'min', …);
+```
+
+La signature est `($logicalId, $name, $subType, &$order, $min, $max, $unite)` — donc **minutes,
+bornées 1 à 600** (10 h). Contrôles de lecture voisins, sans ambiguïté possible sur l'ordre des
+arguments : `'Filtration_TodayTime', …, 0, 24, 'h'` et `'PHMinus_Today', …, 0, 36, 'mL'`.
+
+**Recoupé sur Bioul le 2026-09-03** : les cinq sorties portent `240, 5, 2, 2, 240` — toutes dans
+`[1, 600]`, et `240 min = 4 h` est une durée de minuterie plausible. La valeur `5` de @nopbop sur sa
+sortie 1 tombe dans le même intervalle. ⚠️ **Non mesuré : l'existence côté serveur.** Elle est
 attestée par du code amont qui tourne, pas par une réponse. C'est un endpoint d'**écriture** :
 le sonder à l'aveugle change la configuration d'un vrai bassin.
 
@@ -395,10 +408,23 @@ plausible et faux :
 
 Un bit = un créneau, dans l'ordre chronologique de la journée.
 
-🔴 **La granularité n'est pas mesurée.** Un `plan64` de 12 octets donnerait 96 bits, soit un
-créneau de 15 minutes sur 24 h — mais cette longueur vient d'une **fixture inventée**, pas d'une
-charge utile réelle. Un seul relevé la confirme ou la casse, et tant qu'il n'a pas eu lieu, ce
-paragraphe est une déduction et non un fait.
+✅ **La granularité est mesurée** (Bioul, 2026-09-03) : `plan64` fait **16 caractères base64**,
+soit 12 octets, **96 bits — un créneau de 15 minutes sur 24 h**. La déduction précédente, tirée
+d'une fixture inventée, se trouve confirmée par une charge utile réelle.
+
+🔴 **En revanche le DÉCODAGE n'est pas validé, et le relevé ne pouvait pas le valider.** Les trois
+`plan64` présents décodent à **tout zéro** — aucune sortie de ce bassin n'est en mode créneaux. Or
+un plan tout à zéro rend le même résultat sous **n'importe quel ordre de bits** : les deux
+inversions ci-dessus sont donc encore non éprouvées, et une transcription fausse serait
+indiscernable d'une transcription juste.
+
+⚠️ Le contrôle qui trancherait est une sortie **réellement programmée**, dont les plages décodées
+peuvent être comparées à ce que le propriétaire sait de son installation. Tant qu'aucune ne l'est,
+« ça n'a pas échoué » ne veut pas dire « ça marche » : le bras n'a pas été joué.
+
+⚠️ **`plans` ne couvre pas toutes les sorties.** Sur Bioul, les sorties **2 et 9 n'ont aucune
+entrée** — ce qui est distinct d'une entrée vide, et qu'un code lisant `plans[i]` sans garde
+prendrait pour un planning nul.
 
 ✅ **Aucun endpoint d'écriture de programmation n'existe dans les trois sources.** Une
 fonctionnalité de créneaux serait donc **en lecture seule** — la moitié qui ne peut casser
@@ -438,10 +464,14 @@ l'utilisateur.
   ce qui reste notre meilleure source sur ce point.
 - **Ce que `newMode` vaut sur les sorties 2, 3, 8 et 15** — la doc dit que la valeur diffère, jamais
   ce qu'elle vaut.
-- **L'unité et la borne d'`offDelay`** (§ *`SetAutoOff.php`*) — `5` est compatible avec des minutes
-  comme avec des heures. Aucune des trois sources ne tranche.
-- **La longueur réelle de `plan64`** (§ *La programmation horaire*) — elle décide de la granularité
-  des créneaux, et la valeur dont on dispose vient d'une fixture **inventée**.
+- 🔴 **Le décodage de `plan64` n'est pas éprouvé** (§ *La programmation horaire*). Le relevé du
+  2026-09-03 a fermé la question de la **granularité** (96 bits, créneaux de 15 min, mesuré) et
+  **pas** celle de l'ordre des bits : les trois plannings de Bioul sont à zéro, et un planning nul
+  est invariant par toute permutation. Il faut une sortie **réellement programmée**.
+- **L'unité de `outs[].totalTime`** — jamais lue par l'amont, donc non sourcée. Par analogie avec
+  `params.Filtration_TotalTime`, que l'amont divise par 3600 pour obtenir des heures
+  (`klereo.class.php:331`), la seconde est probable. C'est une **inférence**, et la lire comme un
+  fait ferait de `28 414 540` autre chose que ~329 jours.
 - **L'existence côté serveur de `SetAutoOff.php`** — attestée par du code amont qui tourne, jamais
   par une réponse. C'est un endpoint d'écriture ; le sonder n'est pas gratuit.
 - **Ce qu'un endpoint NON documenté accepterait** — hors périmètre par décision, pas par oubli :
