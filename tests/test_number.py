@@ -107,14 +107,59 @@ class TestExtractNumbers:
         details = self._details(regul_modes={"ConsigneEau": 28})
         assert self._keys(details, mock_coordinator) == ["SYS1_number_ConsigneEau"]
 
-    def test_not_created_when_value_is_disabled_sentinel(self, mock_coordinator):
-        """Should skip -2000, which upstream reads as 'setpoint disabled'."""
-        details = self._details(params={"ConsigneEau": -2000})
-        assert self._keys(details, mock_coordinator) == []
+    def test_created_when_value_is_disabled_sentinel(self, mock_coordinator):
+        """🔴 Inverted by measurement on 2026-09-07 (GitHub #55, Forgejo #170).
 
-    def test_not_created_when_value_is_unknown_sentinel(self, mock_coordinator):
-        """Should skip -1000, which upstream reads as 'value unknown'."""
+        The box ACCEPTS `SetParam ConsigneEau` while the stored value reads `-2000`: both
+        queued commands answered `status: 9, detail: "Ok"`, and the box's own front panel
+        went from `Arrêté` to `25.0 °C`. So the sentinel is not a refusal, and barring the
+        entity on it made the value permanently unwritable — the guard produced the very
+        condition it claimed to respect.
+        """
+        details = self._details(params={"ConsigneEau": -2000})
+        assert self._keys(details, mock_coordinator) == ["SYS1_number_ConsigneEau"]
+
+    def test_created_when_value_is_unknown_sentinel(self, mock_coordinator):
+        """`-1000` follows `-2000`, and that it is UNMEASURED is deliberate.
+
+        Only `-2000` was measured. `-1000` is treated the same because barring it removes
+        nothing either: `ConsigneEau` has no read-only fallback, so the old behaviour left
+        the installation with no entity at all rather than with a safer one.
+        """
         details = self._details(params={"ConsigneEau": -1000})
+        assert self._keys(details, mock_coordinator) == ["SYS1_number_ConsigneEau"]
+
+    def test_a_sentinel_reads_as_unknown_rather_than_as_a_number(self, mock_coordinator):
+        """🔴 The entity exists and its VALUE is None — #137's rule, applied here.
+
+        Creating it with `-2000` in place would be the pinned-nonsense control 1.9.0
+        refused: a Water Setpoint reading -2000 °C, outside its own 10–40 bounds. What the
+        sentinel says is "there is nothing to read yet", and `None` renders as `unknown`.
+        """
+        details = self._details(params={"ConsigneEau": -2000})
+        (_, entity), = _extract_numbers(mock_coordinator, "SYS1", details)
+        assert entity._attr_native_value is None
+
+    def test_a_sentinel_arriving_on_a_refresh_also_reads_as_unknown(self, mock_coordinator):
+        """The refresh path must map the value too, or a live entity pins -2000 later."""
+        number = KlereoNumber(mock_coordinator, "SYS1", "ConsigneEau", 28)
+        number.async_write_ha_state = MagicMock()
+        mock_coordinator.data["SYS1"].details.regul_modes["ConsigneEau"] = -2000
+        number._handle_coordinator_update()
+        assert number._attr_native_value is None
+
+    def test_a_setpoint_with_a_sensor_fallback_is_still_barred_by_its_sentinel(
+        self, mock_coordinator
+    ):
+        """🔴 The negative control, and the whole reason this fix is narrow.
+
+        `ConsigneRedox` IS in `PARAM_NAMES`, so `sensor` gives it a read-only
+        `KlereoParamSensor` exactly when this returns False. Lifting the bar for it would
+        REPLACE `sensor.redox_setpoint` with `number.redox_setpoint` on every install
+        carrying a sentinel — a deleted entity and a broken automation, which is #128 and
+        #135 again. `ConsigneEau` has no such fallback; that asymmetry is the fix.
+        """
+        details = self._details(params={"ConsigneRedox": -2000}, access=16)
         assert self._keys(details, mock_coordinator) == []
 
     def test_not_created_when_access_below_minimum(self, mock_coordinator):

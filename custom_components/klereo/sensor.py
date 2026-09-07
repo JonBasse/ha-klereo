@@ -22,11 +22,15 @@ from .const import (
     OUTPUT_NAMES,
     PARAM_COUNTER_TYPES,
     PARAM_NAMES,
-    PARAM_SENTINELS,
     PARAM_TYPES,
     SENSOR_TYPES,
 )
-from .entity import KlereoEntity, is_setpoint_offered, setup_discovery
+from .entity import (
+    KlereoEntity,
+    is_setpoint_offered,
+    setup_discovery,
+)
+from .entity import setpoint_reading as _reading
 from .models import KlereoAlert, KlereoPoolDetails, KlereoProbe
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,32 +39,6 @@ _LOGGER = logging.getLogger(__name__)
 def _humanize_key(key: str) -> str:
     """Convert a camelCase API key to a human-readable name."""
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key)
-
-
-def _reading(value):
-    """Return a setpoint's value, or `None` when Klereo sent a sentinel instead.
-
-    `-2000` means the setpoint is DISABLED and `-1000` that it is UNKNOWN. Neither is a
-    measurement, and an entity named *pH Setpoint* holding one feeds Home Assistant's
-    statistics, graphs and averages a plausible, wrong number. Upstream discards both
-    (`klereo.class.php` l.873-896); `number` already refuses them through
-    `is_setpoint_offered`, and `climate` refuses them too. `sensor` was the one path that
-    did not. See #137.
-
-    🔴 The VALUE is mapped, never the existence. Not creating the entity would delete a
-    sensor installs already have and break any automation referencing it — the harm #128
-    and #135 exist to prevent. `None` renders as `unknown`, which is exactly what the
-    sentinel says.
-
-    ⚠️ The `isinstance` guard is not decoration. `regul_modes` is read UNFILTERED on
-    purpose (#94), so a value here is whatever Klereo sent; a bare `value in
-    PARAM_SENTINELS` raises `TypeError` on anything unhashable and would take the whole
-    platform down rather than one reading. And `-1` must NOT be caught: `const.py` calls
-    reusing it "a false friend that happens to work" — a setpoint of -1 is a real number.
-    """
-    if isinstance(value, int | float) and value in PARAM_SENTINELS:
-        return None
-    return value
 
 
 def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
