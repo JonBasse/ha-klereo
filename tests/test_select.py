@@ -277,14 +277,39 @@ class TestKlereoHeatingModeSelect:
         select = KlereoOutputModeSelect(heating_coordinator, "SYS1", output)
         assert select._attr_current_option == "Heating"
 
-    async def test_select_heating_sends_auto_state(self, heating_coordinator):
-        """A non-Off heat mode pairs with newState = AUTO (2), never the on/off status."""
+    async def test_select_heating_sends_the_on_state(self, heating_coordinator):
+        """🔴 Heating pairs with newState = ON (1) — measured, never the on/off status.
+
+        The reported status is deliberately not consulted here: this call leaves the pump
+        *stopped* (`status = OFF`), and the value sent must still be the one the target
+        mode decides (Forgejo #166).
+        """
         output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_OFF, mode=HEAT_MODE_STOP)
         select = KlereoOutputModeSelect(heating_coordinator, "SYS1", output)
         select.async_write_ha_state = MagicMock()
         await select.async_select_option("Heating")
         heating_coordinator.async_set_output.assert_called_once_with(
-            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_AUTO
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_ON
+        )
+
+    async def test_select_auto_still_sends_the_auto_state(self, heating_coordinator):
+        """Control: the heating branch is a table, not a uniform flip to ON."""
+        output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_AUTO, mode=HEAT_MODE_HEATING)
+        select = KlereoOutputModeSelect(heating_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+        await select.async_select_option("Auto")
+        heating_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_AUTO, OUT_STATE_AUTO
+        )
+
+    async def test_select_cooling_is_unchanged_because_it_is_unmeasured(self, heating_coordinator):
+        """⚠️ Cooling keeps the value that shipped before the measurement. See test_api."""
+        output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_AUTO, mode=HEAT_MODE_HEATING)
+        select = KlereoOutputModeSelect(heating_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+        await select.async_select_option("Cooling")
+        heating_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_COOLING, OUT_STATE_AUTO
         )
 
     async def test_select_off_sends_off_state(self, heating_coordinator):

@@ -108,6 +108,40 @@ HEAT_MODES = {
     HEAT_MODE_HEATING: "Heating",
 }
 
+# The `newState` that goes with each KlereoTherm mode on output 4.
+#
+# 🔴 MEASURED on the official web client, three captures over two installations,
+# 2026-09-06 (GitHub #55 — @nopbop and @StephanH27; Forgejo #166). It replaces the
+# upstream-sourced rule "any mode other than Manual expects AUTO", which is what this
+# integration sent on all four modes and which the wire contradicts on Heating.
+#
+# The value depends on the TARGET mode, not on the state the pump is leaving: Heating was
+# captured from *Auto* (a running pump) and from *Stopped*, and both sent 1. That is what
+# rules out the starting-state hypothesis this repository held for two days.
+#
+# ⚠️ Cooling is NOT measured — no reporter owns a reversible heat pump. It keeps the value
+# that shipped before the measurement, so an unmeasured cell changes nothing rather than
+# being extrapolated from a table with no pattern (1, 2, ?, 0).
+HEAT_MODE_STATES = {
+    HEAT_MODE_STOP: OUT_STATE_OFF,
+    HEAT_MODE_AUTO: OUT_STATE_AUTO,
+    HEAT_MODE_COOLING: OUT_STATE_AUTO,
+    HEAT_MODE_HEATING: OUT_STATE_ON,
+}
+
+
+def state_for_heat_mode(mode: int) -> int:
+    """Return the `newState` to send with a KlereoTherm `newMode` on output 4.
+
+    Shared by `switch`, `select` and `climate` so there is one copy of the table and not
+    three — the three sites carried three copies of the rule it replaces (#118).
+
+    An unrecognised mode falls back to AUTO, never to OFF: OFF is the command that stops
+    the heat pump, and resolving "unknown" to it would repeat the shape of #58, where a
+    request to turn the heating on switched it off.
+    """
+    return HEAT_MODE_STATES.get(mode, OUT_STATE_AUTO)
+
 # Human-readable output mode labels (int → label)
 OUTPUT_MODES = {
     OUT_MODE_MAN: "Manual",

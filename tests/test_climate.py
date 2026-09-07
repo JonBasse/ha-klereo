@@ -24,6 +24,7 @@ from custom_components.klereo.api import (
     OUT_IDX_HEATING,
     OUT_STATE_AUTO,
     OUT_STATE_OFF,
+    OUT_STATE_ON,
 )
 from custom_components.klereo.climate import _extract_climate
 from custom_components.klereo.models import (
@@ -240,12 +241,34 @@ class TestTargetTemperature:
 class TestWrites:
     """Every write goes through a coordinator method, never `coordinator.api`."""
 
-    async def test_setting_heat_sends_the_mode_and_auto_state(self, coordinator):
+    async def test_setting_heat_sends_the_mode_and_the_on_state(self, coordinator):
+        """🔴 ON (1), not AUTO (2) — measured on the official client (Forgejo #166)."""
         entity = _build(coordinator)
         entity.async_write_ha_state = MagicMock()
         await entity.async_set_hvac_mode(HVACMode.HEAT)
         coordinator.async_set_output.assert_called_once_with(
-            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_AUTO)
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_ON)
+
+    async def test_setting_auto_still_sends_the_auto_state(self, coordinator):
+        """Control: the measured table is not a uniform flip to ON.
+
+        The official client sends `2` on the Heating → Auto path. A fix that sent ON
+        everywhere would diverge from it here, which is exactly the objection the reporter
+        raised against flipping all three call sites at once.
+        """
+        entity = _build(coordinator)
+        entity.async_write_ha_state = MagicMock()
+        await entity.async_set_hvac_mode(HVACMode.AUTO)
+        coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_AUTO, OUT_STATE_AUTO)
+
+    async def test_setting_cool_is_unchanged_because_it_is_unmeasured(self, coordinator):
+        """⚠️ Cooling keeps the value this integration has always sent. See test_api."""
+        entity = _build(coordinator)
+        entity.async_write_ha_state = MagicMock()
+        await entity.async_set_hvac_mode(HVACMode.COOL)
+        coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_COOLING, OUT_STATE_AUTO)
 
     async def test_setting_off_sends_the_off_state(self, coordinator):
         entity = _build(coordinator)
@@ -265,7 +288,7 @@ class TestWrites:
         entity.async_write_ha_state = MagicMock()
         await entity.async_turn_on()
         coordinator.async_set_output.assert_called_once_with(
-            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_AUTO)
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_ON)
 
     async def test_turn_off_sends_stop(self, coordinator):
         entity = _build(coordinator)

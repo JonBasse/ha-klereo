@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- 🔴 **The heat pump's `newState` is now the one the official client sends, and it is decided by the mode you are switching TO** ([#166](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/166)). Setting output 4 to **Heating** sent `newState = 2` (Auto); the Klereo web client sends `1` (On). Switching to Auto and stopping the pump were already right. Measured on the wire — three captures by [@nopbop](https://github.com/JonBasse/ha-klereo/issues/55) and two by [@StephanH27](https://github.com/JonBasse/ha-klereo/issues/55), on two installations, 2026-09-06.
+  - **This is the first time this pairing has been measured rather than inferred.** The rule it replaces — *"any mode other than Manual expects AUTO rather than ON/OFF"* — comes from the upstream Jeedom plugin and had been carried, unquestioned and copied into three call sites, since the integration was written.
+  - ⚠️ **The hypothesis this repository held for two days was that `newState` depended on the state the pump was LEAVING** — `1` to come out of *Stopped*, `2` for an ordinary mode change. It is refuted: the capture of *Auto → Heating* leaves a running pump and still sends `1`. Two different starting states, one target, one value.
+  - ⚠️ **Cooling is deliberately unchanged.** Nobody in either thread owns a reversible heat pump, so that cell of the table is unmeasured — and `1, 2, ?, 0` offers no pattern to extrapolate from. An unmeasured cell keeps the behaviour that shipped rather than acquiring a plausible guess.
+  - The table now lives in **one** place (`state_for_heat_mode`), shared by `switch`, `select` and `climate`. The rule it replaces existed as three separate copies, which is the drift [#118](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/118) already paid for once.
+  - ⚠️ **This does not close the other half of the capture.** The official client also writes `ConsigneEau` before every mode change except stopping, and this integration writes none — that half is still open, because it turns on whether the box accepts a setpoint write while the value reads the `-2000` sentinel, which no capture has yet settled.
+
+### Verified
+
+- **472 tests** (up from 463), nine of them new.
+- 🔴 **The witness is discriminant in both directions**, which is what separates it from a test that is green over an inert mechanism:
+  - Restoring the old rule (`AUTO` for any mode above Off) reddens **exactly five** cases — the shared table, and one per call site plus `climate.turn_on`.
+  - Flipping uniformly to `ON` — the change a careless reading of the capture would make, and the one [@nopbop](https://github.com/JonBasse/ha-klereo/issues/55) warned against — reddens **exactly seven**: every Auto, Cooling and unknown-mode control across the three layers. Without that second mutant the controls would be indistinguishable from assertions that cannot fail.
+- **Negative control**: an unrecognised heat mode resolves to `AUTO`, never to `OFF`. `OFF` is the command that stops the heat pump, so resolving "unknown" to it would repeat the shape of [#58](https://github.com/JonBasse/ha-klereo/issues/58), where turning the heating on switched it off.
+- **Negative control**: outputs other than 4 are untouched — Manual still carries the on/off state, and Time Slots, Timer and Regulation still send `AUTO`. The measurement covers output 4 and nothing else.
+
 ## [1.15.0] — 2026-09-03
 
 ### Security

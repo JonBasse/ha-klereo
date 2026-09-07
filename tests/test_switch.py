@@ -155,13 +155,19 @@ class TestKlereoHeatingSwitch:
         return mock_coordinator
 
     async def test_turn_on_sends_heat_mode_not_manual(self, heating_coordinator):
-        """turn_on must send HEAT_MODE_HEATING/AUTO, never OUT_MODE_MAN (= Off here)."""
+        """turn_on must send HEAT_MODE_HEATING, never OUT_MODE_MAN (= Off here).
+
+        The state paired with it is ON (1), not AUTO (2): measured on the official web
+        client on two installations (GitHub #55, Forgejo #166). The table lives in
+        `state_for_heat_mode` — this asserts what reaches the coordinator, so it fails if
+        this platform stops using it.
+        """
         output = _make_output(index=OUT_IDX_HEATING, status=0, mode=0)
         switch = KlereoSwitch(heating_coordinator, "SYS1", output)
         switch.async_write_ha_state = MagicMock()
         await switch.async_turn_on()
         heating_coordinator.async_set_output.assert_called_once_with(
-            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_AUTO
+            "SYS1", OUT_IDX_HEATING, HEAT_MODE_HEATING, OUT_STATE_ON
         )
         assert switch._attr_is_on is True
 

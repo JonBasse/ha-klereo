@@ -14,6 +14,7 @@ from .api import (
     OUT_STATE_OFF,
     OUT_STATE_ON,
     OUTPUT_MODES,
+    state_for_heat_mode,
 )
 from .const import OUTPUT_NAMES
 from .entity import KlereoEntity, is_output_offered, offered_heat_modes, setup_discovery
@@ -154,11 +155,14 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
         """Pick the newState that goes with a newMode.
 
         Only Manual carries the ON/OFF state; every other mode hands control to
-        the box and sends AUTO. On the heating output, any mode above Off is
-        automatic. Source: klereo.class.php l.1525+ and l.1641-1655.
+        the box and sends AUTO. Source: klereo.class.php l.1525+ and l.1641-1655.
+
+        The heating output does NOT follow that rule: its states are the measured table in
+        `state_for_heat_mode`, shared with the `switch` and the `climate` entity so the
+        three sites cannot drift (Forgejo #166).
         """
         if self._is_heating:
-            return OUT_STATE_AUTO if mode > 0 else OUT_STATE_OFF
+            return state_for_heat_mode(mode)
         if mode != OUT_MODE_MAN:
             return OUT_STATE_AUTO
 
