@@ -11,9 +11,9 @@ from .api import (
     HEAT_MODE_STOP,
     OUT_IDX_HEATING,
     OUT_MODE_MAN,
-    OUT_STATE_AUTO,
     OUT_STATE_OFF,
     OUT_STATE_ON,
+    state_for_heat_mode,
 )
 from .const import OUTPUT_NAMES
 from .entity import KlereoEntity, is_output_offered, setup_discovery
@@ -107,7 +107,8 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs):
         """Turn the output on (Manual mode, ON state)."""
         if self._output_index == OUT_IDX_HEATING:
-            mode, state = HEAT_MODE_HEATING, OUT_STATE_AUTO
+            mode = HEAT_MODE_HEATING
+            state = state_for_heat_mode(mode)
         else:
             mode, state = OUT_MODE_MAN, OUT_STATE_ON
         self._attr_is_on = True

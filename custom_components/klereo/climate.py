@@ -25,8 +25,7 @@ from .api import (
     HEAT_MODE_HEATING,
     HEAT_MODE_STOP,
     OUT_IDX_HEATING,
-    OUT_STATE_AUTO,
-    OUT_STATE_OFF,
+    state_for_heat_mode,
 )
 from .const import PARAM_SENTINELS, PARAM_TYPES, WATER_TEMPERATURE_PROBE_TYPE
 from .entity import KlereoEntity, is_output_offered, offered_heat_modes, setup_discovery
@@ -197,11 +196,13 @@ class KlereoClimate(KlereoEntity, ClimateEntity):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set the KlereoTherm mode.
 
-        Any mode above Off hands control to the box and pairs with `newState = AUTO`;
-        Off pairs with OFF. Same rule as the `select`, sourced the same way.
+        The `newState` that goes with each mode is `state_for_heat_mode`, shared with the
+        `switch` and the `select` — measured on the official client rather than inferred
+        (Forgejo #166). It is deliberately not a property of "above Off": Heating sends ON
+        and Auto sends AUTO, and both are above Off.
         """
         mode = HEAT_MODE_BY_HVAC[hvac_mode]
-        state = OUT_STATE_AUTO if mode > HEAT_MODE_STOP else OUT_STATE_OFF
+        state = state_for_heat_mode(mode)
         await self.coordinator.async_set_output(
             self.system_id, OUT_IDX_HEATING, mode, state
         )

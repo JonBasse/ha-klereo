@@ -5,7 +5,19 @@ from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 import pytest
 
-from custom_components.klereo.api import API_URL_COMMAND_STATUS, KlereoApi, KlereoApiError
+from custom_components.klereo.api import (
+    API_URL_COMMAND_STATUS,
+    HEAT_MODE_AUTO,
+    HEAT_MODE_COOLING,
+    HEAT_MODE_HEATING,
+    HEAT_MODE_STOP,
+    OUT_STATE_AUTO,
+    OUT_STATE_OFF,
+    OUT_STATE_ON,
+    KlereoApi,
+    KlereoApiError,
+    state_for_heat_mode,
+)
 
 
 @pytest.fixture
@@ -171,3 +183,55 @@ class TestCommandStatus:
         assert args[1].endswith("/CommandStatus.php")
         assert args[1] == API_URL_COMMAND_STATUS
         assert kwargs["data"]["cmdID"] == 4242
+
+
+class TestHeatModeStates:
+    """`newState` on output 4 is decided by the TARGET heat mode. Measured, not inferred.
+
+    🔴 Three network captures of the official web client, two installations, 2026-09-06
+    (GitHub #55 — @nopbop, @StephanH27; Forgejo #166):
+
+    | transition | newMode | newState |
+    |---|---|---|
+    | Auto → Heating (pump already running) | 3 | **1** |
+    | Stopped → Heating | 3 | **1** |
+    | Heating → Auto | 1 | **2** |
+    | Heating → Stopped | 0 | **0** |
+
+    The two Heating rows leave from *different* starting states and send the same value,
+    which is what rules out the hypothesis this repository held until then — that `newState`
+    depended on where the pump was coming from. It depends on where it is going.
+    """
+
+    def test_heating_pairs_with_on(self):
+        """🔴 The one value this changes. Upstream's rule said AUTO here; the wire says ON."""
+        assert state_for_heat_mode(HEAT_MODE_HEATING) == OUT_STATE_ON
+
+    def test_auto_pairs_with_auto(self):
+        """Measured, and identical to what this integration already sent."""
+        assert state_for_heat_mode(HEAT_MODE_AUTO) == OUT_STATE_AUTO
+
+    def test_stop_pairs_with_off(self):
+        """Measured on both installations, and identical to what was already sent."""
+        assert state_for_heat_mode(HEAT_MODE_STOP) == OUT_STATE_OFF
+
+    def test_cooling_is_left_at_auto_because_nobody_has_measured_it(self):
+        """⚠️ NOT a measurement — a deliberate refusal to invent one.
+
+        No reporter in either thread owns a reversible heat pump, so the Cooling cell is
+        empty. `1, 2, ?, 0` has no pattern to extrapolate from, and guessing it by symmetry
+        would turn three measured values back into a table of four guesses. Cooling
+        therefore keeps the value this integration has always sent: unchanged behaviour is
+        the honest answer to an unmeasured question.
+        """
+        assert state_for_heat_mode(HEAT_MODE_COOLING) == OUT_STATE_AUTO
+
+    def test_an_unknown_mode_falls_back_to_auto_rather_than_off(self):
+        """Control: a mode outside the table must never resolve to OFF.
+
+        OFF is a command that *stops the heat pump*. Resolving an unknown mode to it would
+        turn "we do not recognise this" into a destructive action, which is the shape of
+        the #58 defect (`newMode` 0 sent as an on command). AUTO is the upstream rule and
+        the only non-destructive default.
+        """
+        assert state_for_heat_mode(42) == OUT_STATE_AUTO
