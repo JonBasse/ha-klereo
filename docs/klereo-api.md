@@ -14,6 +14,15 @@
 > porte aussi ce que le **plugin Jeedom amont** et **notre propre `api.py`** savent de l'API, dans
 > les sections marquées. Chaque affirmation nomme sa source, parce qu'elles n'ont pas le même
 > poids : voir § *Surface complète*.
+>
+> 🔴 **Et depuis les 2026-09-05 / 2026-09-06, il porte une quatrième classe de source : le RELEVÉ
+> RÉSEAU du client web officiel.** @StephanH27 et @nopbop ont capturé, dans l'onglet Réseau de
+> leur navigateur, ce que les interfaces v1 et v3 envoient réellement — sur **deux installations**
+> ([GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55),
+> [#61](https://github.com/JonBasse/ha-klereo/issues/61)). C'est la source **la plus lourde des
+> quatre**, et la seule qui ne soit ni une documentation, ni une réimplémentation, ni une
+> supposition : c'est l'API observée. Les faits qui en viennent sont marqués **mesuré sur le fil**,
+> avec la portée de la mesure — deux installations ne sont pas toutes les installations.
 
 ## Comment lire ce fichier — trois réserves qui portent
 
@@ -91,6 +100,25 @@ déjà écartées par la réserve 2. Les compter ferait une surface de dix endpo
 🔴 **`SetParam.php` est absent de la doc officielle et on l'expédie depuis #128.** Il n'est donc
 adossé qu'à l'amont. Ce n'est pas une raison de le retirer — il fonctionne chez de vrais
 utilisateurs — mais toute affirmation sur sa forme repose sur une seule source.
+
+### ✅ La surface est complète — résultat NÉGATIF, mesuré sur le fil
+
+**Le client web officiel n'appelle aucun endpoint hors des huit ci-dessus.** Mesuré le
+**2026-09-05** par @StephanH27 ([GitHub #61](https://github.com/JonBasse/ha-klereo/issues/61)) :
+le bouton de **rafraîchissement** des interfaces **v1 et v3** n'émet qu'une requête,
+`POST GetPoolDetails.php` — celle que l'intégration appelle déjà. La v3 ajoute onze PNG en cache
+et rien d'autre. Les captures de démarrage et d'arrêt de la PAC, du 2026-09-05 et du 2026-09-06,
+ne montrent elles non plus que `SetParam`, `SetOut`, `WaitCommand` et `GetPoolDetails`.
+
+**Ce résultat est écrit ici parce qu'un résultat négatif ne laisse aucune trace ailleurs.** Le
+tableau ci-dessus croise trois sources qui sont toutes des *lectures* — de documentation ou de
+code. Celle-ci est la première mesure **sur le fil**, et elle les corrobore. Sans cette ligne, la
+question « existe-t-il un endpoint de synchronisation que nous ignorons ? » se rouvrira, et on la
+reposera à un utilisateur qui y a déjà répondu.
+
+⚠️ **Portée.** Deux interfaces, quelques gestes, deux installations. Cela ne prouve pas qu'aucun
+neuvième endpoint n'existe — cela prouve que **les gestes observés n'en appellent aucun**, ce qui
+est ce dont on avait besoin pour arrêter d'en chercher un.
 
 ---
 
@@ -284,6 +312,47 @@ L'amont valide les modes `{0,1,2,3,4,6,8,9}` hors sortie 4, et `{0,1,2,3}` sur l
 (`klereo.class.php:1198`) — soit exactement la table ci-dessus **moins 5 et 7**. Deux sources
 écrites indépendamment qui s'accordent sur cette exclusion précise.
 
+#### 🔴 Sur la sortie 4, `newState` est décidé par le mode CIBLE — mesuré sur le fil
+
+La doc donne les trois valeurs de `newState` (`0` arrêt · `1` marche · `2` automatique) et ne dit
+pas **laquelle va avec quel mode**. L'amont porte une règle — *tout mode autre que Manuel attend
+`2`* — et le client web officiel **la contredit sur la sortie 4** :
+
+| Cible (`newMode`) | `newState` envoyé | Mesure |
+|---|:--:|---|
+| Chauffe (3) | **1** | deux captures, **deux états de départ différents** |
+| Auto (1) | **2** | une capture |
+| Arrêt (0) | **0** | deux rapporteurs, deux installations |
+| Froid (2) | **?** | 🔴 **jamais mesuré** |
+
+Relevé les **2026-09-05** (@StephanH27, interface v1) et **2026-09-06** (@nopbop, trois captures),
+[GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55) · #166. Appliqué par l'intégration
+depuis `state_for_heat_mode` (`api.py`), table unique partagée par `switch`, `select` et `climate`.
+
+⚠️ **La valeur dépend de la cible, pas de l'état quitté.** C'est établi par une seule des quatre
+lignes : *Chauffe* a été atteinte depuis *Auto* (pompe **en marche**) et depuis *Arrêt*, et les
+deux envoient `1`. Les trois autres lignes sont **compatibles** avec une table par cible sans la
+démontrer — un seul état de départ chacune.
+
+🔴 **Ne pas inventer la case Froid par symétrie.** `1, 2, ?, 0` n'a aucun motif évident, et aucun
+rapporteur des deux fils ne possède de PAC réversible. Une valeur plausible inscrite ici serait
+pire que le blanc : ce fichier est la seule source durable du dépôt, et une supposition y prend
+l'apparence d'une mesure.
+
+#### `SetParam ConsigneEau` précède tout changement de mode sauf l'arrêt
+
+Mesuré sur le fil, cinq captures, deux installations : avant chaque `SetOut` amenant la sortie 4
+vers *Chauffe*, le client officiel écrit d'abord `SetParam.php` avec `paramID: "ConsigneEau"`.
+**Y compris sur une pompe déjà en marche** — la capture *Auto → Chauffe* de @nopbop part d'un
+widget affichant `Auto 28.0 °C` et écrit quand même `ConsigneEau: 28`, c'est-à-dire la valeur déjà
+affichée. Ce n'est donc **pas** une écriture « de démarrage » : c'est une réaffirmation de la
+consigne avant toute mise en régulation. Seul le passage vers *Arrêt* ne l'émet pas.
+
+⚠️ **L'intégration n'émet pas cette première écriture**, et la question qu'elle ouvre n'est pas
+tranchée : la box accepte-t-elle une écriture de consigne pendant que la valeur lue est la
+sentinelle `-2000` ? Le corps de réponse du `WaitCommand` correspondant n'a pas pu être attribué
+(§ suivant). Suivi en #166.
+
 ### Lire l'état d'exécution d'une commande
 
 **URL** *(la source précise : **session cookie requis**)* **:**
@@ -327,6 +396,37 @@ au moment où il a été écrit ; il est exact depuis le 2026-08-24.
 🔴 En revanche `response` est ici une **liste d'objets**, et le code lit `response` comme un
 **entier nu** (`coordinator.py:159`) — les tests simulant la même forme, rien ne le signale.
 C'est #106, et c'est la conséquence la plus lourde de ce document.
+
+#### ✅ `status: 9` est un SUCCÈS — mesuré sur le fil, et une lecture ancienne à corriger
+
+Corps de réponse d'un `WaitCommand.php` capturé par @StephanH27 le **2026-09-06**
+([GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55)) :
+
+```json
+status: "ok"
+response: { "cmdID": 43…, "status": 9, "startTime": 1788686822, "updateTime": 1788686824, "detail": "Ok" }
+```
+
+La table ci-dessus l'annonçait ; c'est désormais **observé**, `detail: "Ok"` compris.
+
+🔴 **La correction qui va avec.** [GitHub #59](https://github.com/JonBasse/ha-klereo/issues/59)
+décrivait *« Status 9 and nothing happens »* comme le **symptôme d'une panne**. C'est faux, et
+c'est précisément ce qui rendait ce diagnostic si difficile : la commande **réussissait** — c'est
+son **contenu** qui était mauvais (`newMode` 0 sur la sortie 4, le défaut de #58). Un `9` n'est
+donc jamais l'anomalie à instruire ; ce qui l'est, c'est ce qu'on a envoyé.
+
+⚠️ **Ce que cette capture ne dit PAS.** Deux commandes avaient été mises en file (`SetParam` puis
+`SetOut`) et le corps d'**un seul** des deux `WaitCommand` est visible, son `cmdID` tronqué à
+l'affichage. Ce `Ok` n'est donc **attribuable à aucune des deux** — il ne prouve pas que la box
+ait accepté l'écriture de consigne par-dessus la sentinelle `-2000`. C'est la mesure qui manque
+encore à #166.
+
+⚠️ **Et la forme de `response` diverge de la doc, sur ce seul endpoint.** La capture montre un
+**objet**, pas une liste d'objets. Ce n'est pas une contradiction avec la mesure de @nopbop
+(#140), qui porte sur **`CommandStatus.php`** et où `response` est bien un tableau, le plus
+récent en premier — les deux endpoints ne rendent pas la même forme, ou l'un des deux varie. Une
+capture, un endpoint, une installation : à confirmer avant d'en tirer quoi que ce soit pour #106,
+qui reste écrit sur la doc officielle.
 
 ---
 
@@ -464,6 +564,12 @@ l'utilisateur.
   ce qui reste notre meilleure source sur ce point.
 - **Ce que `newMode` vaut sur les sorties 2, 3, 8 et 15** — la doc dit que la valeur diffère, jamais
   ce qu'elle vaut.
+- 🔴 **Le `newState` du mode Froid sur la sortie 4** — les trois autres cibles sont mesurées,
+  celle-ci ne l'est pas, et aucun rapporteur ne possède de PAC réversible. `1, 2, ?, 0` n'offre aucun motif
+  à extrapoler : la case reste **blanche** plutôt que plausible. § *Changer le mode … d'une sortie*.
+- **Si la box accepte une écriture de consigne pendant que la valeur lue est `-2000`** — le client
+  officiel en émet une dans cet état, et l'intégration la refuse. Le corps de réponse qui
+  trancherait n'a pas pu être attribué à sa commande. Suivi en #166.
 - 🔴 **Le décodage de `plan64` n'est pas éprouvé** (§ *La programmation horaire*). Le relevé du
   2026-09-03 a fermé la question de la **granularité** (96 bits, créneaux de 15 min, mesuré) et
   **pas** celle de l'ordre des bits : les trois plannings de Bioul sont à zéro, et un planning nul
