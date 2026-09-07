@@ -14,6 +14,7 @@ from .const import (
     DOMAIN,
     HEATER_MODES_WITHOUT_COOLING,
     HEATER_MODES_WITHOUT_SETPOINT,
+    PARAM_NAMES,
     PARAM_SENTINELS,
     PARAM_TYPES,
     PRO_ONLY_OUTPUTS,
@@ -22,6 +23,33 @@ from .coordinator import KlereoCoordinator
 from .models import KlereoPoolDetails
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def setpoint_reading(value):
+    """Return a setpoint's value, or `None` when Klereo sent a sentinel instead.
+
+    `-2000` means the setpoint is DISABLED and `-1000` that it is UNKNOWN. Neither is a
+    measurement, and an entity holding one feeds Home Assistant's statistics, graphs and
+    averages a plausible, wrong number. Upstream discards both (`klereo.class.php`
+    l.873-896).
+
+    🔴 The VALUE is mapped, never the existence. Not creating the entity would delete one
+    installs already have and break any automation referencing it — the harm #128 and #135
+    exist to prevent. `None` renders as `unknown`, which is exactly what the sentinel says.
+
+    Shared by `sensor` (#137) and by `number` (#170), which reached the same rule from the
+    other side: once a sentinel stopped barring the writable `ConsigneEau`, the entity had
+    to exist while reading nothing. Two copies of this would be a drift waiting to happen.
+
+    ⚠️ The `isinstance` guard is not decoration. `regul_modes` is read UNFILTERED on
+    purpose (#94), so a value here is whatever Klereo sent; a bare `value in
+    PARAM_SENTINELS` raises `TypeError` on anything unhashable and would take a whole
+    platform down rather than one reading. And `-1` must NOT be caught: `const.py` calls
+    reusing it "a false friend that happens to work" — a setpoint of -1 is a real number.
+    """
+    if isinstance(value, int | float) and value in PARAM_SENTINELS:
+        return None
+    return value
 
 
 def is_output_offered(index: int, details: KlereoPoolDetails) -> bool:
@@ -66,8 +94,23 @@ def is_setpoint_offered(key: str, details: KlereoPoolDetails) -> bool:
     param = PARAM_TYPES[key]
     value = details.settings.get(key)
 
-    if value in PARAM_SENTINELS:
-        _LOGGER.debug("Skipping %s: sentinel value %s", key, value)
+    # 🔴 A sentinel is a VALUE, not a permission — and reading it as one was refuted by
+    # measurement on 2026-09-07 (GitHub #55, Forgejo #170). The box ACCEPTED `SetParam
+    # ConsigneEau` while the stored value read `-2000`: both queued commands answered
+    # `status: 9, detail: "Ok"`, and the box's own front panel went from `Arrêté` to
+    # `25.0 °C` and stayed there. The old bar was self-perpetuating — no writable entity
+    # meant nobody could ever write the value, which kept it at `-2000` forever, which is
+    # how GH #55 stayed stuck for a month.
+    #
+    # ⚠️ It STILL bars every key that has a read-only fallback, and that asymmetry is the
+    # whole fix rather than a shortcut. `sensor` creates a `KlereoParamSensor` for a key in
+    # PARAM_NAMES exactly when this returns False, so lifting the bar there would REPLACE
+    # `sensor.ph_setpoint` with `number.ph_setpoint` on every install carrying a sentinel:
+    # a deleted entity and a broken automation, which is #128 and #135 again. `ConsigneEau`
+    # is deliberately NOT in PARAM_NAMES (see `const.py`), so it has no fallback and barring
+    # it yielded no entity at all. Never delete is the rule; this bar was deleting.
+    if value in PARAM_SENTINELS and key in PARAM_NAMES:
+        _LOGGER.debug("Skipping %s: sentinel value %s, falling back to its sensor", key, value)
         return False
 
     min_access = param.get("min_access")

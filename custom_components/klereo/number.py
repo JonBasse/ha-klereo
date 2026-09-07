@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import PARAM_TYPES
-from .entity import KlereoEntity, is_setpoint_offered, setup_discovery
+from .entity import KlereoEntity, is_setpoint_offered, setpoint_reading, setup_discovery
 from .models import KlereoPoolDetails
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,7 +58,12 @@ class KlereoNumber(KlereoEntity, NumberEntity):
         self._attr_native_min_value = settings.get(param.get("min_key"), param.get("min", 0))
         self._attr_native_max_value = settings.get(param.get("max_key"), param.get("max", 100))
         self._attr_native_step = param.get("step", 1)
-        self._attr_native_value = initial_value
+        # A sentinel reads as `unknown`, never as a number: since #170 the guard no longer
+        # refuses the entity on one, so `-2000` would otherwise land here and pin a Water
+        # Setpoint at -2000 °C — outside its own 10-40 bounds, and the pinned-nonsense
+        # control 1.9.0 refused to create. Mapped, not barred: the write is still offered,
+        # because the box accepts it (#170).
+        self._attr_native_value = setpoint_reading(initial_value)
 
     @callback
     def _handle_coordinator_update(self):
@@ -68,7 +73,9 @@ class KlereoNumber(KlereoEntity, NumberEntity):
             return super()._handle_coordinator_update()
         settings = system.details.settings
         if self._key in settings:
-            self._attr_native_value = settings[self._key]
+            # Mapped on the refresh path too: a setpoint disabled on the box AFTER setup
+            # would otherwise pin the live entity at -2000.
+            self._attr_native_value = setpoint_reading(settings[self._key])
         super()._handle_coordinator_update()
 
     async def async_set_native_value(self, value: float) -> None:

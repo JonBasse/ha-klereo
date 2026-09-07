@@ -28,7 +28,13 @@ from .api import (
     state_for_heat_mode,
 )
 from .const import PARAM_SENTINELS, PARAM_TYPES, WATER_TEMPERATURE_PROBE_TYPE
-from .entity import KlereoEntity, is_output_offered, offered_heat_modes, setup_discovery
+from .entity import (
+    KlereoEntity,
+    is_output_offered,
+    is_setpoint_offered,
+    offered_heat_modes,
+    setup_discovery,
+)
 from .models import KlereoPoolDetails
 
 _LOGGER = logging.getLogger(__name__)
@@ -105,14 +111,24 @@ class KlereoClimate(KlereoEntity, ClimateEntity):
 
     @property
     def supported_features(self) -> ClimateEntityFeature:
-        """Advertise a target temperature only where the box actually has one.
+        """Advertise a target temperature where the box will ACCEPT one.
 
-        A disabled setpoint (`-2000`) is a measured, ordinary state — both installations
-        this repository has read carry it. Advertising the feature anyway would put a
-        control in the UI whose every write the box discards.
+        🔴 This used to be derived from `target_temperature is not None`, which conflated
+        two different questions — and measurement split them (Forgejo #170). The target is
+        a READING, and a sentinel means there is nothing to read yet. The feature is a
+        PERMISSION, and the box grants it: on 2026-09-07 it accepted `SetParam ConsigneEau`
+        over a stored `-2000`, answered `status: 9`, and its own front panel went from
+        `Arrêté` to `25.0 °C` (GitHub #55). Deriving one from the other left the reporter
+        with a thermostat that could never be given a target, on a box that would have
+        taken one — and, being unwritable, the value stayed `-2000` forever.
+
+        `is_setpoint_offered` is the same judgement `number` makes, deliberately: the two
+        must not disagree about whether this installation may write its water setpoint.
+        It keeps the gates that ARE measured — access below end-customer, and a `HeaterMode`
+        whose hardware carries no setpoint at all (#124).
         """
         features = ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
-        if self.target_temperature is not None:
+        if self._setpoint_is_writable():
             features |= ClimateEntityFeature.TARGET_TEMPERATURE
         return features
 
@@ -224,16 +240,22 @@ class KlereoClimate(KlereoEntity, ClimateEntity):
     async def async_set_temperature(self, **kwargs) -> None:
         """Write `ConsigneEau`.
 
-        Refused when the setpoint carries a sentinel: a service call can reach an entity
-        that does not advertise the feature, and the write would be discarded by the box
-        with a status this integration would then confirm as successful (#115, #124).
+        🔴 The refusal here used to fire on a sentinel, and its stated reason — "the write
+        would be discarded by the box" — is REFUTED by measurement (Forgejo #170). It was
+        carried over from #124 by analogy: there, an on/off heater accepts `Cooling`,
+        answers status 9 and does nothing. A disabled setpoint is not that case, and this
+        refusal is what kept GitHub #55 stuck.
+
+        A service call can still reach an entity that does not advertise the feature, so
+        the guard stays — on the question that is actually measured: may this installation
+        write this setpoint at all.
         """
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-        if self.target_temperature is None:
+        if not self._setpoint_is_writable():
             _LOGGER.warning(
-                "Refusing to write %s: this installation reports it as disabled", _SETPOINT
+                "Refusing to write %s: this installation cannot be offered it", _SETPOINT
             )
             return
         await self.coordinator.async_set_param(self.system_id, _SETPOINT, temperature)
@@ -247,6 +269,18 @@ class KlereoClimate(KlereoEntity, ClimateEntity):
     def _settings(self) -> dict:
         details = self._details()
         return details.settings if details else {}
+
+    def _setpoint_is_writable(self) -> bool:
+        """Return whether this installation may be offered a water setpoint.
+
+        ⚠️ An unreadable payload NEVER gates — same rule as everywhere else in this
+        integration. A refresh that failed must not silently remove the dial from a
+        thermostat that has one.
+        """
+        details = self._details()
+        if details is None:
+            return True
+        return is_setpoint_offered(_SETPOINT, details)
 
     def _output(self):
         details = self._details()

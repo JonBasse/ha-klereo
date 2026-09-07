@@ -215,17 +215,28 @@ class TestTargetTemperature:
         assert entity.max_temp == 32
         assert entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
 
-    def test_a_disabled_setpoint_keeps_the_entity_and_drops_the_target(self, coordinator):
-        """🔴 The measured case: `ConsigneEau: -2000` means the setpoint is disabled.
+    def test_a_disabled_setpoint_drops_the_target_but_KEEPS_the_dial(self, coordinator):
+        """🔴 The two halves were coupled, and measurement split them (Forgejo #170).
 
-        Both installations this repository has read carry it. The thermostat still shows
-        the water temperature and still switches the pump — it simply offers no target,
-        rather than pinning one to -2000 °C or vanishing entirely.
+        `target_temperature` is a READING and stays `None` — `-2000` is not a temperature.
+        The FEATURE is a permission, and the box grants it: it accepted `SetParam
+        ConsigneEau` over a stored `-2000` on 2026-09-07 (GitHub #55). Deriving the
+        feature from the reading is what left the reporter with a thermostat that could
+        never be given a target, on a box that would have taken one.
         """
         entity = _build(coordinator, params={"ConsigneEau": -2000})
         assert entity.target_temperature is None
-        assert not entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
+        assert entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
         assert entity.hvac_modes
+
+    def test_the_dial_is_withheld_where_the_HARDWARE_carries_no_setpoint(self, coordinator):
+        """The gate that survives: `HeaterMode` 3 is on/off heating without a setpoint.
+
+        This is the #124 family — the box accepts the write, answers status 9 and does
+        nothing — and it is untouched. What was refuted is the SENTINEL, not this.
+        """
+        entity = _build(coordinator, params={"ConsigneEau": 28, "HeaterMode": 3})
+        assert not entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
 
     def test_an_unknown_setpoint_is_treated_the_same(self, coordinator):
         """`-1000` is Klereo's "unknown"; both sentinels are already known here."""
@@ -303,9 +314,23 @@ class TestWrites:
         await entity.async_set_temperature(temperature=29.5)
         coordinator.async_set_param.assert_called_once_with("SYS1", "ConsigneEau", 29.5)
 
-    async def test_a_temperature_write_is_refused_when_the_setpoint_is_disabled(self, coordinator):
-        """🔴 A service call can reach an entity that does not advertise the feature."""
+    async def test_a_temperature_write_GOES_THROUGH_over_a_disabled_setpoint(self, coordinator):
+        """🔴 Inverted by measurement — this is the write that unblocks GitHub #55.
+
+        The refusal here rested on "the write would be discarded by the box". It is not:
+        two queued commands, both `status: 9, detail: "Ok"`, and the box's front panel went
+        from `Arrêté` to `25.0 °C` and stayed there after the pump stopped (2026-09-07).
+        """
         entity = _build(coordinator, params={"ConsigneEau": -2000})
+        entity.async_write_ha_state = MagicMock()
+        await entity.async_set_temperature(temperature=29.5)
+        coordinator.async_set_param.assert_called_once_with("SYS1", "ConsigneEau", 29.5)
+
+    async def test_a_temperature_write_is_still_refused_where_the_HARDWARE_has_no_setpoint(
+        self, coordinator
+    ):
+        """A service call can still reach an entity that does not advertise the feature."""
+        entity = _build(coordinator, params={"ConsigneEau": 28, "HeaterMode": 3})
         entity.async_write_ha_state = MagicMock()
         await entity.async_set_temperature(temperature=29.5)
         coordinator.async_set_param.assert_not_called()
