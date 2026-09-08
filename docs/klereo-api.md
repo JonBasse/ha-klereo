@@ -337,6 +337,20 @@ commande comprise**, et non plus seulement relevée sur le fil du client officie
 ⚠️ **Une cible sur trois** : *Auto* et *Arrêt* n'ont jamais été exercées **depuis Home
 Assistant** — elles ne sont mesurées que du côté client — et *Froid* reste sans porteur.
 
+⚠️ **Et un résultat qui borne ce que ce correctif a acheté.** Le 2026-09-07, @StephanH27 démarre
+sa PAC depuis Home Assistant **en v1.15.0**, c'est-à-dire *avant* cette table : les trois entités
+de cette version envoyaient toutes `newMode: 3` avec `newState: 2` (`switch.py`, `select.py`,
+`climate.py` de la v1.15.0 — vérifié dans l'arbre, pas relevé sur le fil). Sur son **M9**, la
+paire `3` / `2` **démarre donc la pompe**. Ce qui le bloquait n'était pas le `newState`, c'était
+la consigne absente.
+
+Cela ne retire rien à la table — le client officiel envoie `1`, et `1` est désormais confirmé de
+bout en bout sur la KlereoTherm de @nopbop. Mais il faut le dire dans ce sens-là : la table
+**aligne l'intégration sur le client officiel**, elle n'a jamais été démontrée *nécessaire*. Deux
+valeurs de `newState` sont acceptées pour la cible *Chauffe*, sur deux matériels différents.
+🔴 C'est une **déduction** (son rapport + le code de la version qu'il exécutait), pas une capture
+réseau : personne n'a relevé ce que sa box a reçu ce jour-là.
+
 ⚠️ **La valeur dépend de la cible, pas de l'état quitté.** C'est établi par une seule des quatre
 lignes : *Chauffe* a été atteinte depuis *Auto* (pompe **en marche**) et depuis *Arrêt*, et les
 deux envoient `1`. Les trois autres lignes sont **compatibles** avec une table par cible sans la
