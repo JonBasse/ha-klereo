@@ -60,6 +60,11 @@ Your pool systems, sensors, switches, and number entities will be created automa
 After setup, you can configure the integration by clicking **Configure** on the integration card:
 
 - **Update interval** — How often to poll the Klereo API (10–60 minutes, default 10).
+- **Equipment power (W)** — One field per piece of equipment (filtration pump, heating, dosing pumps). Klereo
+  sends no power reading at all, so this figure is yours: read it off the equipment's rating plate, or measure
+  it. Filling one in creates the matching **energy** sensors below. Leaving one empty creates none — the
+  integration never invents a power, because a plausible default would put a credible kWh figure, in a unit that
+  has a price, into the dashboard you use to decide.
 
 ## Entities
 
@@ -143,6 +148,28 @@ Each counter only appears if your installation reports it, so you see the equipm
 consumption sensor additionally needs the pump's flow rate (`PHMinus_Debit` / `Chlore_Debit`); if your box does not
 send it, the run-time sensor still appears and the consumption one does not, rather than showing a computed
 figure with a guessed flow rate.
+
+**Energy consumption** — for the Home Assistant **Energy dashboard** — is the same idea one step further: a run
+time multiplied by a power. Klereo sends no power, so you enter it once per equipment in **Options** (see above),
+and the sensors appear:
+
+| Sensor | Unit |
+|---|---|
+| Filtration Energy Today / Total | kWh |
+| Heating Energy Today / Total | kWh |
+| pH- Energy Today / Total | kWh |
+| Liquid Chlorine Energy Today / Total | kWh |
+| Hybrid Chlorine Energy Today / Total | kWh |
+
+The same rule applies in both directions: **no power entered, no energy sensor**, and **no run-time counter, no
+energy sensor** — never a sensor stuck at `0`, which Home Assistant would read as a counter reset rather than as
+"unknown". Clearing a power (or setting it to 0) removes its energy sensors again; the run-time sensors above are
+untouched either way.
+
+A constant power approximates an on/off pump or heater well — the user who asked for this compared a day against
+his utility meter and read a 751 W delta for a 750 W pump. An inverter heat pump modulates its draw, so the
+figure there is an upper bound rather than a measurement, which is why the power is yours to choose per
+equipment rather than ours to assume.
 
 ### Switches
 

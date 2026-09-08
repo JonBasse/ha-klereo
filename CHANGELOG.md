@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Energy consumption sensors for the Home Assistant Energy dashboard** ([#163](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/163)). Enter a power in **Options** — one field per piece of equipment — and `<Equipment> Energy Today` / `Total` appear in kWh beside the run-time counters, declared `energy` / `total_increasing` so the Energy dashboard will take them. Asked for by [@StephanH27](https://github.com/JonBasse/ha-klereo/issues/60) on 2026-09-03.
+  - **Nothing new is read from the API.** The run time was already on the wire, already parsed and already exposed in seconds since [#54](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/54); the kilowatt-hours are that time multiplied by the power, `× watts / 3600 / 1000`. This is the pattern `DERIVED_COUNTER_TYPES` already uses for product volumes, with a watt where the flow rate is.
+  - ⚠️ `outs[].totalTime` plays **no part**, and an earlier draft of this ticket that built on it was wrong. Its unit is an unmeasured inference; the counters used here are the ones upstream divides by 3600 to get hours, which fixes the second for *those* keys. No change to `KlereoOutput`, and no reopening of [#145](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/145).
+  - 🔴 **An equipment with no power entered gets NO entity** — not one reading zero, not one with a "reasonable" default. A default would put a credible number, in a unit that has a price, into a dashboard someone reads to decide, which is the plausible lie [#105](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/105) refuses. And on a `total_increasing`, `0` is not "unknown" to Home Assistant: it is recorded as a **counter reset**, costing a spurious cycle in the statistics. The same gate applies to the counter: a power entered for hardware the box does not report meters nothing.
+  - **The existing run-time sensors are untouched.** `Filtration Time Today` and its siblings are entities people have already wired into automations; the energy sensors are added beside them, never in their place, and two tests assert it.
+  - Clearing a power — or setting it to 0 — removes its energy sensors again. That is why the options form validates but never defaults these fields.
+  - **The approximation is the user's, and he measured it**: a day of absence compared against his own utility meter read a 751 W delta for a 750 W pump. He also notes it will not hold on an inverter heat pump, which is exactly why the power is per equipment and entered rather than assumed.
+  - **Out of scope, deliberately:** an instantaneous *power* sensor. A binary signal sampled by a poll at 10-minute floor ([#139](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/139)) integrates wrong, and wrong in silence. These counters are integrated **at the source** by the box, which removes the problem instead of moving it.
+
+### Verified
+
+- **505 tests** (up from 477): 28 new, of which the six that carry the ticket are negative controls.
+- 🔴 **Those controls are discriminant, not decorative.** Four mutants were run against them: defaulting an absent power to 0 W reddens **five** cases; removing the counter-presence gate reddens **one**; giving the options form a `default=0` instead of a suggested value reddens **two**; and letting the energy sensor take the run-time sensor's place reddens **two**. Without them, an entity that always reports `0` would satisfy every other assertion in the file — it is indistinguishable from a correct one on a pump at rest.
+
 ## [1.16.0] — 2026-09-07
 
 ### Fixed
