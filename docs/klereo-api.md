@@ -260,6 +260,20 @@ soit exactement la panne que #95 existe pour empêcher.
 viennent en PREMIER** dans `response[]`. Lire `response[0]` rendrait le verdict d'une **autre**
 commande — avec la bonne forme, le bon type et aucune erreur. L'appariement se fait sur `cmdID`.
 
+✅ **Confirmé indépendamment le 2026-09-08** (sonde `SetAutoOff` sur Bioul, § plus bas), et la
+mesure va plus loin que l'ordre : `CommandStatus` ne rend pas les commandes récentes, il rend
+**tout un historique**. Un seul appel a renvoyé les deux commandes de la sonde, à trois minutes
+d'intervalle, **suivies de commandes du 2026-06-03** — plus de trois mois plus tôt. L'appariement
+sur `cmdID` n'est donc pas une prudence théorique : `response[]` contient en permanence des
+verdicts qui ne sont pas le vôtre, et prendre `[0]` marche **par chance** tant qu'on sonde juste
+après avoir écrit.
+
+🔴 **Et les deux endpoints n'horodatent PAS de la même façon.** Sur `CommandStatus`,
+`startTime` / `updateTime` sont des **chaînes formatées** — `"2026-09-08 11:30:09"` ; sur
+`WaitCommand`, la capture du 2026-09-05 montre des **entiers epoch** — `1788686822`. Même nom de
+champ, deux types. Un lecteur qui typerait ces clés depuis une seule des deux captures casserait
+sur l'autre, et `api.py` ne les lit aujourd'hui ni l'une ni l'autre.
+
 ### Changer le mode de fonctionnement et l'état d'une sortie
 
 **URL :** `https://connect.klereo.fr/php/SetOut.php`
@@ -528,9 +542,44 @@ arguments : `'Filtration_TodayTime', …, 0, 24, 'h'` et `'PHMinus_Today', …, 
 
 **Recoupé sur Bioul le 2026-09-03** : les cinq sorties portent `240, 5, 2, 2, 240` — toutes dans
 `[1, 600]`, et `240 min = 4 h` est une durée de minuterie plausible. La valeur `5` de @nopbop sur sa
-sortie 1 tombe dans le même intervalle. ⚠️ **Non mesuré : l'existence côté serveur.** Elle est
-attestée par du code amont qui tourne, pas par une réponse. C'est un endpoint d'**écriture** :
-le sonder à l'aveugle change la configuration d'un vrai bassin.
+sortie 1 tombe dans le même intervalle.
+
+### ✅ L'existence côté serveur est MESURÉE — sonde du 2026-09-08 sur Bioul
+
+Jusqu'ici cet endpoint n'était attesté que par du code amont qui tourne, jamais par une réponse de
+`connect.klereo.fr`. Il l'est désormais, par une sonde en deux étages conçue pour ne rien changer.
+
+**Étage 1 — existence, sans écriture possible.** `POST` avec le seul `poolID`, aucune sortie
+nommée :
+
+```json
+HTTP 200  ·  {"status":"error","detail":"Mauvais délais"}
+```
+
+🔴 **C'est la preuve la plus forte des deux, et la moins attendue.** Une route inexistante ne
+**valide** pas un `offDelay` — elle 404. Le serveur a lu la requête, cherché le délai, ne l'a pas
+trouvé et l'a refusé avec un message métier **en français**. L'endpoint existe, parse ses
+paramètres et contrôle ce champ.
+
+**Étage 2 — réécriture idempotente**, `offDelay: 240 → 240` sur la sortie 0 (la valeur déjà en
+place, donc changement d'état nul par construction) :
+
+```json
+SetAutoOff   → {"status":"ok","response":[{"cmdID":4399790,"poolID":121170}]}
+CommandStatus→ {"cmdID":4399790,"status":9,"detail":"Ok", …}
+relecture    → offDelay 240, inchangé
+```
+
+✅ **`status: 9` — la commande est ACCEPTÉE ET EXÉCUTÉE, et le compte est à `access: 10`.**
+`SetAutoOff` ne demande donc **pas** l'accès professionnel : une entité bâtie dessus serait
+utilisable par un utilisateur ordinaire, ce qui était la vraie question à trancher avant de la
+construire. L'enveloppe est celle des autres écritures — `response` est un **tableau** dont le
+premier élément porte `cmdID` et `poolID`, exactement la forme que `KlereoCoordinator._command_id`
+lit déjà.
+
+⚠️ Ce qui reste non mesuré : le comportement à `0`, et ce que `offDelay` signifie sur une sortie
+en mode non-manuel. La sonde a délibérément réécrit une valeur existante, donc elle ne dit rien de
+ces deux cas.
 
 ---
 
@@ -619,8 +668,6 @@ l'utilisateur.
   `params.Filtration_TotalTime`, que l'amont divise par 3600 pour obtenir des heures
   (`klereo.class.php:331`), la seconde est probable. C'est une **inférence**, et la lire comme un
   fait ferait de `28 414 540` autre chose que ~329 jours.
-- **L'existence côté serveur de `SetAutoOff.php`** — attestée par du code amont qui tourne, jamais
-  par une réponse. C'est un endpoint d'écriture ; le sonder n'est pas gratuit.
 - **Ce qu'un endpoint NON documenté accepterait** — hors périmètre par décision, pas par oubli :
   deviner des noms chez un tiers qui menace de bannir ferait porter le risque sur le compte de
   l'utilisateur.
