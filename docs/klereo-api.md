@@ -329,6 +329,14 @@ Relevé les **2026-09-05** (@StephanH27, interface v1) et **2026-09-06** (@nopbo
 [GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55) · #166. Appliqué par l'intégration
 depuis `state_for_heat_mode` (`api.py`), table unique partagée par `switch`, `select` et `climate`.
 
+✅ **Confirmé sur le matériel le 2026-09-08**, pour la première fois hors du banc de test :
+@nopbop, en **v1.16.0**, démarre sa PAC **depuis Home Assistant** — la pompe redémarre
+physiquement, `Heating Mode` passe à `Heating`, le thermostat affiche `Heat 28 °C` et le client v1
+confirme `Chauffe 28.0°C`. La ligne *Chauffe* est donc validée **de bout en bout, notre propre
+commande comprise**, et non plus seulement relevée sur le fil du client officiel.
+⚠️ **Une cible sur trois** : *Auto* et *Arrêt* n'ont jamais été exercées **depuis Home
+Assistant** — elles ne sont mesurées que du côté client — et *Froid* reste sans porteur.
+
 ⚠️ **La valeur dépend de la cible, pas de l'état quitté.** C'est établi par une seule des quatre
 lignes : *Chauffe* a été atteinte depuis *Auto* (pompe **en marche**) et depuis *Arrêt*, et les
 deux envoient `1`. Les trois autres lignes sont **compatibles** avec une table par cible sans la
@@ -348,10 +356,27 @@ widget affichant `Auto 28.0 °C` et écrit quand même `ConsigneEau: 28`, c'est-
 affichée. Ce n'est donc **pas** une écriture « de démarrage » : c'est une réaffirmation de la
 consigne avant toute mise en régulation. Seul le passage vers *Arrêt* ne l'émet pas.
 
-⚠️ **L'intégration n'émet pas cette première écriture**, et la question qu'elle ouvre n'est pas
-tranchée : la box accepte-t-elle une écriture de consigne pendant que la valeur lue est la
-sentinelle `-2000` ? Le corps de réponse du `WaitCommand` correspondant n'a pas pu être attribué
-(§ suivant). Suivi en #166.
+⚠️ **L'intégration n'émet pas cette première écriture.** La question que cela ouvrait — la box
+accepte-t-elle une écriture de consigne pendant que la valeur lue est la sentinelle `-2000` ? —
+est **tranchée depuis le 2026-09-07, et la réponse est oui.** Relevé de @StephanH27, box M9 dont
+`ConsigneEau` valait `-2000`, deux preuves indépendantes :
+
+- **les DEUX `WaitCommand`** de la paire `SetParam` + `SetOut` répondent `status: 9,
+  detail: "Ok"` (cmdID `4396950` et `4396951`). L'attribution devient **inutile** : quel que soit
+  celui des deux qui portait la consigne, elle a été acceptée ;
+- **l'afficheur physique de la box** passe de `Arrêté` à `25.0 °C` — exactement la valeur écrite
+  par le client v1 — et **y reste** après un nouvel arrêt. Ce n'est plus « le serveur a répondu
+  Ok », c'est un effet observé sur le matériel.
+
+🔴 **La sentinelle est donc une VALEUR, pas une permission**, et la garde qui refusait l'écriture
+est retirée depuis v1.16.0 (#170/#171).
+
+⚠️ **Et `-2000` n'est PAS l'état « arrêté ».** @nopbop a mesuré le 2026-09-08 que sa pompe
+arrêtée porte `ConsigneEau: 28`. La sentinelle marque une consigne **jamais écrite** ; elle n'a
+été observée que sur du chauffage tout-ou-rien, jamais sur une KlereoTherm. Corollaire de
+méthode : sa capture 3 (*Arrêt → Chauffe*) n'était donc **pas** une écriture par-dessus la
+sentinelle, contrairement au conditionnel qu'il posait le 2026-09-06. La preuve ci-dessus est
+**entièrement** celle de @StephanH27 ; le second témoin n'a jamais existé.
 
 ### Lire l'état d'exécution d'une commande
 
@@ -415,11 +440,13 @@ c'est précisément ce qui rendait ce diagnostic si difficile : la commande **r�
 son **contenu** qui était mauvais (`newMode` 0 sur la sortie 4, le défaut de #58). Un `9` n'est
 donc jamais l'anomalie à instruire ; ce qui l'est, c'est ce qu'on a envoyé.
 
-⚠️ **Ce que cette capture ne dit PAS.** Deux commandes avaient été mises en file (`SetParam` puis
-`SetOut`) et le corps d'**un seul** des deux `WaitCommand` est visible, son `cmdID` tronqué à
-l'affichage. Ce `Ok` n'est donc **attribuable à aucune des deux** — il ne prouve pas que la box
-ait accepté l'écriture de consigne par-dessus la sentinelle `-2000`. C'est la mesure qui manque
-encore à #166.
+⚠️ **Ce que cette capture-ci ne dit PAS — et comment une autre l'a contourné.** Deux commandes
+avaient été mises en file (`SetParam` puis `SetOut`) et le corps d'**un seul** des deux
+`WaitCommand` est visible, son `cmdID` tronqué à l'affichage. Ce `Ok` n'est **attribuable à
+aucune des deux**, et cela reste vrai de cette capture. Ce n'est plus la mesure qui manque : le
+2026-09-07, @StephanH27 a capturé les **deux** corps, `status: 9, detail: "Ok"` l'un comme
+l'autre — ce qui **contourne** l'attribution au lieu de la résoudre. Voir
+§ *`SetParam ConsigneEau` précède tout changement de mode sauf l'arrêt*.
 
 ⚠️ **Et la forme de `response` diverge de la doc, sur ce seul endpoint.** La capture montre un
 **objet**, pas une liste d'objets. Ce n'est pas une contradiction avec la mesure de @nopbop
@@ -567,9 +594,9 @@ l'utilisateur.
 - 🔴 **Le `newState` du mode Froid sur la sortie 4** — les trois autres cibles sont mesurées,
   celle-ci ne l'est pas, et aucun rapporteur ne possède de PAC réversible. `1, 2, ?, 0` n'offre aucun motif
   à extrapoler : la case reste **blanche** plutôt que plausible. § *Changer le mode … d'une sortie*.
-- **Si la box accepte une écriture de consigne pendant que la valeur lue est `-2000`** — le client
-  officiel en émet une dans cet état, et l'intégration la refuse. Le corps de réponse qui
-  trancherait n'a pas pu être attribué à sa commande. Suivi en #166.
+  ⚠️ Depuis le 2026-09-07 c'est aussi une **demande** — @StephanH27 souhaite chaud/froid/auto/arrêt
+  « pour l'hiver » — et pas seulement un trou. Une demande n'est pas un instrument : la case reste
+  blanche tant que personne ne peut la mesurer.
 - 🔴 **Le décodage de `plan64` n'est pas éprouvé** (§ *La programmation horaire*). Le relevé du
   2026-09-03 a fermé la question de la **granularité** (96 bits, créneaux de 15 min, mesuré) et
   **pas** celle de l'ordre des bits : les trois plannings de Bioul sont à zéro, et un planning nul
