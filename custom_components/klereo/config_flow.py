@@ -10,7 +10,14 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KlereoApi, KlereoApiError, extract_system_list
-from .const import DOMAIN, SCAN_INTERVAL_MIN_MINUTES, SCAN_INTERVAL_MINUTES, hash_password
+from .const import (
+    COUNTER_EQUIPMENT,
+    DOMAIN,
+    SCAN_INTERVAL_MIN_MINUTES,
+    SCAN_INTERVAL_MINUTES,
+    hash_password,
+    power_option_key,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -156,15 +163,28 @@ class NoPoolsFound(HomeAssistantError):
     """
 
 
-def options_schema(current: int) -> vol.Schema:
-    """Build the options form schema, pre-filled with `current`."""
-    return vol.Schema(
-        {
-            vol.Optional("scan_interval", default=current): vol.All(
-                int, vol.Range(min=SCAN_INTERVAL_MIN_MINUTES, max=60)
-            ),
-        }
-    )
+def options_schema(current: int, options: dict | None = None) -> vol.Schema:
+    """Build the options form schema, pre-filled with `current` and with `options`.
+
+    🔴 The power fields carry a `suggested_value` and NO `default`. The difference is the
+    whole feature: a default writes a watt into the entry for every equipment the moment
+    the form is submitted, so `sensor` would then be metering our number rather than the
+    user's, for hardware they never declared. With a suggested value, a field left blank
+    is simply absent from `user_input` — which is also how an energy entity is removed
+    again. See #163, and `configured_power` in `entity.py` for the other end.
+    """
+    options = options or {}
+    schema = {
+        vol.Optional("scan_interval", default=current): vol.All(
+            int, vol.Range(min=SCAN_INTERVAL_MIN_MINUTES, max=60)
+        ),
+    }
+    for equipment in COUNTER_EQUIPMENT:
+        key = power_option_key(equipment)
+        schema[
+            vol.Optional(key, description={"suggested_value": options.get(key)})
+        ] = vol.All(vol.Coerce(float), vol.Range(min=0))
+    return vol.Schema(schema)
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
@@ -178,6 +198,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=options_schema(
-                current=self.config_entry.options.get("scan_interval", SCAN_INTERVAL_MINUTES)
+                current=self.config_entry.options.get("scan_interval", SCAN_INTERVAL_MINUTES),
+                options=self.config_entry.options,
             ),
         )
