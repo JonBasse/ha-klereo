@@ -283,17 +283,25 @@ class TestTheRawPayloadReachesTheExport:
 
         assert _raw(result)["outs"][0][field] == MEASURED_OUT[field]
 
-    async def test_the_typed_output_model_did_not_grow(self):
+    async def test_the_typed_output_model_only_grows_for_a_field_a_FEATURE_reads(self):
         """🔴 Negative control on the SCOPE: the raw payload answers the question
         *instead of* widening the model, not as well as.
 
-        A field nothing reads is noise — #138 refused exactly that. If `KlereoOutput`
-        ever grows a `realStatus`, this test says so.
+        A field nothing reads is noise — #138 refused exactly that, and this guard was
+        written for it. `off_delay` was added on the OTHER justification: #162 builds a
+        writable auto-off timer on it, so it has to reach the platform as part of a typed
+        model rather than a raw dict (`CLAUDE.md`). The distinction is the whole point of
+        the guard, so the list is enumerated rather than loosened — an added field must
+        name the feature that reads it, here, or this test stays red.
+
+        ⚠️ `realStatus` is deliberately still absent: #141 reads it from the raw export
+        and nothing else, which is exactly the case this test was built to hold.
         """
         result = await _export_payload()
 
         parsed = result["coordinator_data"]["121170"]["details"]["outs"][0]
-        assert set(parsed) == {"index", "status", "mode", "type"}
+        assert set(parsed) == {"index", "status", "mode", "type", "off_delay"}
+        assert "realStatus" not in parsed
 
 
 class TestRedactionReachesTheRawPayload:

@@ -33,21 +33,37 @@ class KlereoProbe:
 
 @dataclass
 class KlereoOutput:
-    """A Klereo controllable output."""
+    """A Klereo controllable output.
+
+    ⚠️ `off_delay` is the one field here added because a FEATURE reads it, and that is the
+    distinction #145 turned on. #145 refused to widen this class to make payload fields
+    *visible* — the raw diagnostics export already does that, and a field nothing reads is
+    noise. `SetAutoOff` (#162) reads this one to build an entity, and the coordinator hands
+    the platforms typed models rather than raw API dicts (`CLAUDE.md`), so it has to be
+    carried here. The other six unparsed keys of `outs[]` keep their refusal.
+    """
 
     index: int
     status: int = 0
     mode: int = 0
     type: int = 0
+    off_delay: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> KlereoOutput:
-        """Parse an output dict from the API."""
+        """Parse an output dict from the API.
+
+        🔴 `off_delay` defaults to `None`, NOT to `0`, unlike the four fields above it.
+        An absent timer is unknown, and `0` is the single value nobody has measured — the
+        upstream-declared floor is `1`. Defaulting to it would both invent a reading and
+        pick a side in an open question (#162).
+        """
         return cls(
             index=data["index"],
             status=data.get("status", 0),
             mode=data.get("mode", 0),
             type=data.get("type", 0),
+            off_delay=data.get("offDelay"),
         )
 
 

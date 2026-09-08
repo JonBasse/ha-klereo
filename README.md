@@ -13,6 +13,7 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 - **Probe sensors** — Water temperature, air temperature, pH, redox (ORP), filter pressure, flow rate, chlorine level, container levels, and more.
 - **Equipment switches** — Control lighting, filtration, heating, and auxiliary outputs (on/off) with optimistic state updates.
 - **Adjustable setpoints** — Water temperature setpoint exposed as a number entity you can adjust directly from the UI.
+- **Auto-off timers** — Each output's *Temps minuterie* exposed as a number entity in minutes, adjustable from the UI.
 - **Regulation parameters** — View regulation modes and setpoints as read-only sensors.
 - **Manual refresh** — A **Refresh from Klereo** button per pool re-reads the cloud on demand, exactly as the button in Klereo's own web interface does.
 - **Automatic discovery** — All pool systems, probes, and outputs are discovered automatically from your Klereo account. New entities are added dynamically without requiring a restart.
@@ -234,6 +235,24 @@ Writable regulation setpoints are exposed as number entities:
 | ConsigneEau | Water Setpoint | 10–40 °C | 0.5 |
 
 Changing a value sends a `SetParam` command to the Klereo API.
+
+#### Auto-Off Timers
+
+Every output whose data carries a timer also gets a **‹name› Auto-Off Timer**, in **minutes**,
+adjustable from 1 to 600 (10 hours). It is Klereo's *Temps minuterie* — how long the output runs
+before it switches itself off — and changing it sends a `SetAutoOff` command.
+
+An output whose data carries **no** timer gets **no entity**: nothing is invented, and nothing is
+shown as `0`.
+
+Two things about this timer are not documented anywhere and have not been measured, so the
+integration does not pretend to know them:
+
+- **What it does on an output that is not in Manual mode.** An output running under regulation or a
+  time slot still reports a timer; whether that timer applies there is unknown. The entity shows the
+  value the box reports either way.
+- **What `0` means.** The lowest value offered here is 1, which is the lowest Klereo itself declares.
+  Whether `0` would switch the timer off or simply be refused has never been tried.
 
 ### Refresh Button
 
