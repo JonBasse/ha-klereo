@@ -25,7 +25,13 @@ instead of one:
   output that is not there.
 
 ⚠️ Whoever comes to "align" the two gates: the tests below are the reason not to. Neither
-direction can be applied without turning at least one of them red.
+direction can be applied without turning at least one of them red — and measured, not
+asserted. The blunt alignments are already caught by accident elsewhere (17 and 8 cases),
+because unrelated fixtures happen to carry no outputs or no `HeaterMode`. The two written
+the way this codebase actually reasons are caught HERE AND NOWHERE ELSE: barring the
+setpoint only where the payload does report its outputs — honouring "an unknown answer
+never gates" — reddens two cases, both below; widening `climate` to a known `HeaterMode`
+with no output 4 reddens exactly one, likewise below. Both would otherwise have shipped.
 """
 from unittest.mock import AsyncMock, MagicMock
 
