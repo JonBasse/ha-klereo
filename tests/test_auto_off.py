@@ -157,6 +157,24 @@ class TestWhichOutputsGetATimer:
         assert "SYS1_auto_off_9" in uids
 
 
+    def test_a_PAYLOAD_without_offDelay_yields_no_entity_either(self, entity_coordinator):
+        """The same rule through the REAL path, from the wire rather than a hand-built model.
+
+        The two controls above build `KlereoOutput` directly, so neither of them would see
+        the parser default an absent `offDelay` to `0` — and a `0` default is exactly how
+        this gate stops working while still looking guarded. This one goes through
+        `KlereoPoolDetails.from_dict`, which is what the coordinator actually calls.
+        """
+        details = KlereoPoolDetails.from_dict(
+            {"outs": [{"index": 1, "status": 1}, {"index": 9, "offDelay": 240}]}
+        )
+
+        uids = [uid for uid, _ in _extract_numbers(entity_coordinator, "SYS1", details)]
+
+        assert "SYS1_auto_off_1" not in uids
+        assert "SYS1_auto_off_9" in uids
+
+
 class TestTheTimerEntity:
     def test_it_is_named_for_what_it_is_and_bounded_where_it_was_declared(
         self, entity_coordinator
