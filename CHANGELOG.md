@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **`realStatus` is the physical state of a relay and `status` is the commanded one — measured, written down, and `switch`/`select` still read `status`** ([#141](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/141)). No behaviour changes: this ships the answer to a question that had been open since 2026-08-28, and the reasons the answer does not license a swap.
+  - **The measurement.** [@nopbop](https://github.com/JonBasse/ha-klereo/issues/55) posted a diagnostics export taken **while his heat pump was heating**. Three of his ten outputs are commanded on (`status: 1`): output 1 has run `51 162 044` and reads `realStatus: 1`; outputs 3 and 4 have **never run** (`totalTime: 0`) and read `realStatus: 0`. Meanwhile `AqOnOff`, `AqPower` and `AqPACMode` all read `1` — the pump heats, and not through either relay.
+  - 🔴 **The run times are a second witness, not a restatement of the first.** `outs[].totalTime` and the `params` counters are the **same counter**, which this export shows: `PHMinus_TotalTime` equals `outs[2].totalTime` exactly (`127218`, a stopped output whose counter cannot drift) and `Filtration_TotalTime` matches `outs[1].totalTime` to 351 (a running one, which does). `Chauff_TotalTime` is `0`, like both divergent outputs. **Where the two fields disagree, `realStatus` agrees with the counter and `status` does not** — and that argument stands on its own, without interpreting the `Aq*` fields no source names.
+  - 🔴 **Naming the fields is not permission to swap them.** `data.get("realStatus", 0)` reads `0` on an installation that does not send the key, indistinguishable from a relay genuinely open: switching would turn off **everyone's** outputs to fix the display of one. Two installations have been read, both carry the key, and two are not all. The refusal is now held by behaviour — `tests/test_real_status_gate.py` asserts that an output really running on an installation with no `realStatus` stays on — and not only by the field-list guard from [#145](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/145), which stays green for a parser that fills `status` from `realStatus`.
+  - ⚠️ **The cost is asserted rather than hidden.** On an output whose relay does nothing the switch shows the command and not the world. That is the shape of [GitHub #58](https://github.com/JonBasse/ha-klereo/issues/58), and it is now a measured limitation instead of an unexplained one.
+  - ✅ **Step 2 of the ticket's plan is done, and negative**: `realStatus` appears **zero** times in the whole upstream Jeedom plugin (clone at `10e35cf`, 2026-09-08), which drives its own on/off from `$out['status']`. Not proof — a reimplementation can miss a field the way we did — but it moves the burden onto whoever wants the swap.
+  - **Step 3 — asking Klereo — is still open**, and the field is still absent from the elided lists of the official document.
+
+### Documentation
+
+- **`docs/klereo-api.md` now describes `outs[]`, which the official source elides entirely** ([#141](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/141)). The full key table, the `realStatus` / `status` verdict with the payload that carries it, and the upstream reading.
+  - 🔴 **"Eleven keys, of which the parser drops seven" was never a shape** — it was the Bioul bench. @nopbop's export carries **thirteen** keys on eight of its ten outputs (`recurDate`, `recurMode`) and eleven on the other two: the count varies **inside one payload**, one level below [#138](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/138)'s lesson that containers vary by installation. Corrected in `models.py`, `CLAUDE.md` and the [#145](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/145) fixture comment — the fixture itself is left as measured rather than widened to a union it never carried.
+  - ✅ **The unit of `outs[].totalTime` is narrowed, not closed.** The analogy with `params.<Equipment>_TotalTime` is no longer an analogy — the two are measurably the same counter — so the remaining inference is at the other end of that equality: seconds comes from upstream dividing by 3600 for hours, corroborated by `Filtration_TodayTime: 30511` being 8 h 28 as seconds and an impossible 21 days as minutes.
+  - ⚠️ **`map: 31` on both divergent outputs is written as an open hypothesis, with what would settle it** — never as the reason. `IORename` is empty in this export, `map` is read nowhere upstream, and a correlation over two outputs of one installation is not a mechanism.
+
 ## [1.17.0] — 2026-09-08
 
 ### Added

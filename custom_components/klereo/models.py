@@ -40,7 +40,46 @@ class KlereoOutput:
     *visible* — the raw diagnostics export already does that, and a field nothing reads is
     noise. `SetAutoOff` (#162) reads this one to build an entity, and the coordinator hands
     the platforms typed models rather than raw API dicts (`CLAUDE.md`), so it has to be
-    carried here. The other six unparsed keys of `outs[]` keep their refusal.
+    carried here. The other unparsed keys of `outs[]` — six on the bench, eight on the
+    payload that answered #141 — keep their refusal.
+
+    🔴 **`realStatus` is the PHYSICAL state, `status` is the COMMANDED one — and this class
+    still reads `status`, on purpose.** #141 asked which of the two makes law; @nopbop's
+    diagnostics export of **2026-09-08** (GitHub #55), taken while his heat pump was
+    heating, answers it from inside a single payload:
+
+    - Three outputs are commanded on (`status: 1`) — 1, 3 and 4. Output 1 carries
+      `totalTime: 51162044` and reads `realStatus: 1`. Outputs 3 and 4 carry `totalTime: 0`
+      and read `realStatus: 0`. Every other output is `status: 0` and agrees trivially.
+    - Those `totalTime` values ARE the pool counters, which makes the run times a second
+      witness rather than a restatement: `params.PHMinus_TotalTime` equals
+      `outs[2].totalTime` to the second (`127218`), `params.Filtration_TotalTime` matches
+      `outs[1].totalTime` to within 351 — the stopped counter cannot drift, the running one
+      does — and `params.Chauff_TotalTime` is `0`, like both divergent outputs.
+    - Meanwhile `AqOnOff`, `AqPower` and `AqPACMode` all read `1`. The pump heats; the box
+      has never counted one second on either relay typed for heat. So `realStatus: 0` is
+      correct — neither relay ever closed — and `status: 1` is a command with nothing
+      behind it.
+
+    Where the two disagree, `realStatus` agrees with the run-time counter and `status` does
+    not. That names the fields; it does NOT license swapping them, and `switch`/`select`
+    keep reading `status`:
+
+    - `data.get("realStatus", 0)` reads `0` on an installation that does not send the
+      field, which is indistinguishable from a real "off". Switching would turn everyone's
+      outputs off to fix one — a correction that makes false what was true. Two
+      installations have been read and both carry the key; two are not all.
+    - The upstream Jeedom plugin does not read it either. `realStatus` appears **zero**
+      times in the whole plugin (clone of `MrWaloo/jeedom-klereo` at `10e35cf`, taken
+      2026-09-08); it drives its own on/off from `$out['status']`
+      (`klereo.class.php:626, 634, 637, 658`). Step 2 of #141's plan, and a negative
+      result: not proof, but it moves the burden onto the swap.
+
+    ⚠️ The consequence is stated rather than hidden: on an output whose relay does nothing,
+    the switch shows the command and not the world. That is the same shape as GitHub #58,
+    and it is now a known, measured limitation instead of an unexplained one. The field
+    reaches a reporter through the raw diagnostics export (#145) and through nothing else.
+    See #141 and `docs/klereo-api.md` § *Détail d'un bassin*.
     """
 
     index: int
@@ -200,9 +239,19 @@ class KlereoPoolDetails:
 
         🔴 It is kept because the export is the only remote instrument this project has,
         and it was structurally blind to every field this class does not name: `outs[]`
-        carries eleven keys and `KlereoOutput` parses four, so `realStatus` — the field
-        that blocks #141 — could only be seen by calling the API with the owner's own
-        credentials. No reporter can do that for us. See #145.
+        carried eleven keys on the bench and `KlereoOutput` parses four, so `realStatus` —
+        the field that blocked #141 — could only be seen by calling the API with the
+        owner's own credentials. No reporter can do that for us. See #145.
+
+        ⚠️ "Eleven" was never a shape. @nopbop's export of 2026-09-08 carries THIRTEEN keys
+        on eight of its ten outputs and eleven on the other two — the count varies inside a
+        single payload, not merely between installations (#138's lesson, one level down).
+        That is the argument for keeping the payload verbatim rather than for enumerating
+        it: what is exported must not depend on a count anyone got right once.
+
+        ✅ It paid for itself: #141 is answered out of a raw payload a reporter pasted, and
+        the verdict — `realStatus` physical, `status` commanded, and why `switch`/`select`
+        keep reading `status` anyway — is written on `KlereoOutput` above.
 
         ⚠️ Carrying it here is NOT a licence to widen `KlereoOutput`. A field nothing
         reads is noise; #138 refused exactly that. The raw payload answers the question
