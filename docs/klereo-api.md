@@ -84,7 +84,7 @@ que les deux autres connaissent.**
 | `GetPoolDetails.php` | `poolID` | ✅ | ✅ | ✅ |
 | `SetOut.php` | `poolID`, `outIdx`, `newMode`, `newState`, `comMode` | ✅ | ✅ | ✅ |
 | `SetParam.php` | `poolID`, `paramID`, `newValue`, `comMode` | 🔴 **absent** | ✅ | ✅ |
-| `SetAutoOff.php` | `poolID`, `outIdx`, `offDelay`, `comMode` | 🔴 **absent** | ✅ | 🔴 **absent** |
+| `SetAutoOff.php` | `poolID`, `outIdx`, `offDelay`, `comMode` | 🔴 **absent** | ✅ | ✅ (#162) |
 | `CommandStatus.php` | `cmdID` | ✅ | ❌ | ✅ |
 | `WaitCommand.php` | `cmdID` | ✅ | ✅ | ❌ écarté (#140) |
 
@@ -510,8 +510,13 @@ seule source et le seul consommateur.
 
 ### Poser un délai d'extinction automatique — `SetAutoOff.php`
 
-🔴 **Capacité non exposée par l'intégration.** C'est le seul point de la matrice où l'amont est
-**seul** à savoir quelque chose d'actionnable.
+✅ **Exposée depuis #162** — `api.set_auto_off` / `coordinator.async_set_auto_off`, et une entité
+`number` « Auto-Off Timer » par sortie qui porte le champ. C'était le dernier point de la matrice
+où l'amont était **seul** à savoir quelque chose d'actionnable ; il ne l'est plus.
+
+⚠️ Les deux inconnues de la fin de section (**le comportement à `0`**, **le sens sur une sortie
+non-manuelle**) survivent à cette livraison : l'entité borne à `1` et n'annote rien, précisément
+pour ne rien affirmer à leur sujet.
 
 **Source : amont uniquement** (`klereo.class.php:1280-1299`, `function setAutoOff`).
 

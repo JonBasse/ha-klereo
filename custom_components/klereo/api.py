@@ -15,6 +15,7 @@ API_URL_GET_INDEX = f"{API_URL_BASE}/GetIndex.php"
 API_URL_GET_POOL_DETAILS = f"{API_URL_BASE}/GetPoolDetails.php"
 API_URL_SET_OUT = f"{API_URL_BASE}/SetOut.php"
 API_URL_SET_PARAM = f"{API_URL_BASE}/SetParam.php"
+API_URL_SET_AUTO_OFF = f"{API_URL_BASE}/SetAutoOff.php"
 API_URL_COMMAND_STATUS = f"{API_URL_BASE}/CommandStatus.php"
 
 API_VERSION = "393-J"
@@ -331,6 +332,32 @@ class KlereoApi:
             "POST",
             API_URL_COMMAND_STATUS,
             data={"cmdID": cmd_id, "comMode": API_COM_MODE},
+        )
+
+    async def set_auto_off(self, system_id: str, out_index: int, off_delay: int) -> Any:
+        """Set an output's automatic-off timer, in minutes.
+
+        Args:
+            system_id: The pool system ID.
+            out_index: Output index (0-15).
+            off_delay: Timer in MINUTES. Upstream declares the field bounded 1-600
+                (`klereo.class.php` l.938-939), and the server validates it — a call
+                naming no delay answered `{"status":"error","detail":"Mauvais délais"}`.
+
+        Like `set_output` and `set_param`, this only QUEUES: the returned `cmdID` has to
+        be read back through `command_status`. Measured on Bioul 2026-09-08, from an
+        account at `access: 10` — so this endpoint needs no professional access, unlike
+        the four outputs `PRO_ONLY_OUTPUTS` names. See `docs/klereo-api.md`.
+        """
+        return await self._request_with_retry(
+            "POST",
+            API_URL_SET_AUTO_OFF,
+            data={
+                "poolID": system_id,
+                "outIdx": out_index,
+                "offDelay": off_delay,
+                "comMode": API_COM_MODE,
+            },
         )
 
     async def set_param(self, system_id: str, param_id: str, value: Any) -> Any:

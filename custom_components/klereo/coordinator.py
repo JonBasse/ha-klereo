@@ -344,6 +344,24 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
         await self.async_request_refresh()
         return result
 
+    async def async_set_auto_off(
+        self, system_id: str, out_index: int, off_delay: int
+    ) -> Any:
+        """Send an automatic-off timer, check it ran, and request a data refresh."""
+        description = f"Setting the auto-off timer of output {out_index}"
+        _LOGGER.debug(
+            "%s: sending offDelay=%s to system %s", description, off_delay, system_id
+        )
+        try:
+            result = await self.api.set_auto_off(system_id, out_index, off_delay)
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Failed to set the auto-off timer of output {out_index}: {err}"
+            ) from err
+        await self._async_confirm_command(result, description)
+        await self.async_request_refresh()
+        return result
+
     async def async_set_param(self, system_id: str, param_id: str, value: Any) -> Any:
         """Send a set-parameter command, check it ran, and request a data refresh."""
         description = f"Setting parameter {param_id}"

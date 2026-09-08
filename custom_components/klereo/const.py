@@ -72,6 +72,18 @@ SENSOR_TYPES = {
     14: {"name": "Chlorine", "unit": "mg/L", "device_class": None, "state_class": "measurement"},
 }
 
+# The automatic-off timer Klereo calls « Temps minuterie », in MINUTES. The bounds are
+# upstream's own declaration of the field (`klereo.class.php` l.938-939, `1, 600, 'min'`),
+# recouped against Bioul, whose five outputs read 240, 5, 2, 2, 240 — all inside them.
+#
+# 🔴 The floor is 1 rather than 0 on purpose, and that is a REFUSAL TO ASSERT, not a
+# feature. Whether `offDelay: 0` disables the timer or is rejected outright is UNMEASURED
+# (#162); the server does validate the field ("Mauvais délais" on a call carrying none),
+# so 0 is plausibly refused — plausible is not measured. Keeping the declared floor offers
+# only values known to be accepted and claims nothing about the one that is not.
+AUTO_OFF_MIN_MINUTES = 1
+AUTO_OFF_MAX_MINUTES = 600
+
 OUTPUT_NAMES = {
     0: "Lighting",
     1: "Filtration",
