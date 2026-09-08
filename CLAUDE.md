@@ -124,7 +124,8 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
 - **`diagnostics.py`** — the **only remote instrument this project has**, and reporters are asked
   to paste it into **public** issues. It exports the typed models *and* the raw `GetPoolDetails`
   payload (`details.raw`, #145), because an export limited to the models is blind to every field
-  the parser drops — seven of the eleven on each `outs[]` element, `realStatus` among them.
+  the parser drops — `realStatus` among them; the element carries eleven to thirteen keys, and
+  the count varies inside one payload, so the export keeps it verbatim rather than by list.
 
   > 🔴 `TO_REDACT` is a **security claim**, not a convenience, and the raw payload publishes an
   > object whose key list comes from the server. **A key nobody has judged is not a safe key** —

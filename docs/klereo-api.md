@@ -23,6 +23,12 @@
 > quatre**, et la seule qui ne soit ni une documentation, ni une réimplémentation, ni une
 > supposition : c'est l'API observée. Les faits qui en viennent sont marqués **mesuré sur le fil**,
 > avec la portée de la mesure — deux installations ne sont pas toutes les installations.
+>
+> ✅ **Et depuis le 2026-09-08, une cinquième : l'EXPORT DE DIAGNOSTICS brut** (#145). Ce n'est pas
+> une classe de moindre poids que le relevé réseau — c'est la même chose vue de notre côté : la
+> réponse de `GetPoolDetails` telle qu'elle arrive, avant que notre parseur n'en jette les
+> deux tiers. C'est elle qui a tranché #141 (§ *Détail d'un bassin*), et un rapporteur peut la
+> produire sans outil ni capture, ce qu'aucune des quatre autres ne permet.
 
 ## Comment lire ce fichier — trois réserves qui portent
 
@@ -232,6 +238,134 @@ Chaque élément de `probes[]` :
 | `...` | **élidé dans la source** |
 
 Les quatre champs `*Capteur` ne sont pas lus par l'intégration — suivi en #107.
+
+### ✅ Chaque élément de `outs[]` — MESURÉ, la source l'élide entièrement
+
+Relevé sur l'**export de diagnostics de @nopbop du 2026-09-08**
+([GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55)), une installation KlereoTherm à dix
+sorties, pris **pendant que sa pompe à chaleur chauffait**. C'est la mesure qui a tranché #141.
+Aucune de ces clés n'apparaît dans la documentation Klereo : la liste de `GetPoolsDetails` y est
+élidée (réserve 1).
+
+**L'amont en lit cinq, et nous les mêmes cinq** — mesuré sur le clone du 2026-09-08 :
+`index` (12 lectures), `mode` (10), `status` (6), `type` (2), `offDelay` (1). Les huit autres
+— `realStatus`, `totalTime`, `updateTime`, `map`, `flags`, `cloneSrc`, `recurDate`, `recurMode` —
+apparaissent **zéro** fois dans tout le plugin. Elles n'existent, pour ce projet, que dans l'export
+brut de `diagnostics.py`.
+
+| Champ | Sens | Source |
+|---|---|---|
+| `index` | index interne de la sortie (num) | amont, `api.py` |
+| `status` | état **COMMANDÉ** de la sortie — voir le verdict ci-dessous | mesuré ; lu par l'amont et par `switch`/`select` |
+| `realStatus` | état **PHYSIQUE** du relais — voir le verdict ci-dessous | **mesuré** ; lu par personne, ni ici ni à l'amont |
+| `mode` | mode de fonctionnement (Manuel / Créneaux / Minuterie / Régulation) | doc Klereo, amont, `api.py` |
+| `type` | type de sortie ; `8` sur les deux sorties de chauffe de cette installation | amont, `api.py` |
+| `offDelay` | délai d'extinction automatique, en minutes — § *SetAutoOff* | amont, `api.py` (#162) |
+| `totalTime` | temps de marche cumulé — **coïncide avec `params.<Équipement>_TotalTime` là où un tel compteur existe**, pas partout ; voir ci-dessous | mesuré |
+| `updateTime` | ancienneté de la dernière mise à jour, en secondes (par analogie avec `probes[].directTime`) | inféré |
+| `map` | non identifié — hypothèse ouverte ci-dessous | mesuré, non interprété |
+| `flags` | non identifié | mesuré, non interprété |
+| `cloneSrc` | non identifié ; vaut `1` sur les dix sorties | mesuré, non interprété |
+| `recurDate` | non identifié | mesuré, non interprété |
+| `recurMode` | non identifié | mesuré, non interprété |
+
+🔴 **Le nombre de clés VARIE d'un élément à l'autre DANS LA MÊME charge utile.** Huit des dix
+sorties de cet export en portent **treize** ; les sorties 1 et 4 en portent **onze**, sans
+`recurDate` ni `recurMode`. « Onze clés, dont le parseur en jette sept » décrivait le relevé de
+Bioul du 2026-08-30, pas une forme générale — c'est le rappel de #138 sous une autre face : *les
+conteneurs varient par installation*, et ici ils varient même par élément. Ce qui vaut n'est pas le
+compte, c'est que l'export brut (#145) les rende tous quel que soit leur nombre.
+
+#### 🔴 `realStatus` est le champ PHYSIQUE, `status` le champ COMMANDÉ — mesuré
+
+Table complète des dix sorties, telle que l'export la porte :
+
+```
+      index        type        mode      status  realStatus         map   totalTime
+          0           0           0           0           0           0           0
+          1           0           3           1           1           1    51162044
+          2           0           3           0           0           2      127218
+          3           8           3           1           0          31           0
+          4           8           3           1           0          31           0
+          5           0           0           0           0           5           0
+          6           0           0           0           0           6           0
+          7           0           0           0           0           7           0
+          9           0           0           0           0           8           0
+         15           0           3           0           0           3        7680
+```
+
+Trois sorties sont **commandées en marche** (`status: 1`) : 1, 3 et 4. Les sept autres sont à `0` et
+concordent trivialement. Parmi les trois :
+
+* la sortie 1 a tourné `51 162 044` unités de temps et rend `realStatus: 1` ;
+* les sorties 3 et 4 n'ont **jamais rien** compté (`totalTime: 0`) et rendent `realStatus: 0`.
+
+Et là où un compteur `params` **nomme** le même équipement, les deux valeurs coïncident, ce qui
+fait de `totalTime` un second témoin et non une reformulation du premier :
+
+| compteur `params` | valeur | `outs[].totalTime` correspondant |
+|---|---|---|
+| `PHMinus_TotalTime` | `127218` | sortie 2 : `127218` — **à l'unité près** |
+| `Filtration_TotalTime` | `51162395` | sortie 1 : `51162044` — **à 351 près** |
+| `Chauff_TotalTime` | `0` | sorties 3 et 4 : `0` |
+| `ElectroChlore_TotalTime` | `0` | 🔴 **aucune** — voir ci-dessous |
+
+⚠️ **La correspondance est mesurée sur trois équipements, elle n'est PAS une identité générale, et
+le quatrième compteur la contredit.** `params` ne porte que quatre `*_TotalTime` ; la sortie 15
+compte `7680` et **aucune** clé de `params` ne vaut `7680`, tandis que `ElectroChlore_TotalTime` —
+le seul partenaire plausible — vaut `0`. Écrire « `outs[].totalTime` **est** le compteur du
+bassin » referait ici la faute que la même mesure vient de corriger deux paragraphes plus haut sur
+le nombre de clés : prendre un relevé pour une forme. Ce qui est mesuré est plus étroit et suffit
+à l'argument — les deux sorties divergentes sont typées chauffage (`type: 8`) et `Chauff_TotalTime`
+vaut `0` comme elles.
+
+L'écart est là où il doit être : la sortie 2 est **arrêtée**, son compteur ne peut pas dériver entre
+deux instantanés ; la sortie 1 **tourne**, le sien dérive. Pendant ce temps `AqOnOff: 1`,
+`AqPower: 1` et `AqPACMode: 1` — la pompe à chaleur est alimentée et en mode chauffe — et
+`Chauff_TodayTime` vaut `0` comme `Chauff_TotalTime`.
+
+➡️ **Là où les deux champs divergent, `realStatus` est d'accord avec le compteur de marche et
+`status` ne l'est pas.** La pompe chauffe, mais pas à travers l'un ou l'autre de ces deux relais :
+aucun des deux n'a jamais fermé, `realStatus: 0` a raison, et `status: 1` décrit une commande sans
+effet. C'est la forme exacte du bug d'origine de
+[GitHub #58](https://github.com/JonBasse/ha-klereo/issues/58) — une couche déclare *en marche*, la
+couche physique dit *à l'arrêt*.
+
+⚠️ **Portée de la mesure.** Une installation, une charge utile, deux sorties divergentes. Le
+raisonnement interne (compteurs contre `status`) tient tout seul et ne dépend pas de
+l'interprétation des champs `Aq*`, qu'aucune source ne nomme — et sur lesquels tout n'est d'ailleurs
+pas unanime, `AqFlow` valant `0` sans qu'on sache ce qu'il compte.
+
+#### 🔴 Ce que cela n'autorise PAS : `switch` et `select` continuent de lire `status`
+
+Nommer les deux champs n'est pas savoir qu'on peut les échanger. `data.get("realStatus", 0)` rend
+`0` sur une installation qui n'envoie pas la clé — **indiscernable d'un relais réellement ouvert**.
+Basculer éteindrait toutes les sorties de tout le monde pour corriger l'affichage d'une seule :
+une correction qui rend faux ce qui était vrai. Deux installations ont été lues, toutes deux
+portent la clé ; deux ne sont pas toutes. La décision est écrite sur `models.KlereoOutput` et tenue
+par `tests/test_real_status_gate.py`.
+
+**✅ Étape 2 du plan de #141 — l'amont ignore le champ. Mesuré, résultat négatif.** `realStatus`
+apparaît **zéro** fois dans l'intégralité du plugin Jeedom amont (clone de
+[`MrWaloo/jeedom-klereo`](https://github.com/MrWaloo/jeedom-klereo) à `10e35cf`, pris le
+2026-09-08 ; dernier commit touchant `klereo.class.php` : `0a52d87`, 2025-07-27). Il pilote son
+propre on/off depuis `$out['status']` (`klereo.class.php:626, 634, 637, 658`) et relit `$out['status']`
+avant chaque `SetOut` (l. 1555, 1624). Ce n'est pas une preuve — c'est une réimplémentation, elle
+peut avoir raté le champ comme nous l'avions raté — mais ça déplace la charge sur qui voudrait
+basculer.
+
+#### Hypothèse OUVERTE : `map: 31` serait la sentinelle « non mappé »
+
+Les deux sorties divergentes, et elles seules, portent `map: 31` ; toutes les autres portent une
+petite valeur distincte (`0, 1, 2, 3, 5, 6, 7, 8`). Une lecture séduisante s'offre : `map` serait un
+index d'emplacement et `31` la valeur « aucun », ce qui expliquerait joliment « rien derrière le
+relais ».
+
+🔴 **Ce n'est pas écrit ici comme une raison.** `IORename` est vide (`[]`) dans cet export, donc rien
+ne nomme les emplacements ; `map` n'est lu nulle part dans le plugin amont ; et une corrélation sur
+deux sorties d'une seule installation n'est pas un mécanisme. **Ce qui la trancherait** : un export
+d'une installation dont `IORename` est peuplé, ou une sortie portant `map: 31` avec un `totalTime`
+non nul — qui la réfuterait d'un coup.
 
 ---
 
@@ -710,10 +844,22 @@ l'utilisateur.
   ⚠️ Ce qui reste ouvert est plus étroit : l'origine de l'axe (bit 0 = minuit) est calée par un
   témoignage humain « à priori / normalement », pas par une mesure indépendante, et une seule
   sortie programmée d'une seule installation a été lue.
-- **L'unité de `outs[].totalTime`** — jamais lue par l'amont, donc non sourcée. Par analogie avec
-  `params.Filtration_TotalTime`, que l'amont divise par 3600 pour obtenir des heures
-  (`klereo.class.php:331`), la seconde est probable. C'est une **inférence**, et la lire comme un
-  fait ferait de `28 414 540` autre chose que ~329 jours.
+- ⚠️ **L'unité de `outs[].totalTime`** — **rétrécie le 2026-09-08, pas close.** L'analogie avec
+  `params.<Équipement>_TotalTime` n'en est plus une là où les deux se rejoignent : sur l'export de
+  @nopbop **trois équipements sur quatre** portent la même valeur des deux côtés, mesuré —
+  `PHMinus_TotalTime` égale `outs[2].totalTime` à l'unité près
+  (`127218`, sortie arrêtée) et `Filtration_TotalTime` égale `outs[1].totalTime` à 351 près
+  (sortie qui tourne, donc qui dérive entre deux instantanés). Ce qui reste inféré est l'unité de
+  l'autre bout de l'égalité : que `Filtration_TotalTime` soit en secondes vient de ce que l'amont
+  le divise par 3600 pour afficher des heures (`klereo.class.php:331`), c'est-à-dire d'une
+  réimplémentation. Un contrôle interne va dans le même sens — `Filtration_TodayTime: 30511` lu en
+  secondes fait 8 h 28 pour une journée, alors qu'en minutes il ferait 21 jours, ce qu'un compteur
+  « aujourd'hui » ne peut pas porter. Reste une **inférence bien étayée**, pas une lecture de la
+  documentation.
+- **Ce que valent `map`, `flags`, `cloneSrc`, `recurDate` et `recurMode` sur `outs[]`** — mesurés
+  depuis le 2026-09-08, interprétés par personne : ils n'apparaissent ni dans la source Klereo, ni
+  dans le plugin amont. L'hypothèse `map: 31` = « non mappé » est posée avec ce qui la trancherait
+  au § *Détail d'un bassin* ; les quatre autres n'ont même pas d'hypothèse.
 - **Ce qu'un endpoint NON documenté accepterait** — hors périmètre par décision, pas par oubli :
   deviner des noms chez un tiers qui menace de bannir ferait porter le risque sur le compte de
   l'utilisateur.
