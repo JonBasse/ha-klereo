@@ -116,6 +116,16 @@ def is_setpoint_offered(key: str, details: KlereoPoolDetails) -> bool:
     The value is read from `details.settings` rather than passed in, so both callers
     necessarily judge the same number whichever container it arrived in.
 
+    🔴 DISJOINT from `climate`'s creation gate BY CONSTRUCTION — do not "align" the two
+    (Forgejo #172). A setpoint is a parameter of the POOL: `number` writes `SetParam.php`
+    with `poolID`, `paramID` and `newValue`, and output 4 appears nowhere on that path.
+    `climate` exists only where output 4 does because its modes write `SetOut.php` with
+    `outIdx: 4` — a different endpoint on a different object. A box with `HeaterMode` set
+    and no output 4 therefore correctly carries a writable setpoint and no thermostat;
+    gating this on the output would DELETE that setpoint, which is #128 / #135 again.
+    `climate` itself already uses both gates separately: modes on the output,
+    `async_set_temperature` on this one. `tests/test_disjoint_gates.py` holds them apart.
+
     ⚠️ An unknown answer NEVER gates. A payload carrying no `access`, no `HeaterMode` or
     no `pHMode` must keep the entity it has today. Only a value we can read, and that says
     "no", removes one. Same rule, and the same reason, as `is_output_offered` above.
