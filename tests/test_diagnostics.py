@@ -169,7 +169,13 @@ class TestRedactionCoversWhatWePromise:
 
 # One `outs[]` element, measured 2026-08-30 on the Bioul installation with the OWNER's
 # own credentials — the direct API call #145 exists to make unnecessary. Eleven keys, of
-# which `KlereoOutput` parses four; `realStatus` is the one that blocks #141.
+# which `KlereoOutput` parses four; `realStatus` is the one that blocked #141.
+#
+# ⚠️ Eleven is what BIOUL sent, not a shape. @nopbop's export of 2026-09-08 carries thirteen
+# keys on eight of its ten outputs (`recurDate`, `recurMode`) and eleven on the other two —
+# the count varies inside one payload. This fixture is left as measured rather than widened
+# to the union: it is a record of a real element, and the tests below are about what the
+# export does with whatever it is given, not about how many keys that is.
 MEASURED_OUT = {
     "cloneSrc": -1,
     "flags": 0,
@@ -294,8 +300,20 @@ class TestTheRawPayloadReachesTheExport:
         the guard, so the list is enumerated rather than loosened — an added field must
         name the feature that reads it, here, or this test stays red.
 
-        ⚠️ `realStatus` is deliberately still absent: #141 reads it from the raw export
-        and nothing else, which is exactly the case this test was built to hold.
+        ⚠️ `realStatus` is deliberately still absent, and since 2026-09-08 that is a
+        DECISION rather than a pending question. #141 is answered — @nopbop's export taken
+        while his pump was heating shows `realStatus` tracking the run-time counters and
+        `status` not, so `realStatus` is the physical state and `status` the commanded one
+        (`models.KlereoOutput`). Knowing what the divergence means is not knowing we can
+        act on it: `data.get("realStatus", 0)` reads `0` on an installation that does not
+        send the field, indistinguishable from a real "off", so switching would turn
+        everyone's outputs off to fix one. Nothing reads the field but the export, so
+        nothing but the export carries it.
+
+        🔴 Whoever comes back here having read that #141 is closed: this guard is not a
+        leftover from an open question, and lifting it is the swap in disguise. The
+        behavioural half of the refusal — an output really on, on an installation that
+        sends no `realStatus`, stays on — lives in `tests/test_real_status_gate.py`.
         """
         result = await _export_payload()
 
