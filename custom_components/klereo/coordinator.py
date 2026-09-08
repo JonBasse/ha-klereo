@@ -17,6 +17,8 @@ from .api import (
     CMD_STATUS_IN_FLIGHT,
     CMD_STATUS_LABELS,
     CMD_STATUS_OK,
+    OUT_STATE_OFF,
+    OUT_STATE_ON,
     KlereoApi,
     KlereoApiError,
     extract_system_list,
@@ -328,6 +330,52 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             detail = f"{detail} — {klereo_detail}"
         raise HomeAssistantError(f"{description} was rejected by Klereo: {detail}")
 
+    def _show_confirmed_output(
+        self, system_id: str, out_index: int, mode: int, state: int
+    ) -> None:
+        """Show a confirmed command on EVERY entity of that output, not just the actuated one.
+
+        THE single source of optimism, and it lives here because here is the only place
+        that sees all of them: `switch`, `select` and `climate` read one `KlereoOutput`,
+        and a command names the output rather than the entity that sent it. Writing it in
+        the three platforms instead is what #166 already paid for with the KlereoTherm mode
+        table, which is now shared and not copied.
+
+        @nopbop's symptom is the asymmetry it removes (#174): `select` and `switch` each
+        wrote their OWN state before sending, so whichever entity you touched moved at once
+        and its siblings waited for the poll — up to ten minutes of a `switch` reading `off`
+        on a pump the thermostat, the mode select and Klereo's own client all agreed was
+        heating.
+
+        🔴 Written into the typed model, NEVER into a store of its own, and that is the
+        design constraint of the ticket rather than an implementation detail.
+        `_async_update_data` rebuilds `KlereoSystemData` from scratch on every poll, so the
+        next payload overwrites this by construction — including a payload that CONTRADICTS
+        it. An optimism that outlived a contradicting refresh would hide a genuine cloud-side
+        lag instead of removing one, and the export that refuted that reading covers exactly
+        one installation. `tests/test_optimistic_siblings.py` turns red on stickiness.
+
+        ⚠️ `details.raw` is deliberately left untouched: the diagnostics export publishes it
+        verbatim (#145), and it must keep saying what the box said, not what we asked for.
+
+        🔴 AUTO is not written to `status`. `newState` is ON/OFF only under Manual — every
+        other mode sends AUTO, which says "the box decides" and states nothing about the
+        relay. @nopbop's export shows output 1 in mode 3 (Regulation) reporting `status: 1`,
+        so writing 2 there would flip a running switch to `off` and INVENT the lie this fix
+        exists to remove. The mode is always ours to state; the relay state is not.
+        """
+        system = (self.data or {}).get(system_id)
+        if system is None:
+            return
+        output = system.details.output_index.get(out_index)
+        if output is None:
+            return
+
+        output.mode = mode
+        if state in (OUT_STATE_OFF, OUT_STATE_ON):
+            output.status = state
+        self.async_update_listeners()
+
     async def async_set_output(
         self, system_id: str, out_index: int, mode: int, state: int
     ) -> Any:
@@ -340,7 +388,11 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             raise HomeAssistantError(
                 f"Failed to set output {out_index}: {err}"
             ) from err
-        await self._async_confirm_command(result, description)
+        # Only a CONFIRMED command is shown. Unconfirmed is not a verdict (#140), and
+        # painting one across three entities would be the two-step protocol's own trap —
+        # a rejection made to read exactly like a success (#95).
+        if await self._async_confirm_command(result, description):
+            self._show_confirmed_output(system_id, out_index, mode, state)
         await self.async_request_refresh()
         return result
 
