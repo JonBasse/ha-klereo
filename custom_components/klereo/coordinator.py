@@ -1,7 +1,9 @@
 """DataUpdateCoordinator for Klereo."""
 import asyncio
 import logging
+import math
 from datetime import timedelta
+from time import monotonic
 from typing import Any
 
 import aiohttp
@@ -19,7 +21,12 @@ from .api import (
     KlereoApiError,
     extract_system_list,
 )
-from .const import SCAN_INTERVAL_MIN_MINUTES, SCAN_INTERVAL_MINUTES, SETTING_CONTAINERS
+from .const import (
+    BUTTON_REFRESH_MIN_MINUTES,
+    SCAN_INTERVAL_MIN_MINUTES,
+    SCAN_INTERVAL_MINUTES,
+    SETTING_CONTAINERS,
+)
 from .models import KlereoPoolDetails, KlereoSystemData, KlereoSystemInfo
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,6 +36,10 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     """Klereo data update coordinator."""
 
     api: KlereoApi
+
+    # When the last button-triggered refresh was served, on the monotonic clock. `None`
+    # until the first one, so a freshly loaded entry never refuses its first press.
+    _last_manual_refresh: float | None = None
 
     def __init__(self, hass: HomeAssistant, api: KlereoApi, scan_interval: int = SCAN_INTERVAL_MINUTES) -> None:
         """Initialize the coordinator.
@@ -45,6 +56,47 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             update_interval=timedelta(minutes=max(scan_interval, SCAN_INTERVAL_MIN_MINUTES)),
         )
         self.api = api
+
+    async def async_manual_refresh(self) -> None:
+        """Re-read Klereo because the user asked, at most once per floor period.
+
+        This is the whole of what the web interface's own refresh button does. The network
+        capture behind #164 shows it emitting ONE `POST GetPoolDetails.php` and nothing
+        else — it re-reads, it pushes no synchronisation order at the box — so requesting a
+        coordinator refresh is a faithful implementation of that gesture, not an imitation
+        of it. No write is sent from here, and a test asserts that on the absence of a call
+        rather than on the resulting state.
+
+        🔴 The rate limit is the reason this is a coordinator method and not two lines in
+        `button.py`. #139 put a floor under the polling interval because Klereo refreshes
+        server-side every ten minutes and threatens to ban faster callers — on the USER's
+        account. `button.press` is a service any automation can call in a loop, so an
+        unbounded button hands that floor back through the service door. Bounding it here
+        binds every caller, present and future, instead of one entity class.
+
+        The window is measured from the last refresh THIS method served, so the first press
+        is always honoured and the button adds at most one call per floor period on top of
+        the polling. Refusing instead on "time since the last poll of any kind" would refuse
+        nearly every press an install at the default interval could make, which is an inert
+        entity dressed as a working one.
+        """
+        window = BUTTON_REFRESH_MIN_MINUTES * 60
+        now = monotonic()
+        last = self._last_manual_refresh
+
+        if last is not None and now - last < window:
+            wait_minutes = max(1, math.ceil((window - (now - last)) / 60))
+            raise HomeAssistantError(
+                f"Klereo only refreshes its servers every {BUTTON_REFRESH_MIN_MINUTES} "
+                "minutes and bans accounts that poll faster, so this button is limited to "
+                f"the same pace. Try again in {wait_minutes} minute(s)."
+            )
+
+        # Stamped BEFORE the await: two presses arriving in the same event-loop tick would
+        # otherwise both read the old timestamp and both be served.
+        self._last_manual_refresh = now
+        _LOGGER.debug("Manual refresh requested")
+        await self.async_request_refresh()
 
     async def _async_update_data(self) -> dict[str, KlereoSystemData]:
         """Fetch data from the Klereo API."""

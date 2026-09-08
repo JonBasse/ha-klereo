@@ -28,6 +28,25 @@ def hash_password(plaintext: str) -> str:
 SCAN_INTERVAL_MINUTES = 10
 SCAN_INTERVAL_MIN_MINUTES = 10
 
+# Minimum interval between two refreshes the manual button causes, in minutes.
+#
+# 🔴 It is the SAME number as the polling floor above, and deliberately written as an alias
+# rather than re-typed: they are one measured constraint, and a button holding its own
+# literal would drift away from the floor the day the floor moves. Forgejo #164.
+#
+# The floor above bounds the periodic polling; nothing bounded a control the user can press
+# by hand. `button.press` is a service an automation can call in a loop just as easily as a
+# finger can tap it, so an unbounded button would have re-opened the door #139 closed, from
+# the inside. Bounding presses to one per floor period means the button can at most DOUBLE
+# the call rate the floor already permits, never turn it into hammering.
+#
+# ⚠️ It is measured between two BUTTON refreshes, not since the last poll. Barring a press
+# that lands soon after an automatic poll would refuse nearly every press an install at the
+# default interval could ever make — an entity that is technically present and practically
+# inert, which is the failure #115 / #130 / #101 record three times over. The first press is
+# therefore always served.
+BUTTON_REFRESH_MIN_MINUTES = SCAN_INTERVAL_MIN_MINUTES
+
 # Probe types that return binary 0/1 values and should be BinarySensorEntity
 BINARY_SENSOR_TYPES = {
     10: {"name": "Generic", "device_class": None},

@@ -14,6 +14,7 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 - **Equipment switches** — Control lighting, filtration, heating, and auxiliary outputs (on/off) with optimistic state updates.
 - **Adjustable setpoints** — Water temperature setpoint exposed as a number entity you can adjust directly from the UI.
 - **Regulation parameters** — View regulation modes and setpoints as read-only sensors.
+- **Manual refresh** — A **Refresh from Klereo** button per pool re-reads the cloud on demand, exactly as the button in Klereo's own web interface does.
 - **Automatic discovery** — All pool systems, probes, and outputs are discovered automatically from your Klereo account. New entities are added dynamically without requiring a restart.
 - **Cloud polling** — Data refreshed from the Klereo Connect cloud API at a configurable interval (10–60 minutes, default 10).
 - **Diagnostics** — Built-in diagnostics support for troubleshooting, with automatic redaction of sensitive data.
@@ -233,6 +234,22 @@ Writable regulation setpoints are exposed as number entities:
 | ConsigneEau | Water Setpoint | 10–40 °C | 0.5 |
 
 Changing a value sends a `SetParam` command to the Klereo API.
+
+### Refresh Button
+
+Each pool gets a **Refresh from Klereo** button that re-reads your data immediately instead of
+waiting for the next poll.
+
+It reads; it writes nothing. Klereo's own web interface (both v1 and v3) has the same button, and a
+network capture of it shows a single `GetPoolDetails` call and no command sent to your pool
+controller — so this button does exactly what that one does, and pressing it can never change
+anything at the poolside.
+
+**It refuses more than one refresh once every 10 minutes**, and says so when it does. That is not an
+arbitrary limit: Klereo refreshes its servers every 10 minutes and asks that clients do not poll
+faster, on pain of banning the account — *your* account. Pressing more often would return the same
+data anyway, so the button is held to the same pace as the update interval. The first press after a
+restart is always served.
 
 ## Troubleshooting
 
