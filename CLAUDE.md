@@ -53,8 +53,19 @@ Users install by adding `https://github.com/JonBasse/ha-klereo` as a **custom re
 happens to the submission below.
 
 **Default-catalogue submission: [hacs/default#10263](https://github.com/hacs/default/pull/10263)**,
-opened 2026-08-23, **12/12 checks green**, tracked in #102. Expect **months**, not weeks — the queue
-is ~720 PRs deep and sorts oldest-first.
+opened 2026-08-23, **12/12 checks green**, tracked in #102. Expect **months**, not weeks.
+
+> Measured 2026-09-08: **802 open PRs are older than ours** — that is the real queue, since it
+> sorts oldest-first — out of **1147** open in total, against **203 merged in the last 30 days**.
+> At that rate the wait is on the order of **four months**, and the arithmetic assumes merges are
+> drawn from the front of the queue, which is not verified. ⚠️ Re-measure rather than trust this
+> number; the earlier "~720 deep" in this file was of an unstated kind and cannot be compared to it.
+>
+> ⚠️ **`gh pr view` shows `Action checks completed = FAILURE` on that PR and it is NOT a problem.**
+> Two workflow runs fired on 2026-08-23: the first was **cancelled** (every one of its children
+> reads `CANCELLED`) and its aggregate check failed as a consequence; the second, 56 seconds later,
+> is green on all twelve. Sort the checks by `completedAt` before concluding — the rollup lists
+> both runs side by side and the failure is the superseded one.
 
 ⚠️ It replaces `hacs/default#6025` (2026-03-07, closed as stale 2026-08-01 with an invitation to
 reopen). **#6025 is NOT re-openable** — its branch had to be rebased and GitHub refuses to reopen a
@@ -153,7 +164,7 @@ Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diag
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest tests/ -v     # 128 tests / 10 files, all green 2026-08-23
+.venv/bin/pytest tests/ -v     # 567 tests, all green 2026-09-08 (v1.18.0)
 .venv/bin/ruff check .
 ```
 
