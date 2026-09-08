@@ -607,23 +607,61 @@ Un bit = un créneau, dans l'ordre chronologique de la journée.
 soit 12 octets, **96 bits — un créneau de 15 minutes sur 24 h**. La déduction précédente, tirée
 d'une fixture inventée, se trouve confirmée par une charge utile réelle.
 
-🔴 **En revanche le DÉCODAGE n'est pas validé, et le relevé ne pouvait pas le valider.** Les trois
-`plan64` présents décodent à **tout zéro** — aucune sortie de ce bassin n'est en mode créneaux. Or
-un plan tout à zéro rend le même résultat sous **n'importe quel ordre de bits** : les deux
-inversions ci-dessus sont donc encore non éprouvées, et une transcription fausse serait
-indiscernable d'une transcription juste.
+🔴 **Le relevé du 2026-09-03 était PARTIEL, et les deux conclusions négatives qu'il portait ici
+étaient fausses.** Il annonçait que « les trois `plan64` présents décodent à tout zéro » et que
+« sur Bioul, les sorties 2 et 9 n'ont aucune entrée ». Une seconde sonde, le 2026-09-08, a lu la
+même installation : `plans` porte **DIX** entrées, `plans[0..9]`, et `plans[9]` — la sortie 9,
+*Aux 4* — est **programmée**. Le relevé précédent n'avait pas énuméré le conteneur en entier ;
+sa conclusion négative reposait entièrement sur cette énumération incomplète.
 
-⚠️ Le contrôle qui trancherait est une sortie **réellement programmée**, dont les plages décodées
-peuvent être comparées à ce que le propriétaire sait de son installation. Tant qu'aucune ne l'est,
-« ça n'a pas échoué » ne veut pas dire « ça marche » : le bras n'a pas été joué.
+✅ **L'ordre des bits est TRANCHÉ** (Bioul, 2026-09-08). `plans[9]` vaut `AAAA/v///////w8A`, soit
+`000000feffffffffffff0f00` sur 12 octets, **59 bits à 1**. Les deux inversions annoncées plus haut
+sont les bonnes, et ce n'est pas un choix de plausibilité — c'est une propriété **structurelle**
+que les trois autres ordres candidats ne possèdent pas :
 
-⚠️ **`plans` ne couvre pas toutes les sorties.** Sur Bioul, les sorties **2 et 9 n'ont aucune
-entrée** — ce qui est distinct d'une entrée vide, et qu'un code lisant `plans[i]` sans garde
-prendrait pour un planning nul.
+| ordre des bits | créneaux décodés | étendue | trous |
+|---|---|---|---|
+| **quartet bas d'abord, LSB→MSB** | **06h15 → 21h00** | **59** | **0** |
+| quartet haut d'abord, LSB→MSB | 06h00 → 22h00 | 64 | 5 |
+| quartet bas d'abord, MSB→LSB | 06h00 → 21h00 | 60 | 1 |
+| quartet haut d'abord, MSB→LSB | 06h00 → 22h00 | 64 | 5 |
+
+Sous le bon ordre les 59 bits forment **un intervalle continu** : étendue 59 = nombre de bits, zéro
+trou, un seul bloc. Les trois autres éparpillent les mêmes 59 bits en 2 ou 3 blocs. Une
+transcription fausse n'aurait aucune raison de rendre un planning contigu ; c'est ce qui distingue
+ce décodage d'un décodage seulement joli.
+
+✅ **Le propriétaire confirme le programme**, sollicité avant qu'on lui montre le résultat : *Aux 4*
+est sa **pompe à chaleur**, qui « suit la programmation automatique », et « oui, normalement » de
+06h15 à 21h00.
+
+⚠️ **La force de ce témoignage est écrite ici parce qu'elle n'est pas totale** : « à priori »,
+« normalement ». C'est une confirmation **confiante mais non certaine**. Ce qui est dur, c'est la
+propriété structurelle ; ce qui est humain, c'est l'horaire. **Les deux ensemble font la mesure —
+ni l'un ni l'autre seul.** Le témoignage seul ne distinguerait pas 06h00 de 06h15 ; la structure
+seule ne dirait pas que ces bits sont un vrai planning plutôt qu'un motif fortuit.
+
+⚠️ **Le propriétaire a éteint cette PAC à la main la semaine dernière, en attendant l'hivernage —
+et cela ne contredit rien.** `plan64` est le programme **stocké**, pas l'état vivant de la sortie.
+Un planning survit à une extinction manuelle : c'est précisément pour cela qu'il est encore lisible
+alors que l'équipement ne tourne pas. Lire « il l'a éteinte » comme une objection serait confondre
+la consigne horaire avec le relais.
+
+⚠️ **`plans` ne couvre toujours pas toutes les sorties**, et l'affirmation d'origine reste vraie en
+substance même si son exemple était faux : Bioul rend `plans[0..9]` pour des `outs` = 0, 1, 2, 3, 9.
+Les indices présents et les sorties présentes **ne coïncident pas** — un code lisant `plans[i]` sans
+garde prendrait une entrée absente pour un planning nul, et une entrée présente pour une sortie
+existante.
 
 ✅ **Aucun endpoint d'écriture de programmation n'existe dans les trois sources.** Une
 fonctionnalité de créneaux serait donc **en lecture seule** — la moitié qui ne peut casser
-l'installation de personne.
+l'installation de personne. Ce décodage rend la lecture possible ; il ne rend pas l'écriture
+possible.
+
+⚠️ **Ce que ce relevé ne dit pas** : que le bit 0 soit minuit est cohérent avec un planning
+06h15→21h00 mais n'est pas indépendamment mesuré — un décalage global rendrait un horaire
+également contigu. Le témoignage est ce qui cale l'origine, avec la force limitée écrite plus
+haut. Et une seule sortie programmée, sur une seule installation, a été lue.
 
 ---
 
@@ -665,10 +703,13 @@ l'utilisateur.
   ⚠️ Depuis le 2026-09-07 c'est aussi une **demande** — @StephanH27 souhaite chaud/froid/auto/arrêt
   « pour l'hiver » — et pas seulement un trou. Une demande n'est pas un instrument : la case reste
   blanche tant que personne ne peut la mesurer.
-- 🔴 **Le décodage de `plan64` n'est pas éprouvé** (§ *La programmation horaire*). Le relevé du
-  2026-09-03 a fermé la question de la **granularité** (96 bits, créneaux de 15 min, mesuré) et
-  **pas** celle de l'ordre des bits : les trois plannings de Bioul sont à zéro, et un planning nul
-  est invariant par toute permutation. Il faut une sortie **réellement programmée**.
+- ✅ **Le décodage de `plan64` est éprouvé depuis le 2026-09-08** (§ *La programmation horaire*) —
+  cette entrée est conservée parce qu'elle a porté une conclusion **fausse**. Le relevé du
+  2026-09-03 n'avait pas énuméré `plans` en entier : il y a **dix** entrées, et `plans[9]` est
+  programmée. « Les trois plannings de Bioul sont à zéro » décrivait la sonde, pas l'installation.
+  ⚠️ Ce qui reste ouvert est plus étroit : l'origine de l'axe (bit 0 = minuit) est calée par un
+  témoignage humain « à priori / normalement », pas par une mesure indépendante, et une seule
+  sortie programmée d'une seule installation a été lue.
 - **L'unité de `outs[].totalTime`** — jamais lue par l'amont, donc non sourcée. Par analogie avec
   `params.Filtration_TotalTime`, que l'amont divise par 3600 pour obtenir des heures
   (`klereo.class.php:331`), la seconde est probable. C'est une **inférence**, et la lire comme un
