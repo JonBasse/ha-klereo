@@ -282,6 +282,56 @@ DERIVED_COUNTER_TYPES = {
     )
 }
 
+
+def power_option_key(equipment: str) -> str:
+    """Return the config-entry option holding this equipment's rated power, in watts.
+
+    The equipment name is the one Klereo itself uses (`COUNTER_EQUIPMENT`), so the option
+    and the counter it meters cannot drift apart under a rename.
+    """
+    return f"power_{equipment}"
+
+
+# Energy consumed — the same pattern as `DERIVED_COUNTER_TYPES` above, with a watt where
+# the flow rate is:
+#
+#     kWh = <Equipment>_<period>Time × watts / 3600 / 1000
+#
+# The run time is already on the wire, already parsed and already exposed in seconds by
+# `PARAM_COUNTER_TYPES`; only the multiplication is ours. `outs[].totalTime` plays no part
+# — its unit is an unmeasured inference (`docs/klereo-api.md` § *Ce qui reste ouvert*),
+# whereas upstream divides `Filtration_TotalTime` by 3600 to get hours, which fixes the
+# second for THESE counters.
+#
+# 🔴 Klereo sends no power, so the watt is a USER ENTRY — one option per equipment — and
+# an equipment with no power entered gets NO entity. Not one reading zero, not one with a
+# "reasonable" default: a default would put a credible number, in a unit that has a price,
+# into the dashboard someone uses to decide, which is the plausible lie #105 refuses. On a
+# `total_increasing` a zero is not "unknown" either — Home Assistant records it as a
+# counter reset and charges a spurious cycle. Both terms are gated, exactly as the product
+# volumes above gate on their counter AND their flow rate.
+#
+# `Elec_GramDone` is deliberately absent: it is milligrams of chlorine, not seconds, and a
+# watt applied to it would yield a number in kWh that means nothing.
+#
+# The approximation is the user's, and he measured it: @StephanH27 compared a day of
+# absence against his Linky meter and read a 751 W delta for a 750 W pump (GitHub #60). He
+# also notes it will not hold on an inverter heat pump — his call to make, which is what
+# an option per equipment leaves him.
+ENERGY_COUNTER_TYPES = {
+    f"{prefix}_{period}": {
+        "name": f"{label} Energy {period}",
+        "source": f"{prefix}_{suffix}",
+        "power_option": power_option_key(prefix),
+        "divisor": 3_600_000,
+        "unit": "kWh",
+        "device_class": "energy",
+        "state_class": "total_increasing",
+    }
+    for prefix, label in COUNTER_EQUIPMENT.items()
+    for suffix, period in _COUNTER_PERIODS.items()
+}
+
 # Writable setpoints exposed as `number` entities.
 #   min/max         — fallback bounds, used only when the API sends none
 #   min_key/max_key — the API keys carrying the real bounds, preferred over min/max

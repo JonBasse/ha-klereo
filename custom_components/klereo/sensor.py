@@ -18,6 +18,7 @@ from .const import (
     ALERT_PARAM_PREFIXES,
     BINARY_SENSOR_TYPES,
     DERIVED_COUNTER_TYPES,
+    ENERGY_COUNTER_TYPES,
     NO_REFERENCE_PROBE,
     OUTPUT_NAMES,
     PARAM_COUNTER_TYPES,
@@ -27,6 +28,7 @@ from .const import (
 )
 from .entity import (
     KlereoEntity,
+    configured_power,
     is_setpoint_offered,
     setup_discovery,
 )
@@ -41,8 +43,13 @@ def _humanize_key(key: str) -> str:
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key)
 
 
-def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
-    """Extract probe sensors and param sensors from system details."""
+def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails, options=None):
+    """Extract probe sensors and param sensors from system details.
+
+    `options` carries the config entry's options — read for the per-equipment powers
+    below, and for nothing else. It defaults to None so that the energy counters, whose
+    second term the user supplies, are absent unless something explicitly supplies it.
+    """
     items = []
     for probe in details.probes:
         if probe.type in BINARY_SENSOR_TYPES:
@@ -92,6 +99,24 @@ def _extract_sensors(coordinator, system_id, details: KlereoPoolDetails):
         uid = f"{system_id}_consumption_{key}"
         items.append((uid, KlereoDerivedSensor(coordinator, system_id, key, spec)))
 
+    # Energy is the same gate one step further out: the run time is on the wire, and the
+    # watt is not on the wire at ALL — Klereo sends no power, so it comes from the user.
+    #
+    # 🔴 No power entered, no entity. A default would be a credible number in a unit that
+    # has a price, in a dashboard someone reads to decide (#105); and a zero would be
+    # worse than useless, since Home Assistant reads a zero on a `total_increasing` as a
+    # counter reset rather than as "unknown". The counter half is gated for the same
+    # reason as the product volumes: an installation with no heat pump sends no
+    # `Chauff_*`, and a power entered for hardware that is not there meters nothing.
+    for key, spec in ENERGY_COUNTER_TYPES.items():
+        if spec["source"] not in settings:
+            continue
+        watts = configured_power(options, spec["power_option"])
+        if watts is None:
+            continue
+        uid = f"{system_id}_energy_{key}"
+        items.append((uid, KlereoEnergySensor(coordinator, system_id, key, spec, watts)))
+
     # Unconditionally, NOT on the presence of `alerts`: the key is absent when there is
     # nothing to report (GitHub #57), so keying the entity on it would make an alert
     # sensor that exists only while something is wrong — and vanishes, with its history,
@@ -107,7 +132,14 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Klereo sensors."""
-    setup_discovery(hass, entry, async_add_entities, _extract_sensors)
+
+    def _extract(coordinator, system_id, details):
+        # `entry.options` is read at each discovery rather than captured once, so a power
+        # entered later is seen. Changing an option also reloads the entry
+        # (`_async_update_listener`), which is what rebuilds the entities themselves.
+        return _extract_sensors(coordinator, system_id, details, entry.options)
+
+    setup_discovery(hass, entry, async_add_entities, _extract)
 
 
 class KlereoSensor(KlereoEntity, SensorEntity):
@@ -289,6 +321,62 @@ class KlereoDerivedSensor(KlereoEntity, SensorEntity):
             )
             return None
         return round(seconds * rate / self._spec["divisor"], 2)
+
+
+class KlereoEnergySensor(KlereoEntity, SensorEntity):
+    """Kilowatt-hours computed from a run time on the wire and a power from the user.
+
+    The second entity here whose value is not on the wire, and the first whose second term
+    is not on the wire either: Klereo sends no power. The watt is a per-equipment option,
+    and this entity exists only because one was entered — the gate lives in
+    `_extract_sensors`, so an equipment with no power has no entity to be wrong with.
+
+    Asked for by @StephanH27 (GitHub #60) for the Home Assistant Energy dashboard, which
+    is why the shape is fixed: kWh, `energy`, `total_increasing`. Forgejo #163.
+    """
+
+    def __init__(self, coordinator, system_id, key, spec, watts: float):
+        """Initialize the energy sensor."""
+        super().__init__(coordinator, system_id)
+        self._key = key
+        self._spec = spec
+        self._watts = watts
+
+        self._attr_unique_id = f"{system_id}_energy_{key}"
+        self._attr_name = spec["name"]
+        self._attr_native_unit_of_measurement = spec["unit"]
+        self._attr_device_class = spec["device_class"]
+        self._attr_state_class = SensorStateClass(spec["state_class"])
+        self._attr_native_value = self._compute()
+
+    @callback
+    def _handle_coordinator_update(self):
+        """Handle updated data from the coordinator."""
+        system = self._system()
+        if system is None:
+            return super()._handle_coordinator_update()
+        self._attr_native_value = self._compute()
+        super()._handle_coordinator_update()
+
+    def _compute(self):
+        """Return the energy, or None when the counter is missing or unreadable.
+
+        None, never zero. A zero would read as a counter reset to Home Assistant's
+        statistics and cost a spurious cycle — the same reasoning that keeps this entity
+        from existing at all without a power.
+        """
+        system = self.coordinator.data.get(self.system_id)
+        if system is None:
+            return None
+        try:
+            seconds = float(system.details.settings[self._spec["source"]])
+        except (KeyError, TypeError, ValueError):
+            _LOGGER.debug(
+                "Cannot compute %s: %s is missing or unreadable",
+                self._key, self._spec["source"],
+            )
+            return None
+        return round(seconds * self._watts / self._spec["divisor"], 3)
 
 
 def _describe_alert_param(alert: KlereoAlert, details: KlereoPoolDetails) -> str | None:

@@ -52,6 +52,35 @@ def setpoint_reading(value):
     return value
 
 
+def configured_power(options, key: str) -> float | None:
+    """Return the power the user entered under `key`, or None when they entered none.
+
+    The third gate of this family, and the only one reading the config entry rather than
+    the payload — because the value it guards is the only one Klereo never sends. Same
+    rule as the other two nonetheless: what we cannot read never becomes a number.
+
+    🔴 Zero is "none", not "zero watts". It is how the options form takes a power back,
+    no equipment draws it, and honouring it literally would build the entity #163 exists
+    to refuse — one that always reports `0` and is therefore indistinguishable from a
+    correct one on a pump at rest. Home Assistant would read those zeroes as counter
+    resets on a `total_increasing` and charge a cycle for each.
+
+    ⚠️ Negative is refused here as well as in the form. The form validates a NEW entry;
+    this reads whatever was persisted, including by a version that had no such check —
+    the same split, and the same reason, as the scan-interval floor (#139).
+    """
+    if not options:
+        return None
+    try:
+        watts = float(options[key])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if watts <= 0:
+        _LOGGER.debug("No energy entity for %s: power %s is not a consumption", key, watts)
+        return None
+    return watts
+
+
 def is_output_offered(index: int, details: KlereoPoolDetails) -> bool:
     """Return whether this account may be offered an entity for this output.
 
