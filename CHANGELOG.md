@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **A refresh button, one per pool** ([#164](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/164)). `button.<pool>_refresh_from_klereo` re-reads your data from the Klereo cloud immediately instead of waiting for the next poll. Asked for by [@StephanH27](https://github.com/JonBasse/ha-klereo/issues/61), because both web interfaces have one.
+  - 🔴 **This ticket was refused once, and the refusal was overturned by measurement, not by argument.** The stated reason was that no endpoint in any of the three known API sources performs a synchronisation, so a button calling `async_request_refresh()` would be an inert mechanism imitating something the web interface does for real — a fourth [#115](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/115) / [#130](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/130) / [#101](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/101). [@StephanH27](https://github.com/JonBasse/ha-klereo/issues/61) then captured the network tab while clicking it, on **both** interfaces: v1 emits **one** `POST GetPoolDetails.php` and nothing else; v3 emits the same call plus eleven cached PNGs. **The web button re-reads. It pushes nothing at the box.** The reasoning was sound and the premise was false — the two gestures coincide, so a local refresh is a faithful implementation rather than a substitute for one.
+  - **The entity is named for what it does.** "Refresh from Klereo" names the cloud as the source; nothing here talks to the controller at the poolside, and a name like *Sync* or *Update pool* would promise a conversation that does not happen. That was the one part of the refusal that survived the capture.
+  - 🔴 **It is held to the same 10-minute pace as the polling floor**, and says so when it refuses. [#139](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/139) put that floor under the update interval because Klereo refreshes server-side every ten minutes and bans accounts that poll faster — a cost that lands on the **user's** account. `button.press` is a service any automation can call in a loop, so an unbounded button would have handed that floor straight back through the service door. The limit lives in the coordinator, not in the entity, so a second caller cannot walk around it.
+  - ⚠️ **The window is measured between two button refreshes, not since the last poll.** Refusing a press that lands soon after an automatic poll would refuse nearly every press an installation at the default interval could ever make — an entity that is present and practically inert, which is the failure this repository has now recorded three times. The first press is always served, and the button adds at most one call per floor period on top of the polling it already permits.
+
+### Documented
+
+- **The capture settles something beyond this ticket, and it is a negative result.** It is the first direct measurement of what Klereo's own web client puts on the wire, and it adds **no endpoint** to the eight that [#147](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/147) cross-tabulated from the three known sources — recorded in `docs/klereo-api.md` § *Surface complète*. ⚠️ Its scope is written next to it: one gesture, one installation. It says nothing about the interface's other buttons.
+
+### Verified
+
+- **499 tests** (up from 477): twenty-two new for the button.
+- 🔴 **The suite is discriminant in both directions**, which is the whole point given what this ticket was nearly refused for:
+  - Removing the rate limit reddens **five** cases — every refusal, and the count of calls that reach the API under hammering.
+  - Making the guard bar the *first* press too — the over-correction that yields an inert entity — reddens **eleven**, including every positive control.
+  - Making the press a no-op reddens **ten**. Without that mutant, "the button refreshes" would be an assertion no test could falsify.
+  - Untying the button's floor from the polling floor reddens **four**, the README agreement among them — the same instrument `test_scan_interval.py` uses to stop a documented constraint drifting away from the constant that enforces it.
+- **The no-write control is asserted on the absence of a call to `set_output` / `set_param`, never on the resulting state.** A `SetOut` that queues, answers status 9 and leaves the payload as it was is indistinguishable from a refresh when read from the outside. Adding a write to `async_press` reddens two cases; the state-based version of the same test would stay green.
+- **Negative control**: the refused presses write nothing either — a refusal must not fall back to a command.
+
 ## [1.16.0] — 2026-09-07
 
 ### Fixed
