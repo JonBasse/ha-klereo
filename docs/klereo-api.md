@@ -261,7 +261,7 @@ brut de `diagnostics.py`.
 | `mode` | mode de fonctionnement (Manuel / Créneaux / Minuterie / Régulation) | doc Klereo, amont, `api.py` |
 | `type` | type de sortie ; `8` sur les deux sorties de chauffe de cette installation | amont, `api.py` |
 | `offDelay` | délai d'extinction automatique, en minutes — § *SetAutoOff* | amont, `api.py` (#162) |
-| `totalTime` | temps de marche cumulé — **le même compteur que `params.<Équipement>_TotalTime`**, voir ci-dessous | mesuré |
+| `totalTime` | temps de marche cumulé — **coïncide avec `params.<Équipement>_TotalTime` là où un tel compteur existe**, pas partout ; voir ci-dessous | mesuré |
 | `updateTime` | ancienneté de la dernière mise à jour, en secondes (par analogie avec `probes[].directTime`) | inféré |
 | `map` | non identifié — hypothèse ouverte ci-dessous | mesuré, non interprété |
 | `flags` | non identifié | mesuré, non interprété |
@@ -300,14 +300,24 @@ concordent trivialement. Parmi les trois :
 * la sortie 1 a tourné `51 162 044` unités de temps et rend `realStatus: 1` ;
 * les sorties 3 et 4 n'ont **jamais rien** compté (`totalTime: 0`) et rendent `realStatus: 0`.
 
-Et ces `totalTime` **sont** les compteurs du bassin, ce qui en fait un second témoin et non une
-reformulation du premier :
+Et là où un compteur `params` **nomme** le même équipement, les deux valeurs coïncident, ce qui
+fait de `totalTime` un second témoin et non une reformulation du premier :
 
 | compteur `params` | valeur | `outs[].totalTime` correspondant |
 |---|---|---|
 | `PHMinus_TotalTime` | `127218` | sortie 2 : `127218` — **à l'unité près** |
 | `Filtration_TotalTime` | `51162395` | sortie 1 : `51162044` — **à 351 près** |
 | `Chauff_TotalTime` | `0` | sorties 3 et 4 : `0` |
+| `ElectroChlore_TotalTime` | `0` | 🔴 **aucune** — voir ci-dessous |
+
+⚠️ **La correspondance est mesurée sur trois équipements, elle n'est PAS une identité générale, et
+le quatrième compteur la contredit.** `params` ne porte que quatre `*_TotalTime` ; la sortie 15
+compte `7680` et **aucune** clé de `params` ne vaut `7680`, tandis que `ElectroChlore_TotalTime` —
+le seul partenaire plausible — vaut `0`. Écrire « `outs[].totalTime` **est** le compteur du
+bassin » referait ici la faute que la même mesure vient de corriger deux paragraphes plus haut sur
+le nombre de clés : prendre un relevé pour une forme. Ce qui est mesuré est plus étroit et suffit
+à l'argument — les deux sorties divergentes sont typées chauffage (`type: 8`) et `Chauff_TotalTime`
+vaut `0` comme elles.
 
 L'écart est là où il doit être : la sortie 2 est **arrêtée**, son compteur ne peut pas dériver entre
 deux instantanés ; la sortie 1 **tourne**, le sien dérive. Pendant ce temps `AqOnOff: 1`,
@@ -835,8 +845,9 @@ l'utilisateur.
   témoignage humain « à priori / normalement », pas par une mesure indépendante, et une seule
   sortie programmée d'une seule installation a été lue.
 - ⚠️ **L'unité de `outs[].totalTime`** — **rétrécie le 2026-09-08, pas close.** L'analogie avec
-  `params.<Équipement>_TotalTime` n'en est plus une : sur l'export de @nopbop les deux sont **le
-  même compteur**, mesuré — `PHMinus_TotalTime` égale `outs[2].totalTime` à l'unité près
+  `params.<Équipement>_TotalTime` n'en est plus une là où les deux se rejoignent : sur l'export de
+  @nopbop **trois équipements sur quatre** portent la même valeur des deux côtés, mesuré —
+  `PHMinus_TotalTime` égale `outs[2].totalTime` à l'unité près
   (`127218`, sortie arrêtée) et `Filtration_TotalTime` égale `outs[1].totalTime` à 351 près
   (sortie qui tourne, donc qui dérive entre deux instantanés). Ce qui reste inféré est l'unité de
   l'autre bout de l'égalité : que `Filtration_TotalTime` soit en secondes vient de ce que l'amont
