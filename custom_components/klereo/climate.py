@@ -59,6 +59,15 @@ def _extract_climate(coordinator, system_id, details: KlereoPoolDetails):
     direct access to carries `outs` = 0, 1, 2, 3, 9 — no heating output at all — and a
     thermostat there would be inert in the exact way #124 describes: it would accept every
     command and change nothing.
+
+    🔴 DISJOINT from `is_setpoint_offered` BY CONSTRUCTION — do not "align" the two
+    (Forgejo #172). This gate asks about an OUTPUT because `async_set_hvac_mode` writes
+    `SetOut.php` with `outIdx: 4`; the setpoint gate asks about a POOL PARAMETER because
+    `async_set_temperature` — and `number` — write `SetParam.php`, which carries no output
+    index at all. That is why this class calls both, separately, a few dozen lines below.
+    Widening this one to "a setpoint is offered" would INVENT a thermostat whose mode
+    control writes to an output the box does not report. `tests/test_disjoint_gates.py`
+    turns red on either alignment.
     """
     if OUT_IDX_HEATING not in details.output_index:
         _LOGGER.debug("No heating output on system %s: no climate entity", system_id)
