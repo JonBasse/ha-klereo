@@ -25,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.components.climate import HVACMode
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.klereo.api import (
     HEAT_MODE_STOP,
@@ -239,6 +240,85 @@ class TestNegativeControls:
         assert switch.is_on is False
         stored = coordinator.data[SYS1].details.output_index[OUT_IDX_HEATING]
         assert (stored.status, stored.mode) == (OUT_STATE_OFF, HEAT_MODE_STOP)
+
+
+class TestARejectedCommandDoesNotStayOnScreen:
+    """The actuated entity must stop showing a command the box refused (#181).
+
+    `switch` and `select` write their own state BEFORE sending, for immediate feedback. A
+    rejection raises, and Home Assistant does not repaint on that: its service handler
+    re-reads only `should_poll` entities, and only after a call that returned. So the
+    refused state stayed on screen until the next poll — ten minutes at the default — and
+    the premise of the ticket, "the lie lasts one round trip", was false.
+
+    The repair is the box's own answer, not a remembered previous state: a refresh after
+    ANY write, whatever its outcome. `_async_update_data` rebuilds the models from the
+    payload, so the next payload overwrites the optimism by construction — the property
+    `test_a_contrary_refresh_wins_over_the_optimistic_state` already holds.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _rejecting_box(self, coordinator):
+        """Status 13 — insufficient rights — and a refresh that really re-reads the box."""
+        coordinator.api.command_status.return_value = {
+            "status": "ok", "response": {"cmdID": 77, "status": 13, "detail": ""}
+        }
+        # An `async def`, not a lambda: AsyncMock awaits a coroutine FUNCTION, but returns
+        # the coroutine a lambda produces without running it — a refresh that never happens.
+        async def _really_refresh():
+            await _refresh(coordinator)
+
+        coordinator.async_request_refresh = AsyncMock(side_effect=_really_refresh)
+
+    async def test_the_switch_returns_to_what_the_box_says(self, coordinator):
+        await _refresh(coordinator)
+        switch = _switch(coordinator, SYS1, 1)
+        assert switch.is_on is False
+
+        with pytest.raises(HomeAssistantError, match="rejected"):
+            await switch.async_turn_on()
+
+        assert switch.is_on is False
+
+    async def test_the_select_returns_to_what_the_box_says(self, coordinator):
+        await _refresh(coordinator)
+        select = _select(coordinator, SYS1, OUT_IDX_HEATING)
+        assert select.current_option == "Off"
+
+        with pytest.raises(HomeAssistantError, match="rejected"):
+            await select.async_select_option("Heating")
+
+        assert select.current_option == "Off"
+
+    async def test_an_accepted_command_keeps_its_optimism(self, coordinator):
+        """Negative control: the refresh must not undo a command the box ACCEPTED.
+
+        Here the box answers 9 and the next payload says "on", as it would after a real
+        start. Without this, "always show the payload" would pass the two tests above by
+        flashing every accepted command back to its old state.
+        """
+        coordinator.api.command_status.return_value = {
+            "status": "ok", "response": {"cmdID": 77, "status": 9, "detail": "Ok"}
+        }
+        await _refresh(coordinator)
+        switch = _switch(coordinator, SYS1, 1)
+        coordinator.api.get_pool_details.side_effect = lambda sid: {
+            "response": [{**_payload_with_output_on(coordinator, sid, 1)}]
+        }
+
+        await switch.async_turn_on()
+
+        assert switch.is_on is True
+
+
+def _payload_with_output_on(coordinator, system_id, index):
+    """The raw payload the box would return once output `index` runs under Manual."""
+    raw = dict(coordinator.data[system_id].details.raw)
+    raw["outs"] = [
+        {**out, "status": OUT_STATE_ON, "mode": OUT_MODE_MAN} if out["index"] == index else out
+        for out in raw["outs"]
+    ]
+    return raw
 
 
 class TestAutoIsNotARelayReading:

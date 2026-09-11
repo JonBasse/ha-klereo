@@ -379,51 +379,72 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     async def async_set_output(
         self, system_id: str, out_index: int, mode: int, state: int
     ) -> Any:
-        """Send a set-output command, check it ran, and request a data refresh."""
+        """Send a set-output command, check it ran, and request a data refresh.
+
+        🔴 The refresh runs whatever the outcome, in a `finally` — and that is a deliberate
+        departure from upstream, which refreshes only on status 9. Upstream writes nothing
+        before the verdict, so skipping the refresh costs it nothing. Every entity HERE
+        writes its state optimistically before sending, and Home Assistant does not repaint
+        on an exception: without this refresh a refused command stayed on screen until the
+        next poll (#181). The payload is the box's own answer, so it undoes the optimism
+        without this code having to remember what the entity showed before.
+        """
         description = f"Setting output {out_index}"
         _LOGGER.debug("%s: sending mode=%s state=%s to system %s", description, mode, state, system_id)
         try:
-            result = await self.api.set_output(system_id, out_index, mode, state)
-        except Exception as err:
-            raise HomeAssistantError(
-                f"Failed to set output {out_index}: {err}"
-            ) from err
-        # Only a CONFIRMED command is shown. Unconfirmed is not a verdict (#140), and
-        # painting one across three entities would be the two-step protocol's own trap —
-        # a rejection made to read exactly like a success (#95).
-        if await self._async_confirm_command(result, description):
-            self._show_confirmed_output(system_id, out_index, mode, state)
-        await self.async_request_refresh()
+            try:
+                result = await self.api.set_output(system_id, out_index, mode, state)
+            except Exception as err:
+                raise HomeAssistantError(
+                    f"Failed to set output {out_index}: {err}"
+                ) from err
+            # Only a CONFIRMED command is shown. Unconfirmed is not a verdict (#140), and
+            # painting one across three entities would be the two-step protocol's own trap —
+            # a rejection made to read exactly like a success (#95).
+            if await self._async_confirm_command(result, description):
+                self._show_confirmed_output(system_id, out_index, mode, state)
+        finally:
+            await self.async_request_refresh()
         return result
 
     async def async_set_auto_off(
         self, system_id: str, out_index: int, off_delay: int
     ) -> Any:
-        """Send an automatic-off timer, check it ran, and request a data refresh."""
+        """Send an automatic-off timer, check it ran, and request a data refresh.
+
+        The refresh runs whatever the outcome — see `async_set_output` (#181).
+        """
         description = f"Setting the auto-off timer of output {out_index}"
         _LOGGER.debug(
             "%s: sending offDelay=%s to system %s", description, off_delay, system_id
         )
         try:
-            result = await self.api.set_auto_off(system_id, out_index, off_delay)
-        except Exception as err:
-            raise HomeAssistantError(
-                f"Failed to set the auto-off timer of output {out_index}: {err}"
-            ) from err
-        await self._async_confirm_command(result, description)
-        await self.async_request_refresh()
+            try:
+                result = await self.api.set_auto_off(system_id, out_index, off_delay)
+            except Exception as err:
+                raise HomeAssistantError(
+                    f"Failed to set the auto-off timer of output {out_index}: {err}"
+                ) from err
+            await self._async_confirm_command(result, description)
+        finally:
+            await self.async_request_refresh()
         return result
 
     async def async_set_param(self, system_id: str, param_id: str, value: Any) -> Any:
-        """Send a set-parameter command, check it ran, and request a data refresh."""
+        """Send a set-parameter command, check it ran, and request a data refresh.
+
+        The refresh runs whatever the outcome — see `async_set_output` (#181).
+        """
         description = f"Setting parameter {param_id}"
         _LOGGER.debug("%s: sending value=%s to system %s", description, value, system_id)
         try:
-            result = await self.api.set_param(system_id, param_id, value)
-        except Exception as err:
-            raise HomeAssistantError(
-                f"Failed to set parameter {param_id}: {err}"
-            ) from err
-        await self._async_confirm_command(result, description)
-        await self.async_request_refresh()
+            try:
+                result = await self.api.set_param(system_id, param_id, value)
+            except Exception as err:
+                raise HomeAssistantError(
+                    f"Failed to set parameter {param_id}: {err}"
+                ) from err
+            await self._async_confirm_command(result, description)
+        finally:
+            await self.async_request_refresh()
         return result

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **A command Klereo refuses no longer stays on screen until the next poll** ([#181](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/181)). The switch, the mode select and both kinds of number show your change the moment you make it, before Klereo has answered. When Klereo then **refused** it — insufficient rights, bad parameters, or a request that never left — you got an error, but the entity kept showing the refused state for up to ten minutes, and an automation reading it saw the same thing.
+  - **The cause was a rule copied from upstream.** The Jeedom plugin re-reads the pool only after a success (status 9), and that is sound there: it shows nothing before the verdict. Carried over next to our immediate feedback, the same rule left the refused state standing. Home Assistant does not repaint it either — its service handler re-reads an entity only after a call that returned, and only if the entity polls on its own, which ours do not.
+  - **The integration now re-reads Klereo after every command, whatever the outcome**, in one place for all three writes (`SetOut`, `SetParam`, `SetAutoOff`). The entity returns to what the **box** says, not to a remembered previous value: on a refusal the two are the same, and only the box's answer is still right if something else changed in between.
+  - No extra load on Klereo: a refused command costs the same single re-read an accepted one always did, and Home Assistant's own debounce still applies.
+
 ## [1.18.0] — 2026-09-08
 
 ### Changed
