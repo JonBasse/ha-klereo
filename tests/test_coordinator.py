@@ -1,6 +1,7 @@
 """Tests for the Klereo coordinator."""
 from unittest.mock import AsyncMock, MagicMock
 
+import aiohttp
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
@@ -221,15 +222,40 @@ class TestCommandResultIsChecked:
         with pytest.raises(HomeAssistantError, match="execution timeout"):
             await coordinator.async_set_param("SYS1", "ConsigneEau", 28)
 
-    async def test_does_not_refresh_after_a_rejected_command(self, coordinator, mock_api):
-        """Should not refresh when the command failed — upstream refreshes only on 9."""
-        mock_api.set_output.return_value = {"status": "ok", "response": {"cmdID": 77}}
+    @pytest.mark.parametrize(
+        ("setter", "api_call", "args"),
+        [
+            ("async_set_output", "set_output", ("SYS1", 2, 0, 1)),
+            ("async_set_param", "set_param", ("SYS1", "ConsigneEau", 28)),
+            ("async_set_auto_off", "set_auto_off", ("SYS1", 1, 5)),
+        ],
+    )
+    async def test_refreshes_after_a_rejected_command(
+        self, coordinator, mock_api, setter, api_call, args
+    ):
+        """Should refresh even when the command failed, unlike upstream (#181).
+
+        Upstream refreshes only on 9, and that is sound THERE: it writes nothing before the
+        verdict. Every entity here writes its state optimistically before sending, and Home
+        Assistant does not repaint on an exception — so without this refresh a refused
+        command stays on screen until the next poll.
+        """
+        getattr(mock_api, api_call).return_value = {"status": "ok", "response": {"cmdID": 77}}
         mock_api.command_status.return_value = {"status": "ok", "response": 10}
 
         with pytest.raises(HomeAssistantError):
+            await getattr(coordinator, setter)(*args)
+
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    async def test_refreshes_after_a_command_that_never_left(self, coordinator, mock_api):
+        """Should refresh when the queueing call itself fails — the optimism was written too."""
+        mock_api.set_output.side_effect = aiohttp.ClientError("boom")
+
+        with pytest.raises(HomeAssistantError, match="Failed to set output 2"):
             await coordinator.async_set_output("SYS1", 2, 0, 1)
 
-        coordinator.async_request_refresh.assert_not_awaited()
+        coordinator.async_request_refresh.assert_awaited_once()
 
     async def test_unknown_status_still_raises(self, coordinator, mock_api):
         """Should raise on a status code absent from the label table, naming the number."""
