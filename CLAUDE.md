@@ -112,8 +112,8 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
 > § *Surface complète* — and the crossing matters, because **each of the three sources misses at
 > least one endpoint the other two have**. Two consequences you will otherwise get wrong:
 > `SetParam.php`, which we have shipped since #128, is **absent from Klereo's own documentation**;
-> and `SetAutoOff.php` — which writes the `offDelay` we already read — exists upstream and **is
-> not implemented here**. ⚠️ `GetToken.php` and `GetInfos.php` appear in the official source and
+> and `SetAutoOff.php` — which writes the `offDelay` we already read — is **also absent** there,
+> known only from upstream, and shipped here since #162. ⚠️ `GetToken.php` and `GetInfos.php` appear in the official source and
 > **do not exist**: they are broken Markdown link targets, and counting them yields ten endpoints
 > where there are eight.
 
@@ -144,8 +144,11 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
   > `register` and `podinfo` are redacted to their **key names only**, never blanked, so the next
   > export anyone pastes can still settle what they contain without the owner's credentials.
 
-Six platforms: `sensor` (probes + regulation params) · `binary_sensor` · `switch` (always forces
-Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diagnostics` (redacted).
+Seven platforms (`PLATFORMS` in `__init__.py`), plus `diagnostics` (redacted): `sensor` (probes +
+regulation params) · `binary_sensor` · `button` (refresh from Klereo) · `switch` (Manual mode —
+**except output 4**, where `newMode` is a KlereoTherm mode) · `select` (output mode) · `number`
+(writable setpoints + per-output auto-off timer) · `climate` (the KlereoTherm, only where output 4
+is reported).
 
 > ⚠️ **Setpoints live in THREE containers, and which one your API returns is still unmeasured.**
 > `RegulModes` was guessed (the introducing commit says so in its own comment) and appears nowhere
@@ -164,7 +167,7 @@ Manual mode) · `select` (output mode) · `number` (writable setpoints) · `diag
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest tests/ -v     # 567 tests, all green 2026-09-08 (v1.18.0)
+.venv/bin/pytest tests/ -v     # 573 tests, all green 2026-09-11 (v1.18.1)
 .venv/bin/ruff check .
 ```
 
