@@ -54,6 +54,11 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
         self._attr_name = OUTPUT_NAMES.get(
             self._output_index, f"Output {self._output_index}"
         )
+        # On output 4, "on" picks a KlereoTherm mode for the user; the select and the
+        # thermostat show it instead. Home Assistant reads this only when the registry
+        # entry is CREATED, so existing installations keep their switch enabled (#183).
+        if self._output_index == OUT_IDX_HEATING:
+            self._attr_entity_registry_enabled_default = False
 
         self._update_from_output(output)
 

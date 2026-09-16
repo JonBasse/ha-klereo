@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **The Heating switch (output 4) is created disabled on new installations** ([#183](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/183)). On a KlereoTherm, "on" is not a complete command: the switch has to choose a mode — it sends *Heating* — and nothing on it says so. [@nopbop](https://github.com/JonBasse/ha-klereo/issues/55) proposed removing it; the mode select and the thermostat already cover the equipment and show the mode.
+  - **Existing installations are not touched.** A switch you already have stays enabled and behaves exactly as before, so no automation or dashboard breaks. Home Assistant applies the default only when an entity is first registered, and a test holds that against the real registry.
+  - **Why not remove it:** removing entities people use is something this integration does not do, and it would not remove the guess — the thermostat's own *turn on* picks *Heating* too, because Home Assistant requires it to pick a mode. The difference is that the thermostat shows which one.
+  - ⚠️ Known limit, unchanged: on a reversible heat pump, an enabled Heating switch reads *on* while the pump is cooling.
 - **A debug log no longer fills with `Regulation … has no reference probe`** ([GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55)). The line was written once per probe on every refresh — fourteen times a cycle on [@nopbop](https://github.com/JonBasse/ha-klereo/issues/55)'s installation, most of the volume of his log — for a normal installation with no pressure sensor. It is gone; an index naming a probe the payload does not carry still warns, and the `-1` itself stays readable in the diagnostics export.
 
 ## [1.18.1] — 2026-09-11
