@@ -214,9 +214,10 @@ class KlereoSensor(KlereoEntity, SensorEntity):
         for name, index in sorted(details.regulation_probes.items()):
             if index == NO_REFERENCE_PROBE:
                 # A normal installation, not an anomaly: the measured payload carries
-                # `PressionCapteur: -1` on a pool with no pressure sensor. Warning here
-                # would cry wolf on every one of them.
-                _LOGGER.debug("Regulation %s has no reference probe", name)
+                # `PressionCapteur: -1` on a pool with no pressure sensor. Not logged at
+                # all — this runs once per probe per refresh, and a debug line here was
+                # most of the volume of a real debug log (GitHub #55, 2026-09-15). The
+                # `-1` itself stays readable in the diagnostics export.
                 continue
             if index not in details.probe_index:
                 _LOGGER.warning(
