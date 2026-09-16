@@ -666,15 +666,18 @@ class TestRegulationReferenceProbes:
 
         Both end up creating no attribute, so the attribute alone cannot tell them apart.
         The discriminator is the log: a regulation with no probe is a NORMAL installation
-        and must stay at debug, while an index naming a probe the payload does not carry
-        is a payload that contradicts itself and earns a warning. Confusing the two would
-        cry wolf on every pool without a pressure sensor.
+        and logs nothing, while an index naming a probe the payload does not carry is a
+        payload that contradicts itself and earns a warning. Confusing the two would cry
+        wolf on every pool without a pressure sensor.
+
+        Nothing at all, not even at debug: this runs once per probe per refresh, and the
+        debug line it used to write was most of a real debug log (GitHub #55, 2026-09-15).
         """
         with caplog.at_level("DEBUG", logger="custom_components.klereo.sensor"):
-            self._probe_attrs(mock_coordinator, 16, self._measured(),
-                              water_temperature=16, pressure=-1)
-        assert not [r for r in caplog.records if r.levelname == "WARNING"]
-        assert "pressure" in caplog.text
+            attrs = self._probe_attrs(mock_coordinator, 16, self._measured(),
+                                      water_temperature=16, pressure=-1)
+        assert attrs["regulation_reference"] == ["water_temperature"]
+        assert not caplog.records
 
     def test_an_index_naming_no_probe_warns(self, mock_coordinator, caplog):
         """🔴 A reference pointing at a probe the payload does not carry IS an anomaly."""

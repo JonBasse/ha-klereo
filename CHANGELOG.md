@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **A debug log no longer fills with `Regulation … has no reference probe`** ([GitHub #55](https://github.com/JonBasse/ha-klereo/issues/55)). The line was written once per probe on every refresh — fourteen times a cycle on [@nopbop](https://github.com/JonBasse/ha-klereo/issues/55)'s installation, most of the volume of his log — for a normal installation with no pressure sensor. It is gone; an index naming a probe the payload does not carry still warns, and the `-1` itself stays readable in the diagnostics export.
+
 ## [1.18.1] — 2026-09-11
 
 ### Fixed
