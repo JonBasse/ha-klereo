@@ -55,11 +55,12 @@ happens to the submission below.
 **Default-catalogue submission: [hacs/default#10263](https://github.com/hacs/default/pull/10263)**,
 opened 2026-08-23, **12/12 checks green**, tracked in #102. Expect **months**, not weeks.
 
-> Measured 2026-09-08: **802 open PRs are older than ours** — that is the real queue, since it
-> sorts oldest-first — out of **1147** open in total, against **203 merged in the last 30 days**.
-> At that rate the wait is on the order of **four months**, and the arithmetic assumes merges are
-> drawn from the front of the queue, which is not verified. ⚠️ Re-measure rather than trust this
-> number; the earlier "~720 deep" in this file was of an unstated kind and cannot be compared to it.
+> Measured 2026-09-16 by a raw `gh pr list --limit 3000` count, not the search API: **812 open
+> PRs are older than ours** out of **1330** open, against **203 merged in the last 30 days**. On
+> 2026-09-08 it was **802** of 1147. **The queue in front of us did not shrink in eight days**, so
+> the "about four months" once derived here from the merge rate is **not supported**: there is no
+> honest ETA. ⚠️ Re-measure rather than trust these numbers, and count PRs older than
+> `2026-08-23T14:50:17Z` (our `createdAt`), not the open total.
 >
 > ⚠️ **`gh pr view` shows `Action checks completed = FAILURE` on that PR and it is NOT a problem.**
 > Two workflow runs fired on 2026-08-23: the first was **cancelled** (every one of its children
