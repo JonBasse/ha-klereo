@@ -32,6 +32,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.klereo.api import (
@@ -100,6 +101,12 @@ async def _start_heating(hass, box, entry_point):
         data={CONF_USERNAME: "u", CONF_PASSWORD: "p", "password_hashed": True},
     )
     entry.add_to_hass(hass)
+    # An EXISTING installation: the Heating switch is born disabled on new ones (#183), and
+    # @nopbop's is an enabled entry that predates that.
+    er.async_get(hass).async_get_or_create(
+        "switch", DOMAIN, f"{SYS}_output_{OUT_IDX_HEATING}", config_entry=entry,
+        suggested_object_id="pool_heating",
+    )
     with patch("custom_components.klereo.KlereoApi", return_value=box["api"]):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()

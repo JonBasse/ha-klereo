@@ -196,6 +196,13 @@ Turning a switch on or off sends a **Manual mode** command to the Klereo system.
 > **Heating**, turning it off sends **Off**, and its mode select offers those options rather than
 > Manual / Time Slots / Timer / Regulation.
 >
+> **On a new installation, the Heating switch is created disabled.** "On" is not a complete command for
+> a KlereoTherm: the switch has to pick a mode for you, and nothing on it says which. The mode select
+> and the thermostat cover the same equipment and show the mode, so they are what you get by default.
+> You can still enable the switch under *Settings → Devices & services → Entities*. An installation
+> that already had it keeps it, enabled and unchanged. Note that it reads *on* whenever the heat pump
+> is not stopped — including while a reversible pump is **cooling**.
+>
 > **Which of them you are offered depends on your heating hardware.** `Auto` and `Cooling` only appear
 > on a real heat pump — Klereo's `HeaterMode` 2 or 4. An on/off heater or a heating circuit without a
 > setpoint gets `Off` and `Heating` alone, because it has nothing else it can do. If your installation
