@@ -167,7 +167,7 @@ is reported).
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest tests/ -v     # 573 tests, all green 2026-09-11 (v1.18.1)
+.venv/bin/pytest tests/ -v     # 583 tests, all green 2026-09-16 (v1.19.0)
 .venv/bin/ruff check .
 ```
 
