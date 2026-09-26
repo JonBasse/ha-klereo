@@ -17,6 +17,8 @@ from .api import (
     CMD_STATUS_IN_FLIGHT,
     CMD_STATUS_LABELS,
     CMD_STATUS_OK,
+    OUT_IDX_FILTRATION,
+    OUT_MODE_MAN,
     OUT_STATE_OFF,
     OUT_STATE_ON,
     KlereoApi,
@@ -363,6 +365,13 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
         relay. @nopbop's export shows output 1 in mode 3 (Regulation) reporting `status: 1`,
         so writing 2 there would flip a running switch to `off` and INVENT the lie this fix
         exists to remove. The mode is always ours to state; the relay state is not.
+
+        ⚠️ The Filtration output (1) under Manual mode is the one place `state` can also be
+        an analogue pump's speed step, up to its own `PumpMaxSpeed`
+        (`number.KlereoPumpSpeedNumber`, api.py) rather than plain ON/OFF. Unlike AUTO
+        above, that IS a literal, truthful relay command we just sent — Manual states are
+        never "the box decides" — so it is written through as-is, scoped to this one
+        output so every other output keeps the narrower OFF/ON-only rule unchanged.
         """
         system = (self.data or {}).get(system_id)
         if system is None:
@@ -372,7 +381,9 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             return
 
         output.mode = mode
-        if state in (OUT_STATE_OFF, OUT_STATE_ON):
+        if out_index == OUT_IDX_FILTRATION and mode == OUT_MODE_MAN:
+            output.status = state
+        elif state in (OUT_STATE_OFF, OUT_STATE_ON):
             output.status = state
         self.async_update_listeners()
 

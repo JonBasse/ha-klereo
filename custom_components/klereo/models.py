@@ -80,6 +80,19 @@ class KlereoOutput:
     and it is now a known, measured limitation instead of an unexplained one. The field
     reaches a reporter through the raw diagnostics export (#145) and through nothing else.
     See #141 and `docs/klereo-api.md` § *Détail d'un bassin*.
+
+    🔴 **`real_status` is now parsed too — the same `off_delay` exception, not a reversal
+    of the policy above.** A FEATURE reads it: `number.KlereoPumpSpeedNumber`, under
+    Regulation on the Filtration output only. Five diagnostics exports from one reporter,
+    an analogue pump (`PumpMaxSpeed: 3`), settle why: `status` and `realStatus` diverge
+    under Regulation, and `realStatus` is the one that agrees with the pump's own
+    `PmpRunningSpeed`/`PmpWatts`/`PmpRPM` (`ExtraParams`) — with a lag, confirmed by
+    watching both settle to the same reading after a setpoint change, and cross-checked
+    against an independent power meter. `switch`/`select` still read `status` everywhere,
+    unchanged; this is one narrow place a measured signal beats no signal.
+
+    ⚠️ Defaults to `None`, NOT `0` — same reasoning as `off_delay`: a missing field must
+    not read as a genuinely stopped pump.
     """
 
     index: int
@@ -87,6 +100,7 @@ class KlereoOutput:
     mode: int = 0
     type: int = 0
     off_delay: int | None = None
+    real_status: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> KlereoOutput:
@@ -103,6 +117,7 @@ class KlereoOutput:
             mode=data.get("mode", 0),
             type=data.get("type", 0),
             off_delay=data.get("offDelay"),
+            real_status=data.get("realStatus"),
         )
 
 
@@ -161,6 +176,27 @@ class KlereoAlert:
         )
 
 
+def _parse_optional_int(value: Any) -> int | None:
+    """Return `value` as an int, or `None` when it is absent or not honestly one.
+
+    Same rule as `_parse_regulation_probes` below, applied to a single scalar: a numeric
+    string is accepted (Klereo has sent numbers as strings elsewhere in this payload), a
+    float is not (truncating one would be a guess about which whole number was meant), and
+    `bool` is rejected explicitly since it is an `int` subclass in Python and would
+    otherwise silently read as 0 or 1.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _parse_regulation_probes(data: dict[str, Any]) -> dict[str, int]:
     """Return {regulation: probe index} for the reference fields this payload carries.
 
@@ -204,6 +240,12 @@ class KlereoPoolDetails:
     alerts: list[KlereoAlert] = field(default_factory=list)
     reported_alert_count: int | None = None
     access: int | None = None
+    # The Filtration pump's maximum speed step, straight off the wire. `> 1` is upstream's
+    # own gate for "this is an analogue/variable-speed pump" (`klereo.class.php` l.632,
+    # 912, 1429) — see `number.KlereoPumpSpeedNumber`, the only reader. `docs/klereo-api.md`
+    # elides `GetPoolsDetails`'s field lists, so this key is attested by upstream alone, not
+    # by Klereo's own documentation or a capture this project has taken.
+    pump_max_speed: int | None = None
     probe_index: dict[int, KlereoProbe] = field(default_factory=dict)
     output_index: dict[int, KlereoOutput] = field(default_factory=dict)
     regulation_probes: dict[str, int] = field(default_factory=dict)
@@ -293,6 +335,7 @@ class KlereoPoolDetails:
             params=dict(data.get("params", {})),
             extra_params=dict(data.get("ExtraParams", {})),
             access=data.get("access"),
+            pump_max_speed=_parse_optional_int(data.get("PumpMaxSpeed")),
             probe_index={p.index: p for p in probes},
             output_index={o.index: o for o in outs},
             regulation_probes=_parse_regulation_probes(data),

@@ -6,8 +6,11 @@ import pytest
 from custom_components.klereo.api import (
     HEAT_MODE_HEATING,
     HEAT_MODE_STOP,
+    OUT_IDX_FILTRATION,
     OUT_IDX_HEATING,
     OUT_MODE_MAN,
+    OUT_MODE_REGUL,
+    OUT_MODE_TIME_SLOTS,
     OUT_STATE_AUTO,
     OUT_STATE_OFF,
     OUT_STATE_ON,
@@ -202,6 +205,83 @@ class TestKlereoHeatingSwitch:
         """status == 0 means stopped."""
         output = _make_output(index=OUT_IDX_HEATING, status=OUT_STATE_OFF, mode=0)
         switch = KlereoSwitch(heating_coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+
+class TestKlereoFiltrationSwitchUnderManualIsUnchanged:
+    """🔴 The switch does NOT track an analogue pump's speed under Manual — on purpose.
+
+    An earlier draft made it read any non-zero Manual status as "on", to match
+    `number.KlereoPumpSpeedNumber`. Reverted on request: the switch stays exactly what
+    it was before this feature existed — a plain `status == OUT_STATE_ON` (1) check —
+    and the speed entity is where a speed step actually shows. Only Regulation (below)
+    is special-cased, because that one is measured to need it.
+    """
+
+    def test_is_off_at_speed_2_under_manual(self, mock_coordinator):
+        """Unlike ON (1), a speed step is not reflected by the switch under Manual."""
+        output = _make_output(index=OUT_IDX_FILTRATION, status=2, mode=OUT_MODE_MAN)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+    def test_is_on_at_plain_on_under_manual(self, mock_coordinator):
+        """Positive control: ordinary Manual ON/OFF is untouched by this output's specifics."""
+        output = _make_output(index=OUT_IDX_FILTRATION, status=OUT_STATE_ON, mode=OUT_MODE_MAN)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        assert switch._attr_is_on is True
+
+    def test_is_off_at_zero_under_manual(self, mock_coordinator):
+        output = _make_output(index=OUT_IDX_FILTRATION, status=OUT_STATE_OFF, mode=OUT_MODE_MAN)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+    def test_status_2_under_time_slots_still_reads_as_off(self, mock_coordinator):
+        """🔴 Scope control: status 2 under Time Slots is still the generic AUTO flag.
+
+        Only Regulation is measured (see `TestKlereoFiltrationSwitchUnderRegulation`
+        below) — Time Slots is a DIFFERENT non-Manual mode nobody has measured on this
+        hardware, and widening every non-Manual mode to "always on" would repeat the
+        exact defect `_show_confirmed_output` already refuses for every other output:
+        turning the commanded AUTO into an invented relay reading.
+        """
+        output = _make_output(index=OUT_IDX_FILTRATION, status=2, mode=OUT_MODE_TIME_SLOTS)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+    def test_other_outputs_are_unaffected(self, mock_coordinator):
+        """Scope control: a non-Filtration output at status 2 still reads as off."""
+        output = _make_output(index=0, status=2, mode=OUT_MODE_MAN)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+
+class TestKlereoFiltrationSwitchUnderRegulation:
+    """🔴 MEASURED on a real installation: an analogue Filtration pump under Regulation
+    was demonstrably running while `status` did not reliably say so (`status`/`realStatus`
+    varied across captures, sometimes disagreeing with each other — see
+    `models.KlereoOutput.real_status`). Reading `status` literally risks showing off on a
+    pump that IS running. Regulation is therefore read as always on for this output, the
+    same simplification the Heating switch already makes for "not stopped".
+
+    ⚠️ This does NOT license reading any `status` value as "running" for every non-Manual
+    mode, or for every output — see the scope controls in the class above and below.
+    """
+
+    def test_regulation_reads_as_on_even_at_the_measured_status(self, mock_coordinator):
+        output = _make_output(index=OUT_IDX_FILTRATION, status=OUT_STATE_AUTO, mode=OUT_MODE_REGUL)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        assert switch._attr_is_on is True
+
+    def test_regulation_reads_as_on_regardless_of_status(self, mock_coordinator):
+        """The approximation is on the MODE, not on decoding whatever status carries."""
+        output = _make_output(index=OUT_IDX_FILTRATION, status=0, mode=OUT_MODE_REGUL)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        assert switch._attr_is_on is True
+
+    def test_other_outputs_under_regulation_are_unaffected(self, mock_coordinator):
+        """Scope control: the approximation is specific to the Filtration output."""
+        output = _make_output(index=2, status=OUT_STATE_AUTO, mode=OUT_MODE_REGUL)
+        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
         assert switch._attr_is_on is False
 
 

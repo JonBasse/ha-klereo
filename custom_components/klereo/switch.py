@@ -9,8 +9,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .api import (
     HEAT_MODE_HEATING,
     HEAT_MODE_STOP,
+    OUT_IDX_FILTRATION,
     OUT_IDX_HEATING,
     OUT_MODE_MAN,
+    OUT_MODE_REGUL,
     OUT_STATE_OFF,
     OUT_STATE_ON,
     state_for_heat_mode,
@@ -87,9 +89,19 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
                 # On the heating output, AUTO (2) means the KlereoTherm is
                 # running — Off is the only state that reads as off there.
                 # Elsewhere status 2 only means "under automatic control", which
-                # says nothing about the relay, so it is deliberately not mapped.
+                # says nothing about the relay, so it is deliberately not mapped —
+                # except on Filtration under Regulation specifically, below.
                 if self._output_index == OUT_IDX_HEATING:
                     self._attr_is_on = int(status) != OUT_STATE_OFF
+                elif self._output_index == OUT_IDX_FILTRATION and int(output.mode) == OUT_MODE_REGUL:
+                    # 🔴 MEASURED (diagnostics exports, an analogue pump): `status`
+                    # does not reliably reflect the pump under Regulation, yet the
+                    # pump was demonstrably running in every capture. Reading
+                    # `status` literally would risk showing off on a running pump —
+                    # the wrong side of the mistake the comment above warns about.
+                    # Approximated as always on, the same simplification the
+                    # Heating switch already makes for "not stopped".
+                    self._attr_is_on = True
                 else:
                     self._attr_is_on = int(status) == OUT_STATE_ON
             except (ValueError, TypeError):

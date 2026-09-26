@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .api import OUT_IDX_FILTRATION, OUT_MODE_MAN, OUT_MODE_REGUL
 from .const import (
     AUTO_OFF_MAX_MINUTES,
     AUTO_OFF_MIN_MINUTES,
@@ -47,6 +48,18 @@ def _extract_numbers(coordinator, system_id, details: KlereoPoolDetails):
             continue
         uid = f"{system_id}_auto_off_{output.index}"
         items.append((uid, KlereoAutoOffNumber(coordinator, system_id, output)))
+
+    # An analogue Filtration pump — upstream's own gate, `PumpMaxSpeed > 1`
+    # (`klereo.class.php` l.632, see api.py). Absent or `<= 1` (or on an installation
+    # with no Filtration output at all) yields no entity: `switch.KlereoSwitch`'s plain
+    # ON/OFF already covers a fixed-speed pump, unchanged.
+    if details.pump_max_speed is not None and details.pump_max_speed > 1:
+        pump = details.output_index.get(OUT_IDX_FILTRATION)
+        if pump is not None:
+            uid = f"{system_id}_pump_speed_{OUT_IDX_FILTRATION}"
+            items.append(
+                (uid, KlereoPumpSpeedNumber(coordinator, system_id, pump, details.pump_max_speed))
+            )
     return items
 
 
@@ -168,4 +181,98 @@ class KlereoAutoOffNumber(KlereoEntity, NumberEntity):
         self.async_write_ha_state()
         await self.coordinator.async_set_auto_off(
             self.system_id, self._output_index, minutes
+        )
+
+
+class KlereoPumpSpeedNumber(KlereoEntity, NumberEntity):
+    """Speed setpoint for a variable-speed ("analogue") Filtration pump (output 1).
+
+    Bounded `0..PumpMaxSpeed`, sent verbatim as `newState` under `newMode=Manual` — see
+    the sourcing comment above `OUT_IDX_FILTRATION` in `api.py` for the full citation
+    (upstream Jeedom plugin; ✅ `PumpMaxSpeed` confirmed on five diagnostics exports).
+    Created only when a payload carries the field above 1 (`_extract_numbers`), the
+    "never invent, only read" rule `KlereoAutoOffNumber` follows for `offDelay`.
+
+    Reports a value under Manual AND under Regulation — see `_update_from_output` for
+    which field each reads and why. Every other mode still reports nothing.
+    """
+
+    _attr_mode = NumberMode.SLIDER
+    _attr_native_min_value = 0
+    _attr_native_step = 1
+
+    def __init__(self, coordinator, system_id, output: KlereoOutput, max_speed: int):
+        """Initialize the pump-speed entity."""
+        super().__init__(coordinator, system_id)
+        self._output_index = output.index
+
+        self._attr_unique_id = f"{system_id}_pump_speed_{self._output_index}"
+        name = OUTPUT_NAMES.get(self._output_index, f"Output {self._output_index}")
+        self._attr_name = f"{name} Speed"
+        self._attr_icon = "mdi:pump"
+        self._attr_native_max_value = max_speed
+
+        self._update_from_output(output)
+
+    @property
+    def available(self) -> bool:
+        """Return False once the payload stops carrying this output.
+
+        Same narrowing as `KlereoAutoOffNumber.available` — see its docstring (#130).
+        """
+        return super().available and self._find_my_output() is not None
+
+    @callback
+    def _handle_coordinator_update(self):
+        """Handle updated data from the coordinator."""
+        output = self._find_my_output()
+        if output is not None:
+            self._update_from_output(output)
+        super()._handle_coordinator_update()
+
+    def _update_from_output(self, output: KlereoOutput):
+        """Update the reported speed from output data.
+
+        Manual reads `status`; Regulation reads `real_status` instead — MEASURED, see
+        `models.KlereoOutput.real_status` for the citation. Every other mode reports
+        nothing, same as `switch.KlereoSwitch`.
+        """
+        try:
+            mode = int(output.mode)
+        except (ValueError, TypeError):
+            mode = None
+
+        if mode == OUT_MODE_MAN:
+            raw = output.status
+        elif mode == OUT_MODE_REGUL:
+            raw = output.real_status
+        else:
+            raw = None
+
+        if raw is None:
+            self._attr_native_value = None
+            return
+
+        try:
+            self._attr_native_value = int(raw)
+        except (ValueError, TypeError):
+            _LOGGER.warning(
+                "Unexpected speed reading %r for output %s", raw, self._output_index
+            )
+            self._attr_native_value = None
+
+    def _find_my_output(self) -> KlereoOutput | None:
+        """Find this output's data in the coordinator data."""
+        system = self._system()
+        if system is None:
+            return None
+        return system.details.output_index.get(self._output_index)
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the pump speed. Always sends Manual mode — the only mode a speed applies to."""
+        speed = int(value)
+        self._attr_native_value = speed
+        self.async_write_ha_state()
+        await self.coordinator.async_set_output(
+            self.system_id, self._output_index, OUT_MODE_MAN, speed
         )

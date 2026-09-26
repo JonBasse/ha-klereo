@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.klereo.const import PARAM_COUNTER_TYPES, SENSOR_TYPES
+from custom_components.klereo.const import PARAM_COUNTER_TYPES, PUMP_TELEMETRY_TYPES, SENSOR_TYPES
 from custom_components.klereo.models import (
     KlereoAlert,
     KlereoPoolDetails,
@@ -492,6 +492,96 @@ class TestRunTimeCounters:
         assert self._uids(mock_coordinator, extra_params={"HybChl_TotalTime": 7200}) == [
             "SYS1_param_HybChl_TotalTime", "SYS1_alerts",
         ]
+
+
+class TestPumpTelemetry:
+    """Live telemetry from an analogue Filtration pump's own controller, `ExtraParams`.
+
+    🔴 UNDOCUMENTED by every source this project otherwise trusts — absent from
+    `docs/klereo-api.md` and read by nothing in the upstream Jeedom plugin. Sourced
+    entirely from a reporter's own Home Assistant diagnostics exports, five captures
+    under Regulation on one installation (`PumpMaxSpeed: 3`), 2026-09-25. Reaches `sensor`
+    through the same curated `PARAM_NAMES` gate as everything else in this file — these
+    tests hold that gate, not a claim about what the numbers mean physically.
+    """
+
+    def _extract(self, mock_coordinator, **containers):
+        details = KlereoPoolDetails(**containers)
+        mock_coordinator.data["SYS1"].details = details
+        return _extract_sensors(mock_coordinator, "SYS1", details)
+
+    def _uids(self, mock_coordinator, **containers):
+        return [uid for uid, _ in self._extract(mock_coordinator, **containers)]
+
+    def _sensor(self, mock_coordinator, key, **containers):
+        for uid, entity in self._extract(mock_coordinator, **containers):
+            if uid == f"SYS1_param_{key}":
+                return entity
+        return None
+
+    def test_pmp_watts_is_created_with_a_power_unit(self, mock_coordinator):
+        """The field name states its unit unambiguously (see `const.PUMP_TELEMETRY_TYPES`)."""
+        sensor = self._sensor(mock_coordinator, "PmpWatts", extra_params={"PmpWatts": 243})
+        assert sensor.native_value == 243
+        assert sensor.native_unit_of_measurement == "W"
+        assert sensor.device_class == "power"
+        assert sensor.state_class == "measurement"
+
+    def test_pmp_running_speed_is_created_with_a_percent_unit(self, mock_coordinator):
+        """✅ Confirmed by the reporter directly, not inferred from a captured range
+        (see the sourcing comment in const.py) — unlike PmpFlow/PmpRPM below."""
+        sensor = self._sensor(
+            mock_coordinator, "PmpRunningSpeed", extra_params={"PmpRunningSpeed": 70}
+        )
+        assert sensor.native_value == 70
+        assert sensor.native_unit_of_measurement == "%"
+        assert sensor.device_class is None
+        assert sensor.state_class == "measurement"
+
+    def test_pmp_rpm_is_created_with_no_unit(self, mock_coordinator):
+        """🔴 No unit invented: plausible from the field's name, but unconfirmed by the
+        reporter (see the sourcing comment in const.py) — unlike PmpRunningSpeed above."""
+        sensor = self._sensor(mock_coordinator, "PmpRPM", extra_params={"PmpRPM": 114})
+        assert sensor.native_value == 114
+        assert sensor.native_unit_of_measurement is None
+        assert sensor.device_class is None
+
+    def test_the_curated_telemetry_list_is_exactly_these_keys(self, mock_coordinator):
+        """🔴 Pins the curation, the same way `test_the_curated_counter_list...` does above."""
+        assert set(PUMP_TELEMETRY_TYPES) == {
+            "PmpWatts", "PmpRunningSpeed", "PmpSpeed", "PmpRPM",
+            "PmpFlow", "PmpStatus", "PmpError", "PmpTimeout",
+        }
+
+    def test_an_uncurated_pump_key_creates_nothing(self, mock_coordinator):
+        """🔴 Negative control: an unlisted `Pmp*`-shaped key is not admitted by a
+        suffix/prefix pattern — only the names in `PUMP_TELEMETRY_TYPES` are."""
+        assert self._uids(mock_coordinator, extra_params={"PmpVoltage": 12}) == ["SYS1_alerts"]
+
+    def test_an_installation_with_no_analogue_pump_gets_nothing(self, mock_coordinator):
+        """No `Pmp*` keys in the payload means no entities — never invented."""
+        assert self._uids(mock_coordinator, extra_params={"ExtraVersion": 134}) == ["SYS1_alerts"]
+
+    def test_telemetry_refreshes_with_the_payload(self, mock_coordinator):
+        sensor = self._sensor(mock_coordinator, "PmpWatts", extra_params={"PmpWatts": 68})
+        mock_coordinator.data["SYS1"].details.extra_params["PmpWatts"] = 243
+        sensor._handle_coordinator_update()
+        assert sensor.native_value == 243
+
+    def test_telemetry_sensors_are_not_diagnostic(self, mock_coordinator):
+        """🔴 Reverted on request: an earlier draft grouped these eight under Home
+        Assistant's `diagnostic` entity category, away from the main entity list. This
+        project has never used that category anywhere else, and Power/Running Speed in
+        particular are numbers a reporter is likely to want on the main dashboard."""
+        sensor = self._sensor(mock_coordinator, "PmpWatts", extra_params={"PmpWatts": 68})
+        assert sensor.entity_category is None
+
+    def test_every_telemetry_key_has_an_icon(self, mock_coordinator):
+        """🔴 Pins the whole table: the default icon is a plain eye, which tells a reader
+        nothing apart from these entities. Every key must set its own."""
+        for key in PUMP_TELEMETRY_TYPES:
+            sensor = self._sensor(mock_coordinator, key, extra_params={key: 1})
+            assert sensor.icon is not None, key
 
 
 class TestProductConsumption:
