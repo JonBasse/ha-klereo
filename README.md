@@ -12,6 +12,7 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 
 - **Probe sensors** — Water temperature, air temperature, pH, redox (ORP), filter pressure, flow rate, chlorine level, container levels, and more.
 - **Equipment switches** — Control lighting, filtration, heating, and auxiliary outputs (on/off) with optimistic state updates.
+- **Variable-speed ("analogue") Filtration pump control** — A speed slider bounded to your own pump's maximum, for pools whose box reports one, plus optional read-only telemetry sensors (power, RPM, flow, and more). See [below](#pump-speed-filtration-output).
 - **Adjustable setpoints** — Water temperature setpoint exposed as a number entity you can adjust directly from the UI.
 - **Auto-off timers** — Each output's *Temps minuterie* exposed as a number entity in minutes, adjustable from the UI.
 - **Regulation parameters** — View regulation modes and setpoints as read-only sensors.
@@ -210,6 +211,37 @@ Turning a switch on or off sends a **Manual mode** command to the Klereo system.
 
 > **Note:** Some outputs (pH Corrector, Disinfectant, Flocculant, Hybrid Disinfectant) may require professional-level access on your Klereo account to control.
 
+### Pump Speed (Filtration output)
+
+If your installation has a **variable-speed ("analogue")** Filtration pump, a `number.filtration_speed` entity offers a slider from 0 up to your pump's own maximum speed, always in Manual mode.
+
+> **Source: the upstream Jeedom plugin.** Klereo's API sends a `PumpMaxSpeed` field that its own documentation never names, but that [MrWaloo's Jeedom plugin](https://github.com/MrWaloo/jeedom-klereo) reads: `PumpMaxSpeed > 1` means your pump is variable-speed, and the box accepts a speed step (from 0 to `PumpMaxSpeed`) directly as the output's state in Manual mode. This entity ports that mechanism.
+>
+> **The entity only appears if your box actually reports `PumpMaxSpeed` above 1** — nothing is invented for a fixed-speed pump, which keeps working through the plain Filtration switch below exactly as before. ✅ Confirmed on a real installation via a Home Assistant diagnostics export (`"PumpMaxSpeed": 3`). If you have a variable-speed pump and can confirm what a given speed step on the slider actually does on your hardware, please say so on the issue tracker.
+
+The existing Filtration switch keeps working alongside it exactly as before: turning it on sends Manual/On, and under Manual mode it still only reads *on* at plain `status == 1` — it does **not** follow the speed entity, on purpose, so a pump running at speed step 2 or 3 shows the switch as off. Use the speed entity to see and set the actual step; the switch stays a simple Manual on/off control. The Output Mode select is unaffected and still owns switching this output between Manual, Time Slots, Timer and Regulation; leaving and returning to Manual through it preserves whatever speed was last set rather than resetting the pump to Off.
+
+> ✅ **Under Regulation, the switch reads *on* — confirmed on a live installation.** The Filtration switch approximates Regulation as always on rather than risking an incorrect off — verified in practice: switching from Manual to Régulé in the Klereo app, the switch followed to on after the next refresh.
+>
+> ✅ **Under Regulation, the speed entity now shows a value too — `realStatus`, confirmed across five diagnostics exports.** The first capture looked like `status` was pinned to a constant "automatic" flag under Regulation and carried no usable speed; further captures from the same installation, following intentional speed changes (raising, then lowering, a regulation setpoint), showed that `realStatus` tracks the pump's actual target speed instead — agreeing with a separate live telemetry field (`PmpRunningSpeed`) and with a real, externally measured change in the pump's power draw, where `status` agreed with neither. The speed entity reads `realStatus` under Regulation now; it still shows nothing on an installation whose payload carries no `realStatus` at all, rather than guessing.
+>
+> ⚠️ **`realStatus` reacts faster than the pump telemetry below does.** Right after a setpoint change, `realStatus` (the box's target) updated immediately while `PmpRunningSpeed`/`PmpWatts`/`PmpRPM` (the pump's own physically measured reading) briefly still showed the old value, catching up a couple of minutes later. If the speed entity and the telemetry sensors disagree right after you change something, that is this lag, not a bug — give it a minute.
+
+**Pump telemetry sensors.** If your box's `ExtraParams` payload carries them, you also get a handful of read-only sensors straight from the pump's own controller, alongside your other sensors like every other reading in this integration. These are undocumented by Klereo and unread by the upstream Jeedom plugin — sourced entirely from one reporter's diagnostics exports — so units are only shown where actually confirmed; the rest are exposed as raw numbers, and they lag the speed entity during a transition (see above).
+
+| Sensor | What it shows |
+|---|---|
+| **Filtration Pump Power** | Instantaneous electrical power, in watts. Cross-checked against an independent power meter — confirmed. |
+| **Filtration Pump Running Speed** | The pump's own physically measured running speed, in **%** — confirmed by the reporter directly. Lags `realStatus` during a transition, then settles to match it. |
+| **Filtration Pump Speed Setpoint** | The speed the pump's local controller is currently trying to reach, in **%** — confirmed by the reporter directly. In every capture so far it moves together with Running Speed rather than ahead of it. |
+| **Filtration Pump RPM** | Motor speed — plausibly revolutions per minute (the field's name), unconfirmed, no unit shown. |
+| **Filtration Pump Flow** | A flow reading — plausibly related to the `DebitPompe` value you declared for your installation, unconfirmed, no unit shown. |
+| **Filtration Pump Status** | The reporter's own reading is "presumably on/off" — offered as a guess, not confirmed anywhere in the Klereo app. Read `1` in every capture seen so far, at every speed; never observed at `0`. |
+| **Filtration Pump Error Code** | `0` in every capture so far. What a non-zero value means is not documented anywhere — if you ever see one, please report it on the issue tracker. |
+| **Filtration Pump Timeout** | Briefly went to `1` after a regulation setpoint change, stayed there through the speed transition, then returned to `0` on its own a few minutes later, confirmed in Home Assistant's own history. Nothing about it is visible anywhere in the Klereo app — no alert, no indicator. Reads as a genuine but self-clearing transient rather than a fault; what specifically triggers it is still unknown. |
+
+⚠️ Every description above marked "plausibly" or "unconfirmed" is exactly that — read on one installation, not documented by Klereo or by the upstream Jeedom plugin. Treat the numbers as informative, not as ground truth, until more installations confirm them.
+
 ### Climate
 
 If your installation reports a heating output, a single `climate` entity is created for the
@@ -242,6 +274,8 @@ Writable regulation setpoints are exposed as number entities:
 | ConsigneEau | Water Setpoint | 10–40 °C | 0.5 |
 
 Changing a value sends a `SetParam` command to the Klereo API.
+
+> The Filtration pump's speed is also a `number` entity, but it writes `SetOut` rather than `SetParam` — see [Pump Speed](#pump-speed-filtration-output) above.
 
 #### Auto-Off Timers
 

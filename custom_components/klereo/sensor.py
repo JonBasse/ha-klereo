@@ -24,6 +24,7 @@ from .const import (
     PARAM_COUNTER_TYPES,
     PARAM_NAMES,
     PARAM_TYPES,
+    PUMP_TELEMETRY_TYPES,
     SENSOR_TYPES,
 )
 from .entity import (
@@ -249,11 +250,14 @@ class KlereoParamSensor(KlereoEntity, SensorEntity):
         self._attr_name = PARAM_NAMES.get(key, _humanize_key(key))
         self._attr_native_value = _reading(initial_value)
 
-        # Counters carry a unit and a class; an ordinary regulation parameter carries
-        # neither, and giving it a plausible one would be a guess.
-        counter = PARAM_COUNTER_TYPES.get(key, {})
+        # Counters and pump telemetry carry a unit and a class where one is actually
+        # confirmed; an ordinary regulation parameter carries neither, and giving it a
+        # plausible one would be a guess. The two typed tables are disjoint by key, so
+        # checking one then the other never shadows a real entry with an empty one.
+        counter = PARAM_COUNTER_TYPES.get(key) or PUMP_TELEMETRY_TYPES.get(key, {})
         self._attr_native_unit_of_measurement = counter.get("unit")
         self._attr_device_class = counter.get("device_class")
+        self._attr_icon = counter.get("icon")
         state_class = counter.get("state_class")
         if state_class:
             self._attr_state_class = SensorStateClass(state_class)
