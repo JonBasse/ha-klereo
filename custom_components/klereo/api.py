@@ -97,6 +97,31 @@ OUT_STATE_AUTO = 2
 # `elseif ($outIndex === 4)` branch (l.1525+).
 OUT_IDX_HEATING = 4
 
+# Output 1 is always Filtration — the index table in `docs/klereo-api.md` § *Changer le
+# mode ... d'une sortie* is fixed across installations, the same way OUT_IDX_HEATING (4)
+# is. Named here because the variable-speed pump handling below applies to this output
+# specifically.
+OUT_IDX_FILTRATION = 1
+
+# A variable-speed ("analogue") Filtration pump does not use a fixed handful of `newState`
+# values the way every other output does. Source: upstream Jeedom plugin
+# `klereo.class.php` — `if ($details['PumpMaxSpeed'] > 1) { // Analogic pump` (l.632, 912,
+# 1429) gates a `numeric`/`slider` control bounded `0..PumpMaxSpeed` (l.913-914) whose
+# value is sent verbatim as `newState` under `newMode=Manual` (l.1493-1495, 1511-1513).
+#
+# `PumpMaxSpeed` is a top-level field of `GetPoolDetails`, read into
+# `KlereoPoolDetails.pump_max_speed` — per-installation, not a fixed "1/2/3" menu.
+# ✅ Confirmed on five diagnostics exports from one reporter (`PumpMaxSpeed: 3`); an
+# earlier draft hardcoded three named speeds after kouakattak/Klereo_HA
+# (https://github.com/kouakattak/Klereo_HA), superseded once the upstream mechanism
+# above was found. See `number.KlereoPumpSpeedNumber`, the only reader.
+#
+# When a pump is NOT analogue, `PumpMaxSpeed` is absent or `<= 1` and no speed entity is
+# created — `switch.KlereoSwitch`'s plain ON/OFF covers that case, unchanged. The matching
+# write path in `coordinator.KlereoCoordinator._show_confirmed_output` writes ANY Manual
+# status for this output through as-is, not just `OUT_STATE_ON` (1), because a Manual
+# status here can legitimately be any value up to `PumpMaxSpeed`.
+
 HEAT_MODE_STOP = 0
 HEAT_MODE_AUTO = 1
 HEAT_MODE_COOLING = 2

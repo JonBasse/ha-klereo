@@ -8,6 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import (
     HEAT_MODES,
+    OUT_IDX_FILTRATION,
     OUT_IDX_HEATING,
     OUT_MODE_MAN,
     OUT_STATE_AUTO,
@@ -166,12 +167,23 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
         if mode != OUT_MODE_MAN:
             return OUT_STATE_AUTO
 
-        # Manual: preserve the output's current ON/OFF state. A status of AUTO
-        # has no ON/OFF meaning, so anything that is not ON becomes OFF.
         output = self._find_my_output()
         if output is None:
             return OUT_STATE_OFF
         try:
-            return OUT_STATE_ON if int(output.status) == OUT_STATE_ON else OUT_STATE_OFF
+            status = int(output.status)
         except (ValueError, TypeError):
             return OUT_STATE_OFF
+
+        if self._output_index == OUT_IDX_FILTRATION:
+            # An analogue Filtration pump's Manual state is a speed step bounded by
+            # its own `PumpMaxSpeed` (`number.KlereoPumpSpeedNumber`, api.py), not a
+            # plain ON/OFF. Preserve it as-is — any non-negative reading — so leaving
+            # and returning to Manual through THIS select does not silently drop a
+            # running pump to Off. A negative or unreadable status still falls back
+            # to Off, the same honest default the general case below uses.
+            return status if status >= OUT_STATE_OFF else OUT_STATE_OFF
+
+        # Manual: preserve the output's current ON/OFF state. A status of AUTO
+        # has no ON/OFF meaning, so anything that is not ON becomes OFF.
+        return OUT_STATE_ON if status == OUT_STATE_ON else OUT_STATE_OFF

@@ -8,8 +8,10 @@ from custom_components.klereo.api import (
     HEAT_MODE_COOLING,
     HEAT_MODE_HEATING,
     HEAT_MODE_STOP,
+    OUT_IDX_FILTRATION,
     OUT_IDX_HEATING,
     OUT_MODE_MAN,
+    OUT_MODE_REGUL,
     OUT_MODE_TIME_SLOTS,
     OUT_MODE_TIMER,
     OUT_STATE_AUTO,
@@ -597,3 +599,45 @@ class TestAvailabilityOfSelect:
         """The half that already worked must survive: a failed refresh still bars."""
         mock_coordinator.last_update_success = False
         assert self._entity(mock_coordinator).available is False
+
+
+class TestManualModePreservesPumpSpeedOnOutput1:
+    """The generic Output Mode select must not reset a running pump to Off.
+
+    `KlereoOutputModeSelect._state_for_mode` used to binarize any non-`OUT_STATE_ON`
+    status to OFF when returning to Manual — harmless everywhere a Manual state is only
+    ever 0 or 1, but on output 1, where an analogue pump's Manual status can be any speed
+    step up to its own `PumpMaxSpeed` (`number.KlereoPumpSpeedNumber`), it would silently
+    drop a running pump to Off the moment a user (or another select) left and re-entered
+    Manual.
+    """
+
+    async def test_manual_preserves_a_speed_step_instead_of_binarizing_to_off(self, mock_coordinator):
+        """Re-selecting Manual while status already reads a speed step must resend it."""
+        output = KlereoOutput(index=OUT_IDX_FILTRATION, status=2, mode=OUT_MODE_MAN)
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {OUT_IDX_FILTRATION: output}
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+
+        await select.async_select_option("Manual")
+
+        mock_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_FILTRATION, OUT_MODE_MAN, 2
+        )
+
+    async def test_other_outputs_still_binarize_to_on_off(self, mock_coordinator):
+        """Control: the widened preservation is scoped to output 1 alone."""
+        output = KlereoOutput(index=0, status=2, mode=OUT_MODE_MAN)
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {0: output}
+        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+
+        await select.async_select_option("Manual")
+
+        mock_coordinator.async_set_output.assert_called_once_with(
+            "SYS1", 0, OUT_MODE_MAN, OUT_STATE_OFF
+        )
