@@ -189,7 +189,7 @@ class KlereoPumpSpeedNumber(KlereoEntity, NumberEntity):
 
     Bounded `0..PumpMaxSpeed`, sent verbatim as `newState` under `newMode=Manual` — see
     the sourcing comment above `OUT_IDX_FILTRATION` in `api.py` for the full citation
-    (upstream Jeedom plugin; ✅ `PumpMaxSpeed` confirmed on five diagnostics exports).
+    (upstream Jeedom plugin; ✅ `PumpMaxSpeed` confirmed on six diagnostics exports).
     Created only when a payload carries the field above 1 (`_extract_numbers`), the
     "never invent, only read" rule `KlereoAutoOffNumber` follows for `offDelay`.
 

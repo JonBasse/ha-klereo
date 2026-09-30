@@ -90,8 +90,9 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
                 # running — Off is the only state that reads as off there.
                 # Elsewhere status 2 only means "under automatic control", which
                 # says nothing about the relay, so it is deliberately not mapped —
-                # except on Filtration under Regulation on a confirmed analogue
-                # pump specifically, below.
+                # except on Filtration on a confirmed analogue pump specifically,
+                # under Regulation (reads `real_status`) and under Manual (reads
+                # any speed step above 0 as on), both below.
                 if self._output_index == OUT_IDX_HEATING:
                     self._attr_is_on = int(status) != OUT_STATE_OFF
                 elif (
@@ -112,6 +113,23 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
                     # below rather than inventing an answer — the same trap
                     # `tests/test_real_status_gate.py` exists to catch (#141).
                     self._attr_is_on = int(output.real_status) != OUT_STATE_OFF
+                elif (
+                    self._output_index == OUT_IDX_FILTRATION
+                    and int(output.mode) == OUT_MODE_MAN
+                    and self._is_analogue_pump()
+                ):
+                    # ✅ CONFIRMED (reporter's own dashboard, and the official Klereo
+                    # app) on a variable-speed pump: Manual at any speed step above 0
+                    # is the pump running, not just step 1. Reading plain `status ==
+                    # OUT_STATE_ON` here showed the switch off at a genuinely running
+                    # speed 2/3 — the same false-negative shape the Regulation fix
+                    # above already corrects, one mode over.
+                    #
+                    # Writing is unchanged: turning this switch on/off still sends
+                    # plain Manual/On (speed 1) or Manual/Off — the slider
+                    # (`number.KlereoPumpSpeedNumber`) stays the only way to pick a
+                    # step above 1.
+                    self._attr_is_on = int(status) > OUT_STATE_OFF
                 else:
                     self._attr_is_on = int(status) == OUT_STATE_ON
             except (ValueError, TypeError):

@@ -4,8 +4,11 @@ Source: upstream Jeedom plugin `klereo.class.php` — see the full citation abov
 `OUT_IDX_FILTRATION` in `api.py`. ✅ `PumpMaxSpeed` is confirmed on five diagnostics
 exports from one reporter, all under Regulation; the same exports settled that `status`
 does not reliably track the live speed there but `real_status` does (full citation:
-`models.KlereoOutput.real_status`). The switch deliberately does NOT follow the speed
-under Manual (reverted on request) — only Regulation is special-cased.
+`models.KlereoOutput.real_status`). On a CONFIRMED analogue pump (every payload in this
+file sets `PumpMaxSpeed: 5`), the switch follows any speed step above 0 as on, under
+BOTH Manual and Regulation — see `TestTheSwitchFollowsSpeedUnderManual` and
+`TestTheSwitchFollowsRegulation` below. A fixed-speed pump keeps the original plain
+`status == OUT_STATE_ON` reading in both modes, unchanged (`tests/test_switch.py`).
 
 What these tests hold throughout is the same property `test_optimistic_siblings.py` holds
 for the heating output (#174): `switch.KlereoSwitch`, `select.KlereoOutputModeSelect` and
@@ -326,17 +329,19 @@ def _mode(coordinator, index=OUT_IDX_FILTRATION):
     return _bind(coordinator, KlereoOutputModeSelect(coordinator, SYS1, output))
 
 
-class TestTheSwitchDoesNotFollowSpeedUnderManual:
-    """🔴 Reverted on request: the switch does NOT track an analogue pump's speed.
+class TestTheSwitchFollowsSpeedUnderManual:
+    """✅ CONFIRMED (reporter's own dashboard, and the official Klereo app): on a
+    variable-speed pump, the switch follows any Manual speed step above 0 as on — see
+    `tests/test_switch.py::TestKlereoFiltrationSwitchUnderManualOnAConfirmedAnaloguePump`
+    for the full citation and the fixed-speed-pump scope control.
 
-    An earlier draft made `switch.KlereoSwitch` read any non-zero Manual status as "on",
-    to follow the speed entity. Reverted: under Manual, the switch stays exactly what it
-    was before this feature existed — plain `status == OUT_STATE_ON` (1) — and the speed
-    entity is where a speed step actually shows. Only Regulation is special-cased
-    (`TestTheSwitchFollowsRegulation` below), because that one is measured to need it.
+    🔴 An EARLIER draft kept the switch at plain `status == OUT_STATE_ON` under Manual
+    for every installation, reverted then re-introduced here scoped to a CONFIRMED
+    analogue pump only — reading "off" at a real, running speed 2/3 misled a real
+    dashboard, and the official Klereo app agrees Filtration reads as running there.
     """
 
-    async def test_setting_speed_2_does_not_turn_the_switch_on(self, coordinator):
+    async def test_setting_speed_2_turns_the_switch_on(self, coordinator):
         await _refresh(coordinator)
         switch = _switch(coordinator)
         speed = _speed(coordinator)
@@ -344,7 +349,7 @@ class TestTheSwitchDoesNotFollowSpeedUnderManual:
 
         await speed.async_set_native_value(2.0)
 
-        assert switch.is_on is False
+        assert switch.is_on is True
         assert speed.native_value == 2
 
     async def test_setting_plain_on_still_turns_the_switch_on(self, coordinator):

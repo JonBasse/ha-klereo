@@ -208,14 +208,19 @@ class TestKlereoHeatingSwitch:
         assert switch._attr_is_on is False
 
 
-class TestKlereoFiltrationSwitchUnderManualIsUnchanged:
-    """🔴 The switch does NOT track an analogue pump's speed under Manual — on purpose.
+class TestKlereoFiltrationSwitchUnderManualOnAFixedSpeedPump:
+    """A fixed-speed (or unconfirmed) Filtration pump keeps the ORIGINAL Manual reading.
 
-    An earlier draft made it read any non-zero Manual status as "on", to match
-    `number.KlereoPumpSpeedNumber`. Reverted on request: the switch stays exactly what
-    it was before this feature existed — a plain `status == OUT_STATE_ON` (1) check —
-    and the speed entity is where a speed step actually shows. Only Regulation (below)
-    is special-cased, because that one is measured to need it.
+    An earlier draft made the switch read any non-zero Manual status as "on" for every
+    installation, to match `number.KlereoPumpSpeedNumber`. Reverted on request at the
+    time: the switch stayed exactly what it was before this feature existed — a plain
+    `status == OUT_STATE_ON` (1) check. That plain check is now scoped to a fixed-speed
+    (or unconfirmed) pump specifically — see `TestKlereoFiltrationSwitchUnderManualOnAConfirmedAnaloguePump`
+    below for the CONFIRMED-analogue-pump behaviour, which does follow the speed step
+    (review feedback: reading "off" at a running speed 2/3 misled a real dashboard).
+
+    `mock_coordinator` carries no `pump_max_speed` (`None`), so every test here is
+    already exercising the fixed-speed/unconfirmed case without needing to say so.
     """
 
     def test_is_off_at_speed_2_under_manual(self, mock_coordinator):
@@ -238,11 +243,10 @@ class TestKlereoFiltrationSwitchUnderManualIsUnchanged:
     def test_status_2_under_time_slots_still_reads_as_off(self, mock_coordinator):
         """🔴 Scope control: status 2 under Time Slots is still the generic AUTO flag.
 
-        Only Regulation is measured (see `TestKlereoFiltrationSwitchUnderRegulation`
-        below) — Time Slots is a DIFFERENT non-Manual mode nobody has measured on this
-        hardware, and widening every non-Manual mode to "always on" would repeat the
-        exact defect `_show_confirmed_output` already refuses for every other output:
-        turning the commanded AUTO into an invented relay reading.
+        Only Regulation and Manual are measured (see the two dedicated classes) — Time
+        Slots is a DIFFERENT mode nobody has measured on this hardware, and widening it
+        too would repeat the exact defect `_show_confirmed_output` already refuses for
+        every other output: turning the commanded AUTO into an invented relay reading.
         """
         output = _make_output(index=OUT_IDX_FILTRATION, status=2, mode=OUT_MODE_TIME_SLOTS)
         switch = KlereoSwitch(mock_coordinator, "SYS1", output)
@@ -255,8 +259,94 @@ class TestKlereoFiltrationSwitchUnderManualIsUnchanged:
         assert switch._attr_is_on is False
 
 
+class TestKlereoFiltrationSwitchUnderManualOnAConfirmedAnaloguePump:
+    """✅ CONFIRMED (reporter's own dashboard, and the official Klereo app): on a
+    variable-speed pump, Manual at any speed step above 0 is the pump running, not
+    just step 1. Reading `status == OUT_STATE_ON` read speed 2/3 as off — the
+    reporter's own dashboard showed the switch off at a real, running speed 2, and the
+    official Klereo app agrees Filtration reads as running there.
+
+    🔴 This is the opposite direction from `TestKlereoFiltrationSwitchUnderManualOnAFixedSpeedPump`
+    above and deliberately does NOT change writing: `async_turn_on`/`async_turn_off`
+    still send plain Manual/On (speed 1) or Manual/Off — the slider
+    (`number.KlereoPumpSpeedNumber`) stays the only way to choose a step above 1.
+    """
+
+    def _put(self, mock_coordinator, output, pump_max_speed=3):
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {output.index: output}
+        details.pump_max_speed = pump_max_speed
+        return mock_coordinator
+
+    def test_is_on_at_speed_2_under_manual(self, mock_coordinator):
+        output = _make_output(index=OUT_IDX_FILTRATION, status=2, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is True
+
+    def test_is_on_at_speed_3_under_manual(self, mock_coordinator):
+        output = _make_output(index=OUT_IDX_FILTRATION, status=3, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is True
+
+    def test_is_on_at_plain_speed_1_under_manual(self, mock_coordinator):
+        """Positive control: speed 1 (`OUT_STATE_ON`) was already read as on before this fix."""
+        output = _make_output(index=OUT_IDX_FILTRATION, status=OUT_STATE_ON, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is True
+
+    def test_is_off_at_zero_under_manual(self, mock_coordinator):
+        output = _make_output(index=OUT_IDX_FILTRATION, status=OUT_STATE_OFF, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+    def test_a_fixed_speed_pump_still_reads_off_at_speed_2(self, mock_coordinator):
+        """Scope control: the SAME status=2 reads off when the pump isn't confirmed analogue."""
+        output = _make_output(index=OUT_IDX_FILTRATION, status=2, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=None)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+    def test_other_outputs_are_unaffected(self, mock_coordinator):
+        """Scope control: a non-Filtration output at status 2 still reads as off, even
+        on a system with a confirmed analogue pump elsewhere."""
+        output = _make_output(index=0, status=2, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+    async def test_turning_on_still_sends_plain_manual_on(self, mock_coordinator):
+        """Writing is unchanged: the switch never sends a speed step, only On/Off."""
+        output = _make_output(index=OUT_IDX_FILTRATION, status=OUT_STATE_OFF, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        switch.async_write_ha_state = MagicMock()
+
+        await switch.async_turn_on()
+
+        coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_FILTRATION, OUT_MODE_MAN, OUT_STATE_ON
+        )
+
+    async def test_turning_off_still_sends_plain_manual_off(self, mock_coordinator):
+        output = _make_output(index=OUT_IDX_FILTRATION, status=3, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        switch.async_write_ha_state = MagicMock()
+
+        await switch.async_turn_off()
+
+        coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_FILTRATION, OUT_MODE_MAN, OUT_STATE_OFF
+        )
+
+
 class TestKlereoFiltrationSwitchUnderRegulation:
-    """🔴 MEASURED on a real installation, across five diagnostics exports AND a Home
+    """🔴 MEASURED on a real installation, across six diagnostics exports AND a Home
     Assistant entity-history graph: on a CONFIRMED analogue pump (`pump_max_speed > 1`),
     `status` does not reliably reflect the relay under Regulation, but `real_status` does
     — including reaching 0 for a genuine stop, not just "the box decided" (the graph shows
