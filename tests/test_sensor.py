@@ -564,6 +564,7 @@ class TestPumpTelemetry:
 
     def test_telemetry_refreshes_with_the_payload(self, mock_coordinator):
         sensor = self._sensor(mock_coordinator, "PmpWatts", extra_params={"PmpWatts": 68})
+        sensor.async_write_ha_state = MagicMock()
         mock_coordinator.data["SYS1"].details.extra_params["PmpWatts"] = 243
         sensor._handle_coordinator_update()
         assert sensor.native_value == 243

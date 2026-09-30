@@ -252,6 +252,18 @@ class KlereoPoolDetails:
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
+    def is_analogue_pump(self) -> bool:
+        """Return whether THIS system reports a variable-speed Filtration pump.
+
+        `pump_max_speed > 1` is upstream's own gate (`klereo.class.php` l.632, 912,
+        1429) — the single source of truth for the four call sites that used to each
+        repeat this comparison: `switch.KlereoSwitch`, `select.KlereoOutputModeSelect`,
+        `coordinator.KlereoCoordinator._show_confirmed_output` and
+        `number.KlereoPumpSpeedNumber`'s creation.
+        """
+        return self.pump_max_speed is not None and self.pump_max_speed > 1
+
+    @property
     def settings(self) -> dict[str, Any]:
         """Return setpoints and regulation parameters from either container.
 

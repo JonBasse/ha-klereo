@@ -256,32 +256,78 @@ class TestKlereoFiltrationSwitchUnderManualIsUnchanged:
 
 
 class TestKlereoFiltrationSwitchUnderRegulation:
-    """🔴 MEASURED on a real installation: an analogue Filtration pump under Regulation
-    was demonstrably running while `status` did not reliably say so (`status`/`realStatus`
-    varied across captures, sometimes disagreeing with each other — see
-    `models.KlereoOutput.real_status`). Reading `status` literally risks showing off on a
-    pump that IS running. Regulation is therefore read as always on for this output, the
-    same simplification the Heating switch already makes for "not stopped".
+    """🔴 MEASURED on a real installation, across five diagnostics exports AND a Home
+    Assistant entity-history graph: on a CONFIRMED analogue pump (`pump_max_speed > 1`),
+    `status` does not reliably reflect the relay under Regulation, but `real_status` does
+    — including reaching 0 for a genuine stop, not just "the box decided" (the graph shows
+    a real dip to 0 mid-cycle, not a display artefact). See `models.KlereoOutput.real_status`.
 
-    ⚠️ This does NOT license reading any `status` value as "running" for every non-Manual
-    mode, or for every output — see the scope controls in the class above and below.
+    🔴 An EARLIER draft approximated Regulation as always-on for every installation,
+    without checking `pump_max_speed`. Reverted on review: a fixed-speed pump whose
+    Regulation has genuinely stopped would have shown as running. Reading `real_status`
+    literally, gated on a CONFIRMED analogue pump, replaces that approximation — and an
+    installation that does not send `real_status` falls back to the same general
+    `status == OUT_STATE_ON` rule every other output/mode already uses, never to an
+    invented answer.
     """
 
-    def test_regulation_reads_as_on_even_at_the_measured_status(self, mock_coordinator):
-        output = _make_output(index=OUT_IDX_FILTRATION, status=OUT_STATE_AUTO, mode=OUT_MODE_REGUL)
-        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+    def _put(self, mock_coordinator, output, pump_max_speed):
+        """Point the shared fixture's system at this output and pump_max_speed."""
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {output.index: output}
+        details.pump_max_speed = pump_max_speed
+        return mock_coordinator
+
+    def test_reads_on_when_real_status_is_running(self, mock_coordinator):
+        output = _make_output(
+            index=OUT_IDX_FILTRATION, status=1, mode=OUT_MODE_REGUL, real_status=2
+        )
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=3)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
         assert switch._attr_is_on is True
 
-    def test_regulation_reads_as_on_regardless_of_status(self, mock_coordinator):
-        """The approximation is on the MODE, not on decoding whatever status carries."""
-        output = _make_output(index=OUT_IDX_FILTRATION, status=0, mode=OUT_MODE_REGUL)
-        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
-        assert switch._attr_is_on is True
+    def test_reads_off_when_real_status_is_a_genuine_stop(self, mock_coordinator):
+        """🔴 THE behaviour the earlier "always on" draft could not express: a real 0
+        under Regulation (confirmed on the reporter's own entity-history graph) now
+        reads as off, not as a lie."""
+        output = _make_output(
+            index=OUT_IDX_FILTRATION, status=1, mode=OUT_MODE_REGUL, real_status=0
+        )
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=3)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
+
+    def test_falls_back_to_the_general_rule_when_real_status_is_absent(self, mock_coordinator):
+        """An installation that does not send `real_status` must not be read as off (or
+        on) by invention — it falls back to the same rule every other case already uses."""
+        output = _make_output(
+            index=OUT_IDX_FILTRATION, status=1, mode=OUT_MODE_REGUL, real_status=None
+        )
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=3)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is True  # status == OUT_STATE_ON (1)
+
+    def test_a_fixed_speed_pump_ignores_real_status_and_keeps_the_original_rule(
+        self, mock_coordinator
+    ):
+        """🔴 THE fix requested on review: gated on `pump_max_speed > 1`. Without it, a
+        fixed-speed pump whose Regulation genuinely stopped (`status` and `real_status`
+        both 0 here) would have shown as running under the old "always on" draft."""
+        output = _make_output(
+            index=OUT_IDX_FILTRATION, status=0, mode=OUT_MODE_REGUL, real_status=0
+        )
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=None)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
+        assert switch._attr_is_on is False
 
     def test_other_outputs_under_regulation_are_unaffected(self, mock_coordinator):
-        """Scope control: the approximation is specific to the Filtration output."""
-        output = _make_output(index=2, status=OUT_STATE_AUTO, mode=OUT_MODE_REGUL)
-        switch = KlereoSwitch(mock_coordinator, "SYS1", output)
+        """Scope control: the exception is specific to the Filtration output, even on a
+        system with a confirmed analogue pump. `real_status: 2` here WOULD read as on if
+        this output got the same treatment as Filtration — it must not."""
+        output = _make_output(index=2, status=OUT_STATE_AUTO, mode=OUT_MODE_REGUL, real_status=2)
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=3)
+        switch = KlereoSwitch(coordinator, "SYS1", output)
         assert switch._attr_is_on is False
 
 

@@ -370,19 +370,47 @@ class TestTheSwitchDoesNotFollowSpeedUnderManual:
 
 
 class TestTheSwitchFollowsRegulation:
-    """The Regulation approximation (`TestKlereoFiltrationSwitchUnderRegulation`,
-    test_switch.py) exercised end-to-end through the coordinator, alongside the speed
-    entity and the Output Mode select."""
+    """The `real_status`-based Regulation reading (`TestKlereoFiltrationSwitchUnderRegulation`,
+    test_switch.py) exercised end-to-end through a real coordinator refresh.
 
-    async def test_regulation_turns_the_switch_on_regardless_of_status(self, coordinator):
+    🔴 Unlike an earlier draft, switching mode alone does NOT turn the switch on — the
+    coordinator's optimistic update never invents a `real_status` it was not given. Only
+    an actual refresh carrying the field does, which is why these tests go through
+    `payloads` + `_refresh` rather than `mode.async_select_option`.
+    """
+
+    async def test_a_refresh_with_real_status_turns_the_switch_on(self, coordinator, payloads):
+        payloads[SYS1]["outs"][1] = _out(
+            OUT_IDX_FILTRATION, status=1, mode=OUT_MODE_REGUL, real_status=2
+        )
         await _refresh(coordinator)
         switch = _switch(coordinator)
-        mode = _mode(coordinator)
-        assert switch.is_on is False
-
-        await mode.async_select_option("Regulation")
 
         assert switch.is_on is True
+
+    async def test_a_refresh_with_real_status_zero_turns_the_switch_off(
+        self, coordinator, payloads
+    ):
+        """🔴 THE behaviour an earlier "always on" draft could not express: a genuine
+        stop under Regulation (real_status: 0) now reads as off, not as a lie."""
+        payloads[SYS1]["outs"][1] = _out(
+            OUT_IDX_FILTRATION, status=1, mode=OUT_MODE_REGUL, real_status=0
+        )
+        await _refresh(coordinator)
+        switch = _switch(coordinator)
+
+        assert switch.is_on is False
+
+    async def test_without_real_status_the_switch_falls_back_to_status(
+        self, coordinator, payloads
+    ):
+        """This payload never carries `realStatus` at all — the switch must not invent
+        an answer, it falls back to the same rule every other case already uses."""
+        payloads[SYS1]["outs"][1] = _out(OUT_IDX_FILTRATION, status=1, mode=OUT_MODE_REGUL)
+        await _refresh(coordinator)
+        switch = _switch(coordinator)
+
+        assert switch.is_on is True  # status == OUT_STATE_ON (1)
 
 
 class TestModeSelectRoundTripPreservesSpeed:
@@ -392,18 +420,15 @@ class TestModeSelectRoundTripPreservesSpeed:
         await _refresh(coordinator)
         speed = _speed(coordinator)
         mode = _mode(coordinator)
-        switch = _switch(coordinator)
         await speed.async_set_native_value(2.0)
-        # The switch does not reflect a speed step under Manual (see the class above) —
-        # only the speed entity does. That is unaffected by this round trip either way.
         assert speed.native_value == 2
 
-        # Regulation reads as on regardless of status (measured, see test_switch.py).
+        # Mid-transition, neither the switch nor the speed entity is asserted here: this
+        # mocked payload never carries `realStatus`, so what they show while Regulation
+        # owns the output depends on that absence in a way `TestTheSwitchFollowsRegulation`
+        # and `TestAutoIsStillNotAPumpSpeed` already cover on their own. What THIS test
+        # holds is only that the speed comes back once Manual owns the output again.
         await mode.async_select_option("Regulation")
-        assert switch.is_on is True
-        # The speed itself is not reported here (`native_value` is None under
-        # Regulation, asserted in `TestAutoIsStillNotAPumpSpeed` below) — what THIS
-        # test holds is that it comes back once Manual owns the output again.
 
         await mode.async_select_option("Manual")
 
