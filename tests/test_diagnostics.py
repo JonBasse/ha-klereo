@@ -296,30 +296,31 @@ class TestTheRawPayloadReachesTheExport:
         A field nothing reads is noise — #138 refused exactly that, and this guard was
         written for it. `off_delay` was added on the OTHER justification: #162 builds a
         writable auto-off timer on it, so it has to reach the platform as part of a typed
-        model rather than a raw dict (`CLAUDE.md`). The distinction is the whole point of
-        the guard, so the list is enumerated rather than loosened — an added field must
-        name the feature that reads it, here, or this test stays red.
+        model rather than a raw dict (`CLAUDE.md`). `real_status` now joins it on the SAME
+        justification, later: `number.KlereoPumpSpeedNumber` reads it under Regulation on
+        a CONFIRMED analogue pump (`pump_max_speed > 1`, five diagnostics exports from one
+        reporter), and `switch.KlereoSwitch` does too — but ONLY in that same narrow case.
+        The distinction is still the whole point of the guard, so the list is enumerated
+        rather than loosened — an added field must name the feature that reads it, here,
+        or this test stays red.
 
-        ⚠️ `realStatus` is deliberately still absent, and since 2026-09-08 that is a
-        DECISION rather than a pending question. #141 is answered — @nopbop's export taken
-        while his pump was heating shows `realStatus` tracking the run-time counters and
-        `status` not, so `realStatus` is the physical state and `status` the commanded one
-        (`models.KlereoOutput`). Knowing what the divergence means is not knowing we can
-        act on it: `data.get("realStatus", 0)` reads `0` on an installation that does not
-        send the field, indistinguishable from a real "off", so switching would turn
-        everyone's outputs off to fix one. Nothing reads the field but the export, so
-        nothing but the export carries it.
+        ✅ This does NOT reopen #141. `real_status` still defaults to `None`, NEVER to `0`
+        (`KlereoOutput.from_dict` reads it with `data.get("realStatus")`, no default —
+        `models.py`), so an installation that never sends the field still cannot be read as
+        "genuinely off". `switch`/`select` still read `status`, never `real_status`, on
+        every OTHER output and every other mode — that general policy, and its behavioural
+        proof, are unchanged and live in `tests/test_real_status_gate.py`.
 
         🔴 Whoever comes back here having read that #141 is closed: this guard is not a
-        leftover from an open question, and lifting it is the swap in disguise. The
-        behavioural half of the refusal — an output really on, on an installation that
-        sends no `realStatus`, stays on — lives in `tests/test_real_status_gate.py`.
+        leftover from an open question. `real_status` reaching the model is the deliberate,
+        narrow exception described above, not the swap #141 refused — the swap would read
+        `real_status` UNCONDITIONALLY, or default it to `0`, and this repository still does
+        neither.
         """
         result = await _export_payload()
 
         parsed = result["coordinator_data"]["121170"]["details"]["outs"][0]
-        assert set(parsed) == {"index", "status", "mode", "type", "off_delay"}
-        assert "realStatus" not in parsed
+        assert set(parsed) == {"index", "status", "mode", "type", "off_delay", "real_status"}
 
 
 class TestRedactionReachesTheRawPayload:

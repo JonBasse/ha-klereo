@@ -111,16 +111,26 @@ OUT_IDX_FILTRATION = 1
 #
 # `PumpMaxSpeed` is a top-level field of `GetPoolDetails`, read into
 # `KlereoPoolDetails.pump_max_speed` — per-installation, not a fixed "1/2/3" menu.
-# ✅ Confirmed on five diagnostics exports from one reporter (`PumpMaxSpeed: 3`); an
-# earlier draft hardcoded three named speeds after kouakattak/Klereo_HA
-# (https://github.com/kouakattak/Klereo_HA), superseded once the upstream mechanism
-# above was found. See `number.KlereoPumpSpeedNumber`, the only reader.
+# ✅ Confirmed on six diagnostics exports from one reporter's installation
+# (`PumpMaxSpeed: 3` throughout); an earlier draft hardcoded three named speeds after
+# kouakattak/Klereo_HA (https://github.com/kouakattak/Klereo_HA), superseded once the
+# upstream mechanism above was found. See `number.KlereoPumpSpeedNumber`, the only
+# reader of the entity.
 #
-# When a pump is NOT analogue, `PumpMaxSpeed` is absent or `<= 1` and no speed entity is
-# created — `switch.KlereoSwitch`'s plain ON/OFF covers that case, unchanged. The matching
-# write path in `coordinator.KlereoCoordinator._show_confirmed_output` writes ANY Manual
-# status for this output through as-is, not just `OUT_STATE_ON` (1), because a Manual
-# status here can legitimately be any value up to `PumpMaxSpeed`.
+# `pump_max_speed > 1` (`models.KlereoPoolDetails.is_analogue_pump`, the single source of
+# truth for this comparison) gates every place this output is treated differently from a
+# plain ON/OFF relay, not just the number entity — a fixed-speed pump (the field absent or
+# `<= 1`) keeps the exact ORIGINAL behaviour everywhere, unchanged:
+#   - `switch.KlereoSwitch` / `select.KlereoOutputModeSelect`, through the shared
+#     `entity.KlereoEntity._is_analogue_pump` — without it, Manual falls back to plain
+#     ON/OFF and Regulation falls back to the general `status == OUT_STATE_ON` rule.
+#   - `coordinator.KlereoCoordinator._show_confirmed_output` — without it, a Manual write
+#     only ever records `OUT_STATE_OFF`/`OUT_STATE_ON`, never a literal speed step.
+#
+# 🔴 On a CONFIRMED analogue pump, `switch.KlereoSwitch` also reads `real_status` under
+# Regulation — not an "always on" approximation, which an earlier draft shipped until the
+# reporter's own entity history graph showed `real_status` genuinely reaching 0 there (a
+# real stop, not a display glitch). See `models.KlereoOutput.real_status`.
 
 HEAT_MODE_STOP = 0
 HEAT_MODE_AUTO = 1

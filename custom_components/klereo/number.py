@@ -53,7 +53,7 @@ def _extract_numbers(coordinator, system_id, details: KlereoPoolDetails):
     # (`klereo.class.php` l.632, see api.py). Absent or `<= 1` (or on an installation
     # with no Filtration output at all) yields no entity: `switch.KlereoSwitch`'s plain
     # ON/OFF already covers a fixed-speed pump, unchanged.
-    if details.pump_max_speed is not None and details.pump_max_speed > 1:
+    if details.is_analogue_pump:
         pump = details.output_index.get(OUT_IDX_FILTRATION)
         if pump is not None:
             uid = f"{system_id}_pump_speed_{OUT_IDX_FILTRATION}"

@@ -175,13 +175,19 @@ class KlereoOutputModeSelect(KlereoEntity, SelectEntity):
         except (ValueError, TypeError):
             return OUT_STATE_OFF
 
-        if self._output_index == OUT_IDX_FILTRATION:
-            # An analogue Filtration pump's Manual state is a speed step bounded by
-            # its own `PumpMaxSpeed` (`number.KlereoPumpSpeedNumber`, api.py), not a
-            # plain ON/OFF. Preserve it as-is — any non-negative reading — so leaving
-            # and returning to Manual through THIS select does not silently drop a
-            # running pump to Off. A negative or unreadable status still falls back
-            # to Off, the same honest default the general case below uses.
+        if self._output_index == OUT_IDX_FILTRATION and self._is_analogue_pump():
+            # A CONFIRMED analogue Filtration pump's Manual state is a speed step
+            # bounded by its own `PumpMaxSpeed` (`number.KlereoPumpSpeedNumber`,
+            # api.py), not a plain ON/OFF. Preserve it as-is — any non-negative
+            # reading — so leaving and returning to Manual through THIS select does
+            # not silently drop a running pump to Off. A negative or unreadable
+            # status still falls back to Off, the same honest default the general
+            # case below uses.
+            #
+            # Gated on `_is_analogue_pump()`: a fixed-speed pump's status is only
+            # ever 0 or 1, and must keep binarizing exactly like every other output
+            # — preserving e.g. a stray `status == 2` there would send `newState=2`
+            # where this used to send 0.
             return status if status >= OUT_STATE_OFF else OUT_STATE_OFF
 
         # Manual: preserve the output's current ON/OFF state. A status of AUTO

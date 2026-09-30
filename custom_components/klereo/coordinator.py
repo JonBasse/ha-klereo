@@ -367,11 +367,12 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
         exists to remove. The mode is always ours to state; the relay state is not.
 
         ⚠️ The Filtration output (1) under Manual mode is the one place `state` can also be
-        an analogue pump's speed step, up to its own `PumpMaxSpeed`
+        a CONFIRMED analogue pump's speed step, up to its own `PumpMaxSpeed`
         (`number.KlereoPumpSpeedNumber`, api.py) rather than plain ON/OFF. Unlike AUTO
         above, that IS a literal, truthful relay command we just sent — Manual states are
         never "the box decides" — so it is written through as-is, scoped to this one
-        output so every other output keeps the narrower OFF/ON-only rule unchanged.
+        output AND to installations `PumpMaxSpeed` actually confirms are analogue, so a
+        fixed-speed pump keeps the narrower OFF/ON-only rule unchanged.
         """
         system = (self.data or {}).get(system_id)
         if system is None:
@@ -381,7 +382,11 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             return
 
         output.mode = mode
-        if out_index == OUT_IDX_FILTRATION and mode == OUT_MODE_MAN:
+        if (
+            out_index == OUT_IDX_FILTRATION
+            and mode == OUT_MODE_MAN
+            and system.details.is_analogue_pump
+        ):
             output.status = state
         elif state in (OUT_STATE_OFF, OUT_STATE_ON):
             output.status = state

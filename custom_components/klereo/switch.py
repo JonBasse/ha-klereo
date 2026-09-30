@@ -90,18 +90,28 @@ class KlereoSwitch(KlereoEntity, SwitchEntity):
                 # running — Off is the only state that reads as off there.
                 # Elsewhere status 2 only means "under automatic control", which
                 # says nothing about the relay, so it is deliberately not mapped —
-                # except on Filtration under Regulation specifically, below.
+                # except on Filtration under Regulation on a confirmed analogue
+                # pump specifically, below.
                 if self._output_index == OUT_IDX_HEATING:
                     self._attr_is_on = int(status) != OUT_STATE_OFF
-                elif self._output_index == OUT_IDX_FILTRATION and int(output.mode) == OUT_MODE_REGUL:
-                    # 🔴 MEASURED (diagnostics exports, an analogue pump): `status`
-                    # does not reliably reflect the pump under Regulation, yet the
-                    # pump was demonstrably running in every capture. Reading
-                    # `status` literally would risk showing off on a running pump —
-                    # the wrong side of the mistake the comment above warns about.
-                    # Approximated as always on, the same simplification the
-                    # Heating switch already makes for "not stopped".
-                    self._attr_is_on = True
+                elif (
+                    self._output_index == OUT_IDX_FILTRATION
+                    and int(output.mode) == OUT_MODE_REGUL
+                    and self._is_analogue_pump()
+                    and output.real_status is not None
+                ):
+                    # 🔴 MEASURED: on an analogue pump, `status` does not reliably
+                    # reflect the relay under Regulation, but `real_status` does —
+                    # including reaching 0 for a real stop (reporter's own entity
+                    # history graph), which is why this reads `real_status` rather
+                    # than approximating "always on" the way an earlier draft did.
+                    # See `models.KlereoOutput.real_status` for the citation.
+                    #
+                    # Gated on `real_status is not None` so an installation that
+                    # does not send the field falls through to the general branch
+                    # below rather than inventing an answer — the same trap
+                    # `tests/test_real_status_gate.py` exists to catch (#141).
+                    self._attr_is_on = int(output.real_status) != OUT_STATE_OFF
                 else:
                     self._attr_is_on = int(status) == OUT_STATE_ON
             except (ValueError, TypeError):

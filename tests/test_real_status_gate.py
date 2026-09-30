@@ -1,4 +1,5 @@
-"""`switch` and `select` read `status`, not `realStatus` — and this file is the reason.
+"""`switch` and `select` read `status`, not `realStatus` — except in ONE narrow, confirmed
+case — and this file is the reason.
 
 Forgejo #141. The two fields are now NAMED: `realStatus` is the physical state of the
 relay, `status` is the state that was commanded. That is measured, in one payload —
@@ -6,13 +7,17 @@ relay, `status` is the state that was commanded. That is measured, in one payloa
 the two disagree there, `realStatus` agrees with the run-time counter and `status` does not
 (`models.KlereoOutput` carries the measurement).
 
-🔴 Naming the fields is not permission to swap them, and the difference between the two is
-exactly what this file holds. `KlereoOutput.from_dict` reads the payload with
-`data.get(..., 0)`: an installation that never sends `realStatus` would read `0` there,
-which is indistinguishable from a relay that is genuinely open. Swapping would turn OFF
-every output of every such installation in order to fix the display of one — a correction
-that makes false what was true. Two installations have been read, both carry the key, and
-two are not all.
+🔴 Naming the fields is not permission to swap them everywhere, and the difference between
+the two is exactly what this file holds. `KlereoOutput.from_dict` parses `real_status` with
+`data.get("realStatus")` — NO default, unlike `status`'s `data.get("status", 0)` — so an
+installation that never sends the field reads `None`, not `0`. That is what makes the ONE
+exception (`switch.KlereoSwitch`, Filtration, Regulation, a CONFIRMED analogue pump only —
+see `api.py` and `models.KlereoOutput.real_status`) safe: it is gated on `real_status is
+not None`, so an installation that does not send the field falls back to the SAME general
+rule this file holds for every other output and mode, never to an invented `0`. Swapping
+`status` for `real_status` UNCONDITIONALLY, the mistake this file actually guards against,
+would still turn OFF every output of every installation that never sends the field, to fix
+the display of one.
 
 The tests below are written on BEHAVIOUR and go through the wire dict, because that is the
 only formulation that catches the swap: an assertion on `KlereoOutput`'s field list is
@@ -133,18 +138,26 @@ class TestTheKnownCostOfReadingStatus:
         assert output.status == 1
         assert switch.is_on is True
 
-    def test_the_physical_field_never_reaches_the_typed_model(self):
-        """The parser drops it, so no platform can read it by accident.
+    def test_real_status_reaches_the_model_but_this_switch_still_ignores_it(self):
+        """🔴 UPDATED, not just made to pass: `real_status` now reaches the typed model.
 
-        Paired with the behavioural tests rather than standing alone: on its own this is an
-        assertion about a field list, and a parser filling `status` from `realStatus` would
-        keep it green.
+        The `off_delay` exception (#162: a FEATURE reads it) now has a second member:
+        `number.KlereoPumpSpeedNumber` reads `real_status` under Regulation on a
+        CONFIRMED analogue pump (`pump_max_speed > 1`), and so does
+        `switch.KlereoSwitch` — but only in that same narrow case. Output 4 here is
+        Heating, not Filtration, so this switch's `is_on` stays driven by `status`
+        alone, exactly as `test_a_commanded_output_with_an_open_relay_still_reads_on`
+        above already asserts — this test only adds that the field itself is no longer
+        invisible to the model.
+
+        Paired with the behavioural tests rather than standing alone: on its own this is
+        an assertion about a field list, and a parser filling `status` from `realStatus`
+        would keep it green.
         """
         coordinator = _coordinator(NOPBOP_OUT_4)
         output = coordinator.data["SYS1"].details.output_index[4]
 
-        assert not hasattr(output, "real_status")
-        assert not hasattr(output, "realStatus")
+        assert output.real_status == 0
 
 
 @pytest.mark.parametrize(

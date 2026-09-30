@@ -11,7 +11,6 @@ from custom_components.klereo.api import (
     OUT_IDX_FILTRATION,
     OUT_IDX_HEATING,
     OUT_MODE_MAN,
-    OUT_MODE_REGUL,
     OUT_MODE_TIME_SLOTS,
     OUT_MODE_TIMER,
     OUT_STATE_AUTO,
@@ -606,38 +605,61 @@ class TestManualModePreservesPumpSpeedOnOutput1:
 
     `KlereoOutputModeSelect._state_for_mode` used to binarize any non-`OUT_STATE_ON`
     status to OFF when returning to Manual — harmless everywhere a Manual state is only
-    ever 0 or 1, but on output 1, where an analogue pump's Manual status can be any speed
-    step up to its own `PumpMaxSpeed` (`number.KlereoPumpSpeedNumber`), it would silently
-    drop a running pump to Off the moment a user (or another select) left and re-entered
-    Manual.
+    ever 0 or 1, but on output 1, where a CONFIRMED analogue pump's Manual status can be
+    any speed step up to its own `PumpMaxSpeed` (`number.KlereoPumpSpeedNumber`), it would
+    silently drop a running pump to Off the moment a user (or another select) left and
+    re-entered Manual.
+
+    🔴 Gated on `pump_max_speed > 1` (review feedback): without it, a FIXED-speed pump
+    whose `status` happened to read 2 would have sent `newState=2` where it sends 0 today
+    — see `test_a_fixed_speed_pump_still_binarizes_to_on_off` below.
     """
+
+    def _put(self, mock_coordinator, output, pump_max_speed):
+        details = mock_coordinator.data["SYS1"].details
+        details.outs = [output]
+        details.output_index = {output.index: output}
+        details.pump_max_speed = pump_max_speed
+        return mock_coordinator
 
     async def test_manual_preserves_a_speed_step_instead_of_binarizing_to_off(self, mock_coordinator):
         """Re-selecting Manual while status already reads a speed step must resend it."""
         output = KlereoOutput(index=OUT_IDX_FILTRATION, status=2, mode=OUT_MODE_MAN)
-        details = mock_coordinator.data["SYS1"].details
-        details.outs = [output]
-        details.output_index = {OUT_IDX_FILTRATION: output}
-        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=3)
+        select = KlereoOutputModeSelect(coordinator, "SYS1", output)
         select.async_write_ha_state = MagicMock()
 
         await select.async_select_option("Manual")
 
-        mock_coordinator.async_set_output.assert_called_once_with(
+        coordinator.async_set_output.assert_called_once_with(
             "SYS1", OUT_IDX_FILTRATION, OUT_MODE_MAN, 2
         )
 
-    async def test_other_outputs_still_binarize_to_on_off(self, mock_coordinator):
-        """Control: the widened preservation is scoped to output 1 alone."""
-        output = KlereoOutput(index=0, status=2, mode=OUT_MODE_MAN)
-        details = mock_coordinator.data["SYS1"].details
-        details.outs = [output]
-        details.output_index = {0: output}
-        select = KlereoOutputModeSelect(mock_coordinator, "SYS1", output)
+    async def test_a_fixed_speed_pump_still_binarizes_to_on_off(self, mock_coordinator):
+        """🔴 THE fix requested on review: `pump_max_speed` absent (or `<= 1`) means this
+        is not a confirmed analogue pump, so output 1 keeps the ORIGINAL ON/OFF-only rule
+        — a stray `status == 2` must not become `newState=2` on a fixed-speed pump."""
+        output = KlereoOutput(index=OUT_IDX_FILTRATION, status=2, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=None)
+        select = KlereoOutputModeSelect(coordinator, "SYS1", output)
         select.async_write_ha_state = MagicMock()
 
         await select.async_select_option("Manual")
 
-        mock_coordinator.async_set_output.assert_called_once_with(
+        coordinator.async_set_output.assert_called_once_with(
+            "SYS1", OUT_IDX_FILTRATION, OUT_MODE_MAN, OUT_STATE_OFF
+        )
+
+    async def test_other_outputs_still_binarize_to_on_off(self, mock_coordinator):
+        """Control: the preservation is scoped to output 1 alone — even on a system with
+        a confirmed analogue pump, a different output keeps binarizing."""
+        output = KlereoOutput(index=0, status=2, mode=OUT_MODE_MAN)
+        coordinator = self._put(mock_coordinator, output, pump_max_speed=3)
+        select = KlereoOutputModeSelect(coordinator, "SYS1", output)
+        select.async_write_ha_state = MagicMock()
+
+        await select.async_select_option("Manual")
+
+        coordinator.async_set_output.assert_called_once_with(
             "SYS1", 0, OUT_MODE_MAN, OUT_STATE_OFF
         )
