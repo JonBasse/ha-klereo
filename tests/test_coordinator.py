@@ -569,6 +569,30 @@ class TestPayloadShapeLogging:
         assert "RegulModes carries keys" not in caplog.text
 
 
+class TestDebugLogCarriesNoRedactedValue:
+    """🔴 #196 — the debug log is published as readily as the diagnostics export.
+
+    `GetIndex` carries `pin`, `compta` and `idAddress` at its top level, and the refresh
+    used to log that response whole. The export redacts the same keys (`TO_REDACT`); the
+    log did not, and reporters are asked for both in public issues — GitHub #62 pasted
+    one on 2026-09-30, hand-masked that time.
+    """
+
+    async def test_a_refresh_logs_no_value_the_export_redacts(self, coordinator, mock_api, caplog):
+        mock_api.get_systems.return_value = {
+            "response": [
+                {"idSystem": "SYS1", "pin": "0000-0000000-0000", "compta": "XX00000", "idAddress": 99999999}
+            ]
+        }
+        mock_api.get_pool_details.return_value = {"response": [{"probes": [], "outs": []}]}
+        with caplog.at_level("DEBUG", logger="custom_components.klereo"):
+            await coordinator._async_update_data()
+
+        assert caplog.text, "positive control: the refresh does log at debug level"
+        for value in ("0000-0000000-0000", "XX00000", "99999999"):
+            assert value not in caplog.text
+
+
 class TestRawPoolPayloadIsCarried:
     """🔴 #145 — the coordinator keeps the `GetPoolDetails` element for the export.
 
