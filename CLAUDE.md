@@ -62,6 +62,12 @@ opened 2026-08-23, **12/12 checks green**, tracked in #102. Expect **months**, n
 > honest ETA. ⚠️ Re-measure rather than trust these numbers, and count PRs older than
 > `2026-08-23T14:50:17Z` (our `createdAt`), not the open total.
 >
+> 🔴 **Re-measured 2026-10-01: merging has all but STOPPED.** **804** older than ours out of
+> **1618** open; **one** merge since 2026-09-16 (#9325, on 09-20), against 203 in the 30 days
+> before. The 293 PRs closed unmerged since 09-01 are same-day rejections (median age 0 days), not
+> a stale sweep. Count merges from a raw `gh pr list --state merged --limit 1500` filtered on
+> `mergedAt` — `--search merged:>=…` happened to agree here, but it is the search API.
+>
 > ⚠️ **`gh pr view` shows `Action checks completed = FAILURE` on that PR and it is NOT a problem.**
 > Two workflow runs fired on 2026-08-23: the first was **cancelled** (every one of its children
 > reads `CANCELLED`) and its aggregate check failed as a consequence; the second, 56 seconds later,
