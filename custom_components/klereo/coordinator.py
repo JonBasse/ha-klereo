@@ -106,7 +106,6 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
         """Fetch data from the Klereo API."""
         try:
             systems_response = await self.api.get_systems()
-            _LOGGER.debug("Systems response: %s", systems_response)
 
             system_list = extract_system_list(systems_response)
 

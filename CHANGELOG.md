@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The debug log no longer prints your box PIN and customer reference** ([#196](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/196)). Every refresh logged Klereo's whole account response, `pin`, `compta` and `idAddress` included, in clear — the same fields the diagnostics export redacts. Debug logs get pasted into public issues as readily as the export, so the line is gone; the same response is already in the export, redacted. If you posted a debug log in an issue before this version, check it for those three fields.
+
 ### Added
 
 - **A speed control for variable-speed ("analogue") Filtration pumps** — a new `number.filtration_speed` entity on output 1, bounded `0..PumpMaxSpeed`, always writing `newMode=Manual`.
