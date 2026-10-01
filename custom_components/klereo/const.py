@@ -344,6 +344,76 @@ ENERGY_COUNTER_TYPES = {
     for suffix, period in _COUNTER_PERIODS.items()
 }
 
+# ── Analogue Filtration pump telemetry ──────────────────────────────────────────────
+#
+# 🔴 UNDOCUMENTED everywhere this project otherwise looks: absent from `docs/klereo-api.md`
+# and read by NOTHING in the upstream Jeedom plugin (which names only `PumpMaxSpeed`, see
+# `api.py`). Sourced entirely from one reporter's own Home Assistant diagnostics exports,
+# `ExtraParams`, five captures under Regulation, 2026-09-25.
+#
+# ⚠️ LAG: these values trail the box's own `realStatus` (`models.KlereoOutput.real_status`)
+# during a transition — a lowered setpoint dropped `realStatus` immediately while these
+# stayed at the old reading for a couple of minutes before catching down. Physically
+# measured reality, not a copy of the box's target.
+#
+# Units: `PmpWatts` (W) — the field name states it. `PmpSpeed`/`PmpRunningSpeed` (%) — the
+# REPORTER confirmed this directly, not inferred from the captured range. Every other key
+# is unitless: plausible but unconfirmed (`PmpRPM` ~ RPM, `PmpFlow` ~ `params.DebitPompe`).
+#
+# Plain `sensor` entities like everything else `PARAM_NAMES` admits — this project does not
+# use Home Assistant's `diagnostic` category anywhere, on purpose.
+#
+# PmpStatus  — the reporter's own guess is "presumably on/off"; always read `1` so far,
+#              never `0`. Kept as a raw number, not a `binary_sensor`, until confirmed.
+# PmpError   — `0` in every capture; a non-zero meaning is undocumented.
+# PmpTimeout — went `0` → `1` across a setpoint change and back to `0` a few minutes
+#              later (Home Assistant's own history). No trace of it anywhere in the
+#              Klereo app. Reads as a self-clearing transient, trigger unknown.
+PUMP_TELEMETRY_TYPES = {
+    "PmpWatts": {
+        "name": "Filtration Pump Power",
+        "unit": "W", "device_class": "power", "state_class": "measurement",
+        "icon": "mdi:lightning-bolt",
+    },
+    "PmpRunningSpeed": {
+        "name": "Filtration Pump Running Speed",
+        "unit": "%", "state_class": "measurement",
+        "icon": "mdi:speedometer",
+    },
+    "PmpSpeed": {
+        "name": "Filtration Pump Speed Setpoint",
+        "unit": "%", "state_class": "measurement",
+        "icon": "mdi:speedometer-slow",
+    },
+    "PmpRPM": {
+        "name": "Filtration Pump RPM",
+        "state_class": "measurement",
+        "icon": "mdi:fan",
+    },
+    "PmpFlow": {
+        "name": "Filtration Pump Flow",
+        "state_class": "measurement",
+        "icon": "mdi:water-pump",
+    },
+    "PmpStatus": {
+        "name": "Filtration Pump Status",
+        "icon": "mdi:pump",
+    },
+    "PmpError": {
+        "name": "Filtration Pump Error Code",
+        "icon": "mdi:alert-circle-outline",
+    },
+    "PmpTimeout": {
+        "name": "Filtration Pump Timeout",
+        "icon": "mdi:timer-alert-outline",
+    },
+}
+
+# Reaches `sensor` through the same curated `PARAM_NAMES` gate as every other `params` /
+# `ExtraParams` key (`_extract_sensors` in sensor.py) — created ONLY on an installation
+# whose payload actually carries a given key, never invented for one that does not.
+PARAM_NAMES.update({key: spec["name"] for key, spec in PUMP_TELEMETRY_TYPES.items()})
+
 # Writable setpoints exposed as `number` entities.
 #   min/max         — fallback bounds, used only when the API sends none
 #   min_key/max_key — the API keys carrying the real bounds, preferred over min/max

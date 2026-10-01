@@ -226,6 +226,17 @@ class KlereoEntity(CoordinatorEntity[KlereoCoordinator]):
         """Return this entity's system, or None once the payload stops carrying it."""
         return self.coordinator.data.get(self.system_id)
 
+    def _is_analogue_pump(self) -> bool:
+        """Return whether THIS system reports a variable-speed Filtration pump.
+
+        Shared by `switch.KlereoSwitch` and `select.KlereoOutputModeSelect` — an
+        entity with no system yet (payload gone) is not a confirmed analogue pump,
+        so this falls through to the general ON/OFF rule rather than guessing.
+        See `models.KlereoPoolDetails.is_analogue_pump` for the underlying gate.
+        """
+        system = self._system()
+        return system is not None and system.details.is_analogue_pump
+
     @property
     def available(self) -> bool:
         """Return whether the payload still carries what this entity reports on.
