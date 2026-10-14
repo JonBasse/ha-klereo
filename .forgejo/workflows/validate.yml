@@ -22,7 +22,7 @@ jobs:
       - uses: https://github.com/actions/checkout@v7
       - uses: https://github.com/actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
 
@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 0
       - uses: https://github.com/actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       # No network and no dependencies: this half compares `manifest.json` against
       # `CHANGELOG.md` and against every tag. The published half — whether the tag and the
       # release reached GitHub — is `--published X.Y.Z`, run by hand at release time. It is
@@ -53,6 +53,6 @@ jobs:
       - uses: https://github.com/actions/checkout@v7
       - uses: https://github.com/actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - run: pip install -r requirements-dev.txt
       - run: pytest tests/ -v
