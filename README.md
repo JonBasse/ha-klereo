@@ -1,6 +1,6 @@
 # Klereo Integration for Home Assistant
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/release/JonBasse/ha-klereo.svg)](https://github.com/JonBasse/ha-klereo/releases)
 [![Validate](https://github.com/JonBasse/ha-klereo/actions/workflows/validate.yml/badge.svg)](https://github.com/JonBasse/ha-klereo/actions/workflows/validate.yml)
 
@@ -32,11 +32,10 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 ### HACS (Recommended)
 
 1. Open **HACS** in your Home Assistant sidebar.
-2. Go to **Integrations**.
-3. Click the three-dot menu in the top right and select **Custom repositories**.
-4. Add the URL `https://github.com/JonBasse/ha-klereo` and select **Integration** as the category.
-5. Search for **Klereo** in the HACS integrations list and install it.
-6. Restart Home Assistant.
+2. Search for **Klereo** and install it.
+3. Restart Home Assistant.
+
+Klereo is in the HACS default catalogue, so you no longer need to add it as a custom repository. Installs already added that way keep working.
 
 ### Manual
 

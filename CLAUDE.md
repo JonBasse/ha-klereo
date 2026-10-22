@@ -46,42 +46,16 @@ version — `tea` for everything issue/PR, **read and write** · `fj` when the b
 
 ---
 
-## HACS status — custom repository today, default-catalogue submission OPEN
+## HACS status — in the DEFAULT catalogue since 2026-10-18
 
-Users install by adding `https://github.com/JonBasse/ha-klereo` as a **custom repository**
-(procedure in `README.md`). That is how every current user got it, and it keeps working whatever
-happens to the submission below.
+**[hacs/default#10263](https://github.com/hacs/default/pull/10263) was merged on 2026-10-18** (opened
+2026-08-23, tracked in #102); `JonBasse/ha-klereo` is listed in `hacs/default`'s `integration` file.
+Users now find **Klereo** by searching HACS directly. Installs made earlier through the
+*custom repository* route keep working unchanged.
 
-**Default-catalogue submission: [hacs/default#10263](https://github.com/hacs/default/pull/10263)**,
-opened 2026-08-23, **12/12 checks green**, tracked in #102. Expect **months**, not weeks.
-
-> Measured 2026-09-16 by a raw `gh pr list --limit 3000` count, not the search API: **812 open
-> PRs are older than ours** out of **1330** open, against **203 merged in the last 30 days**. On
-> 2026-09-08 it was **802** of 1147. **The queue in front of us did not shrink in eight days**, so
-> the "about four months" once derived here from the merge rate is **not supported**: there is no
-> honest ETA. ⚠️ Re-measure rather than trust these numbers, and count PRs older than
-> `2026-08-23T14:50:17Z` (our `createdAt`), not the open total.
->
-> 🔴 **Re-measured 2026-10-01: merging has all but STOPPED.** **804** older than ours out of
-> **1618** open; **one** merge since 2026-09-16 (#9325, on 09-20), against 203 in the 30 days
-> before. The 293 PRs closed unmerged since 09-01 are same-day rejections (median age 0 days), not
-> a stale sweep. Count merges from a raw `gh pr list --state merged --limit 1500` filtered on
-> `mergedAt` — `--search merged:>=…` happened to agree here, but it is the search API.
->
-> ⚠️ **`gh pr view` shows `Action checks completed = FAILURE` on that PR and it is NOT a problem.**
-> Two workflow runs fired on 2026-08-23: the first was **cancelled** (every one of its children
-> reads `CANCELLED`) and its aggregate check failed as a consequence; the second, 56 seconds later,
-> is green on all twelve. Sort the checks by `completedAt` before concluding — the rollup lists
-> both runs side by side and the failure is the superseded one.
-
-⚠️ It replaces `hacs/default#6025` (2026-03-07, closed as stale 2026-08-01 with an invitation to
-reopen). **#6025 is NOT re-openable** — its branch had to be rebased and GitHub refuses to reopen a
-PR whose branch was force-pushed, permanently. Anything saying otherwise is stale.
-
-🔴 **Never delete `.github/workflows/validate.yml` while a submission is in the queue.** HACS
-requires the actions to be passing **at review time**, not at submission time. Deleting that file on
-2026-07-15 silently voided the requirement for the last six weeks of #6025's wait, with no signal
-anywhere. See #89 and #102.
+🔴 **Keep `.github/workflows/validate.yml`.** It is the only place the `hacs` and `hassfest`
+validations run, and they validate exactly what HACS reads. Deleting it on 2026-07-15 (`e402f36`)
+removed that check silently for six weeks, and nothing reported it. See #89 and #102.
 
 > **The `hacs` and `hassfest` jobs run on GitHub, and only there.** `hacs/action` validates
 > github.com's API view of the repository, so it cannot validate a repo it sees only through
@@ -148,8 +122,9 @@ API base `https://connect.klereo.fr/php`. Everything lives under `custom_compone
   > 🔴 `TO_REDACT` is a **security claim**, not a convenience, and the raw payload publishes an
   > object whose key list comes from the server. **A key nobody has judged is not a safe key** —
   > that was the fault of #122. Every key of that payload carries a written verdict in the file;
-  > `register` and `podinfo` are redacted to their **key names only**, never blanked, so the next
-  > export anyone pastes can still settle what they contain without the owner's credentials.
+  > `register` (`UNJUDGED_CONTAINERS`) is redacted to its **key names only**, never blanked, so the
+  > next export anyone pastes can still settle what it contains without the owner's credentials.
+  > `podinfo` was judged in #147 (four integer keys) and is no longer redacted.
 
 Seven platforms (`PLATFORMS` in `__init__.py`), plus `diagnostics` (redacted): `sensor` (probes +
 regulation params) · `binary_sensor` · `button` (refresh from Klereo) · `switch` (Manual mode —
@@ -174,7 +149,7 @@ is reported).
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest tests/ -v     # 583 tests, all green 2026-09-16 (v1.19.0)
+.venv/bin/pytest tests/ -v     # 654 tests collected 2026-10-22 (v1.20.0)
 .venv/bin/ruff check .
 ```
 
