@@ -285,14 +285,26 @@ class KlereoApi:
         }
 
     async def _parse_response(self, response: aiohttp.ClientResponse, url: str) -> Any:
-        """Parse and validate a JSON response from the API."""
+        """Parse and validate a JSON response from the API.
+
+        🔴 Klereo refuses inside an HTTP 200: `{"status":"error","detail":...}`, measured on
+        `SetAutoOff` (`docs/klereo-api.md`). Read as data, a refusal has no `response` key, so
+        a read came out as an empty success and a write as an unverifiable one (#211).
+        `status` is the top-level one only: inside `response` it is a command's status.
+
+        ⚠️ `login` does not pass through here. Its refusal is handled in `login` itself.
+        """
         response.raise_for_status()
         text = await response.text()
         try:
-            return json.loads(text)
+            data = json.loads(text)
         except json.JSONDecodeError as err:
             _LOGGER.error("Invalid JSON from %s: %.200s", url, text)
             raise KlereoApiError(f"Invalid JSON response from {url}") from err
+
+        if isinstance(data, dict) and data.get("status") == "error":
+            raise KlereoApiError(f"Klereo refused {url}: {data.get('detail') or 'no detail given'}")
+        return data
 
     async def _request_with_retry(self, method: str, url: str, **kwargs: Any) -> Any:
         """Make an API request, retrying on 401 and transient errors."""

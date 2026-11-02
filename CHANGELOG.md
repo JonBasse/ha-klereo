@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **A refusal from Klereo inside an HTTP 200 now reads as a failure** ([#211](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/211)). Klereo can answer `{"status":"error","detail":...}` with a 200. A refused read used to count as a successful refresh with no data, so every entity went unavailable and the log said nothing. It now fails the update and logs Klereo's own reason, and a pool whose read is refused at startup retries instead of loading empty. A refused write used to look like it worked; the service call now fails with that reason. When the pool listing is refused during setup, the form says it cannot connect, not that the account has no pools.
+- **Home Assistant 2024.12.0 is now the declared minimum** ([#213](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/213)). `hacs.json` announced 2024.4.0, but re-authentication needs 2024.11 and the options form needs 2024.12, so older versions could install the integration and then crash in those two flows.
 - **A refused login no longer writes Klereo's response to the debug log** ([#217](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/217)). The line now names the response's keys, never their values, the rule set by [#196](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/196).
 - **The documentation no longer says Klereo sends no power reading at all** ([#217](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/217)). That stopped being true in 1.20.0 for variable-speed Filtration pumps. The README and the Filtration power option now say so, and that the energy sensors still read only the figure you enter.
 

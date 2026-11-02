@@ -25,7 +25,7 @@ This integration is a port of the [Jeedom Klereo plugin](https://github.com/MrWa
 ## Prerequisites
 
 - A [Klereo Connect](https://connect.klereo.fr) account with at least one pool system.
-- Home Assistant 2024.4 or later.
+- Home Assistant 2024.12 or later.
 
 ## Installation
 

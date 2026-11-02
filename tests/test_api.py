@@ -58,6 +58,18 @@ def _make_response(data, status=200):
 class TestLogin:
     """Tests for the login method."""
 
+    async def test_a_login_refused_inside_a_200_keeps_its_own_path(self, api, mock_session):
+        """`login` does not go through `_parse_response`, and #211 leaves that alone.
+
+        The answer measured on 2026-11-02 for an unknown account. What a refusal should
+        BECOME is #212's to decide; this only holds the path still until then.
+        """
+        mock_session.post.return_value = _make_response(
+            {"status": "error", "detail": "Identification incorrecte"}
+        )
+        with pytest.raises(KlereoApiError, match="no token returned"):
+            await api.login()
+
     async def test_login_extracts_jwt(self, api, mock_session):
         """Login should extract JWT from 'jwt' key."""
         mock_session.post.return_value = _make_response({"jwt": "my-token"})
@@ -180,6 +192,33 @@ class TestParseResponse:
         response = _make_response({}, status=503)
         with pytest.raises(aiohttp.ClientResponseError):
             await api._parse_response(response, "https://example.com")
+
+    async def test_an_error_inside_a_200_raises_with_klereos_detail(self, api):
+        """`status: error` is a refusal whatever the HTTP status says (#211)."""
+        response = _make_response({"status": "error", "detail": "Mauvais délais"})
+        with pytest.raises(KlereoApiError, match="Mauvais délais"):
+            await api._parse_response(response, "https://example.com")
+
+    async def test_an_error_without_a_detail_still_raises(self, api):
+        """`detail` is optional on the wire; the refusal is not."""
+        response = _make_response({"status": "error"})
+        with pytest.raises(KlereoApiError):
+            await api._parse_response(response, "https://example.com")
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"status": "ok", "response": []},
+            {"response": "ok"},
+            # A `status` inside `response` is a COMMAND status, read by the coordinator.
+            {"status": "ok", "response": {"status": "error"}},
+            [{"status": "error"}],
+        ],
+        ids=["ok", "no-status", "nested-status", "bare-list"],
+    )
+    async def test_anything_else_passes_through_unchanged(self, api, body):
+        """Negative arm: only a top-level `status: error` is a refusal."""
+        assert await api._parse_response(_make_response(body), "https://example.com") == body
 
 
 class TestCommandStatus:

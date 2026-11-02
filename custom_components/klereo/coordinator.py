@@ -123,6 +123,13 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
                 return_exceptions=True,
             )
 
+            # `return_exceptions` keeps one bad pool from costing the others, but with EVERY
+            # pool refused there is nothing left to keep: carrying on would report a
+            # successful refresh of empty details, the silence of #211 one call further down.
+            refusals = [result for result in details_results if isinstance(result, KlereoApiError)]
+            if refusals and len(refusals) == len(system_map):
+                raise refusals[0]
+
             for sys_id, result in zip(system_map, details_results):
                 system = system_map[sys_id]
                 details_raw = system.copy()
@@ -192,11 +199,11 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     def _command_id(result: Any) -> Any:
         """Return the cmdID a queued write answered with, or None.
 
-        The response shape is NOT measured — this reads the plausible ones and gives up
-        quietly on anything else. An expired JWT, for one, answers
-        `{"status": "error", "detail": ...}` with no `response` key at all. Turning a
-        guessed shape into a hard failure would break every write on an assumption, which
-        is exactly the defect #94 records.
+        Only the array form is measured (`SetAutoOff`, `docs/klereo-api.md`) — this reads the
+        plausible ones and gives up quietly on anything else. Turning a guessed shape into a
+        hard failure would break every write on an assumption, which is exactly the defect
+        #94 records. A refusal is not a shape: `api._parse_response` raises it, so
+        `{"status": "error", ...}` never reaches this method (#211).
         """
         if not isinstance(result, dict):
             return None

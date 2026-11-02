@@ -695,6 +695,9 @@ nommée :
 HTTP 200  ·  {"status":"error","detail":"Mauvais délais"}
 ```
 
+Depuis #211, `_parse_response` (`api.py`) lève `KlereoApiError` sur cette forme, quelle que soit
+la route : une erreur dans un 200 n'est plus lue comme une donnée.
+
 🔴 **C'est la preuve la plus forte des deux, et la moins attendue.** Une route inexistante ne
 **valide** pas un `offDelay` — elle 404. Le serveur a lu la requête, cherché le délai, ne l'a pas
 trouvé et l'a refusé avec un message métier **en français**. L'endpoint existe, parse ses

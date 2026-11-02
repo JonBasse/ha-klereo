@@ -4,8 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 import pytest
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from custom_components.klereo.api import KlereoApi
+from custom_components.klereo.api import KlereoApi, KlereoApiError
 from custom_components.klereo.coordinator import KlereoCoordinator
 from custom_components.klereo.models import KlereoSystemData
 
@@ -138,6 +139,26 @@ class TestAsyncUpdateData:
         assert "SYS1" in result  # still present, just without merged details
         assert "SYS2" in result
 
+    async def test_one_refused_pool_of_two_keeps_the_other(self, coordinator, mock_api):
+        """A refusal on one pool says nothing of the other: the update still stands."""
+        mock_api.get_systems.return_value = {"response": [{"idSystem": "SYS1"}, {"idSystem": "SYS2"}]}
+        mock_api.get_pool_details.side_effect = [
+            KlereoApiError("refused"),
+            {"response": [{"probes": [], "outs": []}]},
+        ]
+
+        result = await coordinator._async_update_data()
+
+        assert set(result) == {"SYS1", "SYS2"}
+
+    async def test_every_pool_refused_fails_the_update(self, coordinator, mock_api):
+        """With nothing read at all, a "successful" refresh would be an empty one (#211)."""
+        mock_api.get_systems.return_value = {"response": [{"idSystem": "SYS1"}, {"idSystem": "SYS2"}]}
+        mock_api.get_pool_details.side_effect = KlereoApiError("refused")
+
+        with pytest.raises(UpdateFailed, match="refused"):
+            await coordinator._async_update_data()
+
 
 class TestCommandResultIsChecked:
     """Tests that a rejected Klereo command stops looking like a successful one.
@@ -193,12 +214,11 @@ class TestCommandResultIsChecked:
     async def test_does_not_raise_when_no_command_id_is_returned(self, coordinator, mock_api):
         """Should behave exactly as before when no cmdID can be found.
 
-        The response shape is not measured — an expired JWT answers
-        `{"status": "error", "detail": ...}` with no `response` key at all. Raising on a
-        shape we guessed would break every write on a guess, which is the defect #94
-        records. Never worse than today is the rule here.
+        Raising on a shape we guessed would break every write on a guess, which is the defect
+        #94 records. Never worse than today is the rule here. A refusal (`status: error`)
+        never gets this far: `api._parse_response` raises it (#211).
         """
-        mock_api.set_output.return_value = {"status": "error", "detail": "expired"}
+        mock_api.set_output.return_value = {"status": "ok"}
 
         await coordinator.async_set_output("SYS1", 2, 0, 1)
 
