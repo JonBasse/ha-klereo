@@ -2,6 +2,8 @@
 import asyncio
 import logging
 import math
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from time import monotonic
 from typing import Any
@@ -9,6 +11,7 @@ from typing import Any
 import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
@@ -31,6 +34,7 @@ from .const import (
     SCAN_INTERVAL_MIN_MINUTES,
     SCAN_INTERVAL_MINUTES,
     SETTING_CONTAINERS,
+    WRITE_REREAD_COOLDOWN_SECONDS,
 )
 from .models import KlereoPoolDetails, KlereoSystemData, KlereoSystemInfo
 
@@ -59,6 +63,12 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             _LOGGER,
             name="klereo",
             update_interval=timedelta(minutes=max(scan_interval, SCAN_INTERVAL_MIN_MINUTES)),
+            # Upstream's own helper is the whole cap on re-reads (#214): it reads at once,
+            # then at most once per cooldown, and a call inside the window runs at its end,
+            # so the last write of a burst is still read back. Unloading cancels its timer.
+            request_refresh_debouncer=Debouncer(
+                hass, _LOGGER, cooldown=WRITE_REREAD_COOLDOWN_SECONDS, immediate=True
+            ),
         )
         self.api = api
 
@@ -343,6 +353,34 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             detail = f"{detail} — {klereo_detail}"
         raise HomeAssistantError(f"{description} was rejected by Klereo: {detail}")
 
+    @asynccontextmanager
+    async def _reread_after_write(self) -> AsyncIterator[None]:
+        """Re-read Klereo after a write, whatever its outcome.
+
+        🔴 The re-read runs in a `finally`, and that is a deliberate departure from upstream,
+        which refreshes only on status 9. Upstream writes nothing before the verdict, so
+        skipping the refresh costs it nothing. Every entity HERE writes its state
+        optimistically before sending, and Home Assistant does not repaint on an exception:
+        without this a refused command stayed on screen until the next poll (#181). The
+        payload is the box's own answer, so it undoes the optimism without this code having
+        to remember what the entity showed before.
+
+        🔴 The re-read can now wait for the end of the cooldown (#214), so a failed write
+        also repaints at once from the state already held: rebuilding from the models
+        drops the entity's optimism, and nothing changed on the box to read. It costs no
+        request, so a loop of refused commands buys itself no reads.
+
+        ⚠️ Only a failure repaints. A confirmed write must not: `number` holds its value in
+        the entity until the re-read brings it, and a repaint would snap it back.
+        """
+        try:
+            yield
+        except HomeAssistantError:
+            self.async_update_listeners()
+            raise
+        finally:
+            await self.async_request_refresh()
+
     def _show_confirmed_output(
         self, system_id: str, out_index: int, mode: int, state: int
     ) -> None:
@@ -406,19 +444,10 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
     async def async_set_output(
         self, system_id: str, out_index: int, mode: int, state: int
     ) -> Any:
-        """Send a set-output command, check it ran, and request a data refresh.
-
-        🔴 The refresh runs whatever the outcome, in a `finally` — and that is a deliberate
-        departure from upstream, which refreshes only on status 9. Upstream writes nothing
-        before the verdict, so skipping the refresh costs it nothing. Every entity HERE
-        writes its state optimistically before sending, and Home Assistant does not repaint
-        on an exception: without this refresh a refused command stayed on screen until the
-        next poll (#181). The payload is the box's own answer, so it undoes the optimism
-        without this code having to remember what the entity showed before.
-        """
+        """Send a set-output command, check it ran, and request a data refresh."""
         description = f"Setting output {out_index}"
         _LOGGER.debug("%s: sending mode=%s state=%s to system %s", description, mode, state, system_id)
-        try:
+        async with self._reread_after_write():
             try:
                 result = await self.api.set_output(system_id, out_index, mode, state)
             except Exception as err:
@@ -430,22 +459,17 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
             # a rejection made to read exactly like a success (#95).
             if await self._async_confirm_command(result, description):
                 self._show_confirmed_output(system_id, out_index, mode, state)
-        finally:
-            await self.async_request_refresh()
         return result
 
     async def async_set_auto_off(
         self, system_id: str, out_index: int, off_delay: int
     ) -> Any:
-        """Send an automatic-off timer, check it ran, and request a data refresh.
-
-        The refresh runs whatever the outcome — see `async_set_output` (#181).
-        """
+        """Send an automatic-off timer, check it ran, and request a data refresh."""
         description = f"Setting the auto-off timer of output {out_index}"
         _LOGGER.debug(
             "%s: sending offDelay=%s to system %s", description, off_delay, system_id
         )
-        try:
+        async with self._reread_after_write():
             try:
                 result = await self.api.set_auto_off(system_id, out_index, off_delay)
             except Exception as err:
@@ -453,18 +477,13 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
                     f"Failed to set the auto-off timer of output {out_index}: {err}"
                 ) from err
             await self._async_confirm_command(result, description)
-        finally:
-            await self.async_request_refresh()
         return result
 
     async def async_set_param(self, system_id: str, param_id: str, value: Any) -> Any:
-        """Send a set-parameter command, check it ran, and request a data refresh.
-
-        The refresh runs whatever the outcome — see `async_set_output` (#181).
-        """
+        """Send a set-parameter command, check it ran, and request a data refresh."""
         description = f"Setting parameter {param_id}"
         _LOGGER.debug("%s: sending value=%s to system %s", description, value, system_id)
-        try:
+        async with self._reread_after_write():
             try:
                 result = await self.api.set_param(system_id, param_id, value)
             except Exception as err:
@@ -472,6 +491,4 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
                     f"Failed to set parameter {param_id}: {err}"
                 ) from err
             await self._async_confirm_command(result, description)
-        finally:
-            await self.async_request_refresh()
         return result
