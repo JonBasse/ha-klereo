@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **French translation of the setup and options forms** ([#216](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/216)). Entity names stay in English: translating them would change the `entity_id` of new installations. A test fails if `fr.json` and `en.json` stop carrying the same keys.
+
+### Fixed
+
+- **A refused login no longer writes Klereo's response to the debug log** ([#217](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/217)). The line now names the response's keys, never their values, the rule set by [#196](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/196).
+- **The documentation no longer says Klereo sends no power reading at all** ([#217](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/217)). That stopped being true in 1.20.0 for variable-speed Filtration pumps. The README and the Filtration power option now say so, and that the energy sensors still read only the figure you enter.
+
+### Changed
+
+- **CI runs on Python 3.14 again**, the version Home Assistant runs in production, and Renovate no longer moves it ([#217](https://forgejo.dragonlance.xyz/JonBasse/ha-klereo/issues/217)).
+
 ## [1.20.0] — 2026-10-01
 
 ### Fixed

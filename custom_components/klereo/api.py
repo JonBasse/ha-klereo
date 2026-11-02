@@ -268,7 +268,9 @@ class KlereoApi:
             self._token = data["token"]
         else:
             _LOGGER.error("Login failed: no token in API response")
-            _LOGGER.debug("Login response body: %s", data)
+            # Key names only: the debug log gets pasted into public issues (#196, #217). A
+            # response that is not an object has no key names, only values.
+            _LOGGER.debug("Login response keys: %s", list(data) if isinstance(data, dict) else type(data).__name__)
             raise KlereoApiError("Login failed: no token returned")
 
     async def _get_auth_header(self) -> dict[str, str]:
