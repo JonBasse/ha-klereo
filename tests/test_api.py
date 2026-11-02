@@ -88,6 +88,25 @@ class TestLogin:
         with pytest.raises(KlereoApiError, match="no token"):
             await api.login()
 
+    async def test_a_refused_login_logs_key_names_never_values(self, api, mock_session, caplog):
+        """The debug log is a publication channel: names only, the rule of #196."""
+        mock_session.post.return_value = _make_response({"error": "SECRET-VALUE"})
+        with caplog.at_level("DEBUG", logger="custom_components.klereo.api"):
+            with pytest.raises(KlereoApiError):
+                await api.login()
+
+        assert "SECRET-VALUE" not in caplog.text
+        assert "error" in caplog.text  # positive control: the line is still there
+
+    async def test_a_refused_login_that_is_not_an_object_logs_no_value(self, api, mock_session, caplog):
+        """Klereo's `response` is a list elsewhere, and a list's items are values, not keys."""
+        mock_session.post.return_value = _make_response(["SECRET-VALUE"])
+        with caplog.at_level("DEBUG", logger="custom_components.klereo.api"):
+            with pytest.raises(KlereoApiError):
+                await api.login()
+
+        assert "SECRET-VALUE" not in caplog.text
+
     async def test_login_sends_hashed_password(self, api, mock_session):
         """Login should send the pre-hashed password."""
         mock_session.post.return_value = _make_response({"jwt": "tok"})

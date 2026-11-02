@@ -63,8 +63,10 @@ After setup, you can configure the integration by clicking **Configure** on the 
 
 - **Update interval** — How often to poll the Klereo API (10–60 minutes, default 10).
 - **Equipment power (W)** — One field per piece of equipment (filtration pump, heating, dosing pumps). Klereo
-  sends no power reading at all, so this figure is yours: read it off the equipment's rating plate, or measure
-  it. Filling one in creates the matching **energy** sensors below. Leaving one empty creates none — the
+  sends no power reading for a fixed-speed pump, the heating or the dosing pumps. A variable-speed ("analogue")
+  Filtration pump can report one, shown as the **Filtration Pump Power** sensor, but the energy sensors do not
+  use it. Either way this figure is yours: read it off the equipment's rating plate, or measure it. Filling one
+  in creates the matching **energy** sensors below. Leaving one empty creates none — the
   integration never invents a power, because a plausible default would put a credible kWh figure, in a unit that
   has a price, into the dashboard you use to decide.
 
@@ -152,8 +154,8 @@ send it, the run-time sensor still appears and the consumption one does not, rat
 figure with a guessed flow rate.
 
 **Energy consumption** — for the Home Assistant **Energy dashboard** — is the same idea one step further: a run
-time multiplied by a power. Klereo sends no power, so you enter it once per equipment in **Options** (see above),
-and the sensors appear:
+time multiplied by a power. That power is the one you enter once per equipment in **Options** (see above), never
+a reading from Klereo, and the sensors appear:
 
 | Sensor | Unit |
 |---|---|
