@@ -149,7 +149,7 @@ is reported).
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest tests/ -v     # 654 tests collected 2026-10-22 (v1.20.0)
+.venv/bin/pytest tests/ -v     # 785 tests collected 2026-11-02 (v1.21.0)
 .venv/bin/ruff check .
 ```
 
