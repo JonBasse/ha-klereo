@@ -47,6 +47,18 @@ SCAN_INTERVAL_MIN_MINUTES = 10
 # therefore always served.
 BUTTON_REFRESH_MIN_MINUTES = SCAN_INTERVAL_MIN_MINUTES
 
+# How far apart writes may re-read Klereo, against the ten seconds Home Assistant defaults to.
+# Forgejo #214: each re-read is `GetIndex` plus `GetPoolDetails` on the user's account, and an
+# automation or a dragged slider could otherwise run them six times a minute, under a provider
+# that threatens to ban fast callers (#139).
+#
+# ⚠️ Klereo publishes no threshold, so this respects no known limit. It is a judgement: sixty
+# seconds divides the pace by six, and it is also the longest a confirmed setpoint may stay
+# stale on the thermostat, which writes no optimism and waits for the re-read. That second
+# cost is why this is not the ten-minute floor: toggling a pump and then changing a setpoint
+# is ordinary use, and the thermostat would show the old value for up to ten minutes.
+WRITE_REREAD_COOLDOWN_SECONDS = 60
+
 # Probe types that return binary 0/1 values and should be BinarySensorEntity
 BINARY_SENSOR_TYPES = {
     10: {"name": "Generic", "device_class": None},
