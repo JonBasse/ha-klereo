@@ -1,0 +1,61 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Klereo Connect",
+                "description": "Saisissez vos identifiants Klereo Connect.",
+                "data": {
+                    "username": "Nom d'utilisateur Klereo",
+                    "password": "Mot de passe"
+                },
+                "data_description": {
+                    "username": "Votre **nom d'utilisateur** Klereo Connect, et non votre adresse e-mail. L'application Klereo accepte les deux à la connexion, mais cette API ne reconnaît que le nom d'utilisateur : avec une adresse e-mail, l'authentification réussit, puis aucune piscine n'est renvoyée."
+                }
+            },
+            "reauth_confirm": {
+                "title": "Réauthentification Klereo",
+                "description": "Vos identifiants Klereo ont expiré. Veuillez les saisir à nouveau.",
+                "data": {
+                    "username": "Nom d'utilisateur Klereo",
+                    "password": "Mot de passe"
+                },
+                "data_description": {
+                    "username": "Votre **nom d'utilisateur** Klereo Connect, et non votre adresse e-mail. L'application Klereo accepte les deux à la connexion, mais cette API ne reconnaît que le nom d'utilisateur : avec une adresse e-mail, l'authentification réussit, puis aucune piscine n'est renvoyée."
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Impossible de se connecter à l'API Klereo. Vérifiez votre connexion réseau.",
+            "invalid_auth": "Nom d'utilisateur ou mot de passe incorrect. Si vous avez saisi votre adresse e-mail, essayez plutôt votre nom d'utilisateur Klereo.",
+            "unknown": "Une erreur inattendue s'est produite.",
+            "no_pools": "Vos identifiants ont été acceptés, mais aucune piscine n'est rattachée à ce compte. Cela signifie presque toujours qu'une adresse e-mail a été saisie à la place du **nom d'utilisateur** Klereo : la connexion réussit dans les deux cas, mais seul le nom d'utilisateur correspond à une piscine."
+        },
+        "abort": {
+            "already_configured": "Ce compte est déjà configuré.",
+            "reauth_successful": "La réauthentification a réussi."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Options Klereo",
+                "data": {
+                    "scan_interval": "Intervalle de mise à jour (minutes)",
+                    "power_Filtration": "Puissance de la pompe de filtration (W)",
+                    "power_PHMinus": "Puissance de la pompe de dosage pH- (W)",
+                    "power_ElectroChlore": "Puissance de la pompe de chlore liquide (W)",
+                    "power_HybChl": "Puissance de la pompe de chlore hybride (W)",
+                    "power_Chauff": "Puissance du chauffage (W)"
+                },
+                "data_description": {
+                    "scan_interval": "Fréquence d'interrogation du cloud Klereo. Klereo actualise ses serveurs toutes les 10 minutes et demande aux clients de ne pas interroger plus souvent : 10 est donc à la fois la valeur par défaut et le minimum. Un intervalle plus court renvoie les mêmes données et expose votre compte à un bannissement.",
+                    "power_Filtration": "Puissance nominale de votre pompe de filtration, en watts. Klereo ne transmet une puissance instantanée que pour certaines pompes à vitesse variable, et les capteurs d'énergie ne l'utilisent pas : c'est donc à vous de fournir cette valeur. Relevez-la sur la plaque signalétique de l'équipement, ou mesurez-la. Si vous laissez ce champ vide, aucun capteur d'énergie de filtration n'est créé : une valeur par défaut inventée afficherait un nombre de kWh crédible dans votre tableau de bord Énergie.",
+                    "power_PHMinus": "Puissance nominale de votre pompe de dosage pH-, en watts. C'est à vous de la fournir : Klereo ne transmet aucune puissance. Si vous laissez ce champ vide, aucun capteur d'énergie pH- n'est créé.",
+                    "power_ElectroChlore": "Puissance nominale de votre pompe de chlore liquide, en watts. C'est à vous de la fournir : Klereo ne transmet aucune puissance. Si vous laissez ce champ vide, aucun capteur d'énergie de chlore n'est créé.",
+                    "power_HybChl": "Puissance nominale de votre pompe de chlore hybride, en watts. C'est à vous de la fournir : Klereo ne transmet aucune puissance. Si vous laissez ce champ vide, aucun capteur d'énergie de chlore n'est créé.",
+                    "power_Chauff": "Puissance nominale de votre chauffage ou de votre pompe à chaleur, en watts. C'est à vous de la fournir : Klereo ne transmet aucune puissance. Si vous laissez ce champ vide, aucun capteur d'énergie de chauffage n'est créé. Une puissance constante donne une bonne approximation pour un chauffage tout ou rien ; une pompe à chaleur Inverter module sa puissance, la valeur sera donc une limite haute."
+                }
+            }
+        }
+    }
+}
