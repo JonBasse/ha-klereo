@@ -32,6 +32,9 @@ from custom_components.klereo.diagnostics import TO_REDACT
 # realistic — same delimiters, same lengths — so the fixtures still exercise real shapes,
 # and visibly fake, so a reader can tell at a glance which they are looking at.
 SYNTHETIC = {
+    # no value at all, for the login that answers a key with nothing in it
+    None,
+    "",
     # payload identifiers
     "0000-0000000-0000",          # pin — same dash structure as a real one
     "1111-2222222-3333",          # pin whose last field IS `proID`, for the #147 substring test

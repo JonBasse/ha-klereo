@@ -158,6 +158,25 @@ version=x.xx
 
 Le JWT doit ensuite être transmis dans l'en-tête de **toutes** les requêtes suivantes.
 
+### Le refus — mesuré sur le fil
+
+`GetJWT.php` refuse **dans un HTTP 200**, comme `SetAutoOff` (#212) :
+
+```
+HTTP 200  application/json; charset=UTF-8
+{"status":"error","detail":"Identification incorrecte"}
+```
+
+Aucune clé `jwt` ni `token`. ⚠️ **Portée : un identifiant INEXISTANT avec un mot de passe faux**,
+une requête, le 2026-11-02. La réponse à un mauvais mot de passe sur un compte réel **n'est pas
+mesurée** : le libellé ne distingue pas les deux cas, ce qui rend une réponse identique probable
+sans la prouver.
+
+`KlereoApi.login` ne lit comme refus que cette forme exacte (`LOGIN_REFUSED_DETAIL`), plus les
+HTTP 401 et 403, jamais `status: error` seul. Toute autre réponse sans jeton reste une panne, et son
+`detail` figure dans le message d'erreur : si la mesure sur un compte réel donne un autre libellé,
+c'est là qu'il apparaîtra et cette constante qu'il faudra corriger.
+
 ### Niveaux d'accès
 
 | Niveau | Compte | Source |

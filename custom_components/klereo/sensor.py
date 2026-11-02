@@ -136,8 +136,8 @@ async def async_setup_entry(
 
     def _extract(coordinator, system_id, details):
         # `entry.options` is read at each discovery rather than captured once, so a power
-        # entered later is seen. Changing an option also reloads the entry
-        # (`_async_update_listener`), which is what rebuilds the entities themselves.
+        # entered later is seen. Changing an option also reloads the entry (the options flow
+        # in `config_flow.py`), which is what rebuilds the entities themselves.
         return _extract_sensors(coordinator, system_id, details, entry.options)
 
     setup_discovery(hass, entry, async_add_entities, _extract)

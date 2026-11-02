@@ -27,6 +27,7 @@
         "error": {
             "cannot_connect": "Unable to connect to the Klereo API. Check your network connection.",
             "invalid_auth": "Invalid username or password. If you entered your e-mail address, try your Klereo username instead.",
+            "wrong_account": "This is not the account this entry belongs to. To use another Klereo account, add it as a new integration entry.",
             "unknown": "An unexpected error occurred.",
             "no_pools": "Your credentials were accepted, but no pool is attached to that account. This almost always means an e-mail address was entered where the Klereo **username** is required — the login succeeds either way, but only the username matches a pool."
         },
