@@ -7,6 +7,9 @@ name: Validate
 # Forgejo — and they live in `.github/workflows/validate.yml` instead. The two sets are disjoint, so
 # Renovate has nothing to bump twice. Do NOT add them here, and do NOT delete the GitHub file on the
 # fleet-wide "GitHub Actions are off post-#671" rule: this repo is the exception. See #89.
+#
+# `python-version` follows the Python that Home Assistant runs in production (3.14.9 on HAOS with
+# HA 2026.10.4, measured 2026-11-02), not the latest release. Renovate leaves it alone: #217.
 
 on:
   push:
@@ -22,7 +25,7 @@ jobs:
       - uses: https://github.com/actions/checkout@v7
       - uses: https://github.com/actions/setup-python@v7
         with:
-          python-version: "3.15"
+          python-version: "3.14"
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
 
@@ -38,7 +41,7 @@ jobs:
           fetch-depth: 0
       - uses: https://github.com/actions/setup-python@v7
         with:
-          python-version: "3.15"
+          python-version: "3.14"
       # No network and no dependencies: this half compares `manifest.json` against
       # `CHANGELOG.md` and against every tag. The published half — whether the tag and the
       # release reached GitHub — is `--published X.Y.Z`, run by hand at release time. It is
@@ -53,6 +56,6 @@ jobs:
       - uses: https://github.com/actions/checkout@v7
       - uses: https://github.com/actions/setup-python@v7
         with:
-          python-version: "3.15"
+          python-version: "3.14"
       - run: pip install -r requirements-dev.txt
       - run: pytest tests/ -v

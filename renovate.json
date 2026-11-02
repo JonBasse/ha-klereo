@@ -3,6 +3,18 @@
   "extends": [
     "local>platform/renovate"
   ],
+  "packageRules": [
+    {
+      "description": "Le `python-version` du CI suit le Python de Home Assistant en production, pas la dernière version publiée : changer de version est un geste humain, fait quand HAOS change (#217). Renovate lit cette valeur par le manager `github-actions`, sur le datasource `github-releases` (`actions/python-versions`). La règle `python interpreter` du preset ne vise que le manager `pyenv` : elle ne s'applique pas ici, et #203 a fusionné 3.14 → 3.15 toute seule dans le palier d'automerge.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepNames": [
+        "python"
+      ],
+      "enabled": false
+    }
+  ],
   "customManagers": [
     {
       "customType": "regex",

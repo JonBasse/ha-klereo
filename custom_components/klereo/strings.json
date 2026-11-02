@@ -49,7 +49,7 @@
                 },
                 "data_description": {
                     "scan_interval": "How often to poll the Klereo cloud. Klereo refreshes its servers every 10 minutes and asks that clients do not poll faster, so 10 is both the default and the minimum: a shorter interval returns the same data and risks your account being banned.",
-                    "power_Filtration": "Rated power of your filtration pump, in watts. Klereo sends no power reading, so this figure is yours: take it from the equipment's rating plate, or measure it. Leave it empty and no filtration energy sensor is created — an invented default would put a credible kWh figure in your Energy dashboard.",
+                    "power_Filtration": "Rated power of your filtration pump, in watts. Klereo reports a live power only for some variable-speed pumps, and the energy sensors do not use it, so this figure is yours: take it from the equipment's rating plate, or measure it. Leave it empty and no filtration energy sensor is created — an invented default would put a credible kWh figure in your Energy dashboard.",
                     "power_PHMinus": "Rated power of your pH- dosing pump, in watts. Yours to supply — Klereo sends no power reading. Leave it empty and no pH- energy sensor is created.",
                     "power_ElectroChlore": "Rated power of your liquid chlorine pump, in watts. Yours to supply — Klereo sends no power reading. Leave it empty and no chlorine energy sensor is created.",
                     "power_HybChl": "Rated power of your hybrid chlorine pump, in watts. Yours to supply — Klereo sends no power reading. Leave it empty and no chlorine energy sensor is created.",
