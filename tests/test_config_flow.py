@@ -5,7 +5,7 @@ import aiohttp
 import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
-from custom_components.klereo.api import KlereoApiError
+from custom_components.klereo.api import KlereoApiError, KlereoAuthError
 from custom_components.klereo.config_flow import (
     CannotConnect,
     InvalidAuth,
@@ -53,8 +53,8 @@ class TestValidateInput:
             result = await validate_input(hass, USER_INPUT)
         assert result == {"title": "BernardPetit"}
 
-    async def test_invalid_auth_on_api_error(self):
-        """Should raise InvalidAuth on KlereoApiError."""
+    async def test_invalid_auth_on_a_refused_login(self):
+        """A refusal is the one failure that is about the credentials."""
         hass = MagicMock()
         with patch(
             "custom_components.klereo.config_flow.async_get_clientsession"
@@ -62,13 +62,13 @@ class TestValidateInput:
             "custom_components.klereo.config_flow.KlereoApi"
         ) as mock_api_cls:
             mock_api_cls.return_value.login = AsyncMock(
-                side_effect=KlereoApiError("bad creds")
+                side_effect=KlereoAuthError("refused")
             )
             with pytest.raises(InvalidAuth):
                 await validate_input(hass, USER_INPUT)
 
-    async def test_invalid_auth_on_401(self):
-        """Should raise InvalidAuth on 401 response."""
+    async def test_cannot_connect_on_any_other_login_failure(self):
+        """🔴 An unusable answer must not send the user to re-type a password (#212)."""
         hass = MagicMock()
         with patch(
             "custom_components.klereo.config_flow.async_get_clientsession"
@@ -76,10 +76,21 @@ class TestValidateInput:
             "custom_components.klereo.config_flow.KlereoApi"
         ) as mock_api_cls:
             mock_api_cls.return_value.login = AsyncMock(
-                side_effect=aiohttp.ClientResponseError(
-                    request_info=MagicMock(), history=(), status=401
-                )
+                side_effect=KlereoApiError("no token returned")
             )
+            with pytest.raises(CannotConnect):
+                await validate_input(hass, USER_INPUT)
+
+    async def test_invalid_auth_on_a_login_refused_behind_the_listing(self):
+        """The listing logs in again on a 401, so the same refusal can arrive through it."""
+        hass = MagicMock()
+        with patch(
+            "custom_components.klereo.config_flow.async_get_clientsession"
+        ), patch(
+            "custom_components.klereo.config_flow.KlereoApi"
+        ) as mock_api_cls:
+            api = _api(mock_api_cls)
+            api.get_systems = AsyncMock(side_effect=KlereoAuthError("refused"))
             with pytest.raises(InvalidAuth):
                 await validate_input(hass, USER_INPUT)
 
@@ -274,6 +285,14 @@ class TestTheFieldSaysWhatTheApiActuallyWants:
         message = self._strings(name)["config"]["error"]["no_pools"]
 
         assert "username" in message.lower()
+
+
+    @pytest.mark.parametrize("name", ["strings.json", "translations/en.json"])
+    def test_the_wrong_account_error_says_how_to_add_another_account(self, name):
+        """A missing key renders as the raw `wrong_account` in the form (#215)."""
+        message = self._strings(name)["config"]["error"]["wrong_account"]
+
+        assert "new integration entry" in message
 
 
 class TestHashPassword:

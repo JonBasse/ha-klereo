@@ -9,7 +9,7 @@ from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import KlereoApi, KlereoApiError, extract_system_list
+from .api import KlereoApi, KlereoApiError, KlereoAuthError, extract_system_list
 from .const import (
     COUNTER_EQUIPMENT,
     DOMAIN,
@@ -35,17 +35,6 @@ async def validate_input(hass: core.HomeAssistant, data: dict) -> dict:
     password_hash = hash_password(data[CONF_PASSWORD])
     api = KlereoApi(data[CONF_USERNAME], password_hash, session)
 
-    try:
-        await api.login()
-    except KlereoApiError as err:
-        raise InvalidAuth from err
-    except aiohttp.ClientResponseError as err:
-        if err.status in (401, 403):
-            raise InvalidAuth from err
-        raise CannotConnect from err
-    except (aiohttp.ClientError, TimeoutError) as err:
-        raise CannotConnect from err
-
     # 🔴 Authentication is not the question the user is asking. GitHub #56: an e-mail
     # address LOGS IN and then matches no pool, so the flow declared success, created the
     # entry, and left the reporter with an integration carrying zero entities and no error
@@ -57,7 +46,12 @@ async def validate_input(hass: core.HomeAssistant, data: dict) -> dict:
     # an empty refresh there is a transient, and treating it as fatal would tear down
     # working installations whenever Klereo answers slowly.
     try:
+        await api.login()
         systems = extract_system_list(await api.get_systems())
+    except KlereoAuthError as err:
+        # The same discriminant as `KlereoCoordinator._async_update_data`: anything else is
+        # an outage, and calling that a wrong password sends the user to the wrong place (#212).
+        raise InvalidAuth from err
     except (KlereoApiError, aiohttp.ClientError, TimeoutError) as err:
         raise CannotConnect from err
 
@@ -113,25 +107,34 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input=None):
-        """Handle re-authentication confirmation."""
+        """Handle re-authentication confirmation.
+
+        🔴 `_abort_if_unique_id_mismatch` is the upstream control and it does not fit, for two
+        reasons (#215). It compares against `entry.unique_id` verbatim, which is absent on
+        entries older than 76348ca, not lowercased on entries older than 5680931, and was
+        left behind by any earlier reauth that changed the account; no migration ever
+        rewrote it. And it aborts: a refusal stops the coordinator's polling, so an aborted
+        flow leaves the entry frozen with nothing left to reopen one, for a typo. The account
+        in use is the one the entry logs in with, so that is what the form is compared with.
+        """
+        entry = self._get_reauth_entry()
         errors = {}
         if user_input is not None:
+            username = user_input[CONF_USERNAME].strip()
             try:
-                await validate_input(self.hass, user_input)
+                if username.lower() != entry.data[CONF_USERNAME].strip().lower():
+                    errors["base"] = "wrong_account"
+                else:
+                    await validate_input(self.hass, {**user_input, CONF_USERNAME: username})
 
-                stored_data = {
-                    CONF_USERNAME: user_input[CONF_USERNAME],
-                    CONF_PASSWORD: hash_password(user_input[CONF_PASSWORD]),
-                    "password_hashed": True,
-                }
-
-                self.hass.config_entries.async_update_entry(
-                    self._get_reauth_entry(), data=stored_data
-                )
-                await self.hass.config_entries.async_reload(
-                    self._get_reauth_entry().entry_id
-                )
-                return self.async_abort(reason="reauth_successful")
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data={
+                            CONF_USERNAME: username,
+                            CONF_PASSWORD: hash_password(user_input[CONF_PASSWORD]),
+                            "password_hashed": True,
+                        },
+                    )
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
@@ -143,7 +146,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
 
         return self.async_show_form(
-            step_id="reauth_confirm", data_schema=DATA_SCHEMA, errors=errors
+            step_id="reauth_confirm",
+            data_schema=self.add_suggested_values_to_schema(
+                DATA_SCHEMA,
+                {CONF_USERNAME: user_input[CONF_USERNAME] if user_input else entry.data[CONF_USERNAME]},
+            ),
+            errors=errors,
         )
 
 
@@ -191,8 +199,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle Klereo options."""
 
     async def async_step_init(self, user_input=None):
-        """Manage the options."""
+        """Manage the options.
+
+        The reload happens here and not in an update listener: a listener fires on `data`
+        too, so it reloaded a second time behind `async_update_reload_and_abort`, which HA
+        stops accepting in 2026.12. `OptionsFlowWithReload` does this upstream, from HA 2025.8.
+        """
         if user_input is not None:
+            if self.hass.config_entries.async_update_entry(self.config_entry, options=user_input):
+                self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
             return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(

@@ -27,6 +27,7 @@
         "error": {
             "cannot_connect": "Impossible de se connecter à l'API Klereo. Vérifiez votre connexion réseau.",
             "invalid_auth": "Nom d'utilisateur ou mot de passe incorrect. Si vous avez saisi votre adresse e-mail, essayez plutôt votre nom d'utilisateur Klereo.",
+            "wrong_account": "Ce compte n'est pas celui de cette entrée. Pour utiliser un autre compte Klereo, ajoutez-le comme nouvelle entrée de l'intégration.",
             "unknown": "Une erreur inattendue s'est produite.",
             "no_pools": "Vos identifiants ont été acceptés, mais aucune piscine n'est rattachée à ce compte. Cela signifie presque toujours qu'une adresse e-mail a été saisie à la place du **nom d'utilisateur** Klereo : la connexion réussit dans les deux cas, mais seul le nom d'utilisateur correspond à une piscine."
         },

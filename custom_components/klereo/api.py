@@ -68,6 +68,13 @@ CMD_POLL_INTERVAL_SECONDS = 0.5
 TIMEOUT = 10
 USER_AGENT = "Jeedom plugin"
 
+# 🔴 The ONE answer of `GetJWT` read as "these credentials are refused" (`docs/klereo-api.md`).
+# The match is on the exact text and not on `status: error`, because the two ways of being
+# wrong do not cost the same. Too narrow, and a refusal stays an `UpdateFailed` until someone
+# reads the log, which carries Klereo's own words. Too wide, and a Klereo outage asks every
+# install for its password at once (#212).
+LOGIN_REFUSED_DETAIL = "Identification incorrecte"
+
 # Output modes. Klereo's API documentation lists ten (`docs/klereo-api.md`); the upstream
 # plugin, written independently, validates exactly {0,1,2,3,4,6,8,9} for writes
 # (klereo.class.php l.1198) — the same ten minus 5 and 7, which the documentation marks
@@ -224,6 +231,15 @@ class KlereoApiError(Exception):
     """Error from the Klereo API."""
 
 
+class KlereoAuthError(KlereoApiError):
+    """Klereo refused the credentials, as opposed to answering something unusable.
+
+    Raised only by `KlereoApi.login`, so it holds for the whole account wherever it surfaces.
+    It stays a `KlereoApiError` so that a write caught mid-refusal keeps failing as it does
+    today, and so that the refusal of every pool in `_async_update_data` still counts as one.
+    """
+
+
 class KlereoApi:
     """Klereo API Client."""
 
@@ -258,20 +274,32 @@ class KlereoApi:
                 )
                 response.raise_for_status()
                 data = await response.json(content_type=None)
+        except aiohttp.ClientResponseError as err:
+            if err.status in (401, 403):
+                raise KlereoAuthError(f"Klereo refused the login: HTTP {err.status}") from err
+            _LOGGER.error("Error connecting to Klereo API: %s", err)
+            raise
         except (aiohttp.ClientError, TimeoutError) as err:
             _LOGGER.error("Error connecting to Klereo API: %s", err)
             raise
+        except ValueError as err:
+            raise KlereoApiError("Login failed: the answer is not JSON") from err
 
-        if "jwt" in data:
-            self._token = data["jwt"]
-        elif "token" in data:
-            self._token = data["token"]
-        else:
-            _LOGGER.error("Login failed: no token in API response")
-            # Key names only: the debug log gets pasted into public issues (#196, #217). A
-            # response that is not an object has no key names, only values.
-            _LOGGER.debug("Login response keys: %s", list(data) if isinstance(data, dict) else type(data).__name__)
+        if not isinstance(data, dict):
+            # A response that is not an object has no key names, only values.
+            _LOGGER.debug("Login response type: %s", type(data).__name__)
             raise KlereoApiError("Login failed: no token returned")
+
+        if token := data.get("jwt") or data.get("token"):
+            self._token = token
+            return
+
+        # Key names only: the debug log gets pasted into public issues (#196, #217).
+        _LOGGER.debug("Login response keys: %s", list(data))
+        detail = data.get("detail")
+        if data.get("status") == "error" and detail == LOGIN_REFUSED_DETAIL:
+            raise KlereoAuthError(f"Klereo refused the login: {detail}")
+        raise KlereoApiError(f"Login failed: no token returned ({detail or 'no detail given'})")
 
     async def _get_auth_header(self) -> dict[str, str]:
         """Get the authorization header, logging in if necessary."""
@@ -292,7 +320,8 @@ class KlereoApi:
         a read came out as an empty success and a write as an unverifiable one (#211).
         `status` is the top-level one only: inside `response` it is a command's status.
 
-        ⚠️ `login` does not pass through here. Its refusal is handled in `login` itself.
+        ⚠️ `login` does not pass through here: `KlereoApi.login` tells a refusal from an
+        outage, which `status: error` alone cannot do.
         """
         response.raise_for_status()
         text = await response.text()

@@ -16,6 +16,7 @@ from custom_components.klereo.api import (
     OUT_STATE_ON,
     KlereoApi,
     KlereoApiError,
+    KlereoAuthError,
     state_for_heat_mode,
 )
 
@@ -58,16 +59,54 @@ def _make_response(data, status=200):
 class TestLogin:
     """Tests for the login method."""
 
-    async def test_a_login_refused_inside_a_200_keeps_its_own_path(self, api, mock_session):
-        """`login` does not go through `_parse_response`, and #211 leaves that alone.
-
-        The answer measured on 2026-11-02 for an unknown account. What a refusal should
-        BECOME is #212's to decide; this only holds the path still until then.
-        """
+    async def test_the_measured_refusal_is_an_auth_error(self, api, mock_session):
+        """The answer measured on 2026-11-02 for an unknown account (#212)."""
         mock_session.post.return_value = _make_response(
             {"status": "error", "detail": "Identification incorrecte"}
         )
-        with pytest.raises(KlereoApiError, match="no token returned"):
+        with pytest.raises(KlereoAuthError):
+            await api.login()
+
+    @pytest.mark.parametrize("status", [401, 403])
+    async def test_an_http_refusal_is_an_auth_error(self, api, mock_session, status):
+        """`KlereoAuthError` alone means "refused": callers must not read status codes too."""
+        mock_session.post.return_value = _make_response({}, status=status)
+        with pytest.raises(KlereoAuthError):
+            await api.login()
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            pytest.param({"status": "error", "detail": "Service indisponible"}, id="another-detail"),
+            pytest.param({"status": "error"}, id="no-detail"),
+            pytest.param({"detail": "Identification incorrecte"}, id="detail-without-status"),
+            pytest.param({"status": "ok"}, id="no-token"),
+            pytest.param({"jwt": None}, id="null-token"),
+            pytest.param({"jwt": ""}, id="empty-token"),
+            pytest.param([], id="list"),
+            pytest.param(None, id="null"),
+        ],
+    )
+    async def test_any_other_answer_without_a_token_is_not_an_auth_error(self, api, mock_session, body):
+        """🔴 The discriminant is narrow on purpose: this arm is what an outage looks like."""
+        mock_session.post.return_value = _make_response(body)
+        with pytest.raises(KlereoApiError) as caught:
+            await api.login()
+        assert not isinstance(caught.value, KlereoAuthError)
+        assert api._token is None
+
+    async def test_a_body_that_is_not_json_is_not_an_auth_error(self, api, mock_session):
+        response = _make_response({})
+        response.json = AsyncMock(side_effect=json.JSONDecodeError("not JSON", "<html>", 0))
+        mock_session.post.return_value = response
+        with pytest.raises(KlereoApiError) as caught:
+            await api.login()
+        assert not isinstance(caught.value, KlereoAuthError)
+
+    async def test_the_reason_klereo_gave_reaches_the_error(self, api, mock_session):
+        """An unmeasured refusal must say what it was: that is how the discriminant gets corrected."""
+        mock_session.post.return_value = _make_response({"status": "error", "detail": "Compte suspendu"})
+        with pytest.raises(KlereoApiError, match="Compte suspendu"):
             await api.login()
 
     async def test_login_extracts_jwt(self, api, mock_session):

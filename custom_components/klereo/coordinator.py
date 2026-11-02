@@ -23,6 +23,7 @@ from .api import (
     OUT_STATE_ON,
     KlereoApi,
     KlereoApiError,
+    KlereoAuthError,
     extract_system_list,
 )
 from .const import (
@@ -182,6 +183,10 @@ class KlereoCoordinator(DataUpdateCoordinator[dict[str, KlereoSystemData]]):
 
             return data
 
+        except KlereoAuthError as err:
+            raise ConfigEntryAuthFailed(
+                "Authentication failed — please re-enter your Klereo credentials"
+            ) from err
         except KlereoApiError as err:
             raise UpdateFailed(
                 f"Klereo API error: {err}"
