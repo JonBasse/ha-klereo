@@ -40,9 +40,8 @@ in the global CLAUDE.md). Bank is `fizbot`, shared across runtimes. Never call `
 > and resolve to *different* issues. Always qualify: `JonBasse/ha-klereo#38 (Forgejo)` or a full
 > URL. `CHANGELOG.md` links Forgejo throughout.
 
-Backend routing (which CLI, which token, never guess): load the `managing-forgejo` skill. Short
-version — `tea` for everything issue/PR, **read and write** · `fj` when the body is Markdown-heavy
-(`--body-file`) · `gh` **only** to read the GitHub-side user reports and releases.
+Backend routing (which CLI, which token, never guess): load the `managing-forgejo` skill. `gh` serves
+**only** to read the GitHub-side user reports and releases.
 
 ---
 
@@ -200,7 +199,7 @@ Cross-repo rules are canonical in fizbot — **edit them there, not here**:
   § *One branch = one worktree*.
 - **Landing a PR** — `fb-issue land <N> --repo <owner/name>`, and nothing hand-rolled: it updates
   the head, waits for green **on that head**, merges, then confirms by reachability. A hand-rolled
-  `tea api …/pulls/<N>/merge` loses the `block_on_outdated_branch` race and is refused by the
+  merge call loses the `block_on_outdated_branch` race and is refused by the
   auto-mode classifier as a merge without review (measured 2026-09-13 on prism/prism-infra#851).
   Canonical rule in fizbot `CLAUDE.md` § *Landing a PR* (edit there, not here).
 - **Plan/spec lifecycle** — delete `docs/superpowers/{plans,specs}` in the merging PR; git history is
